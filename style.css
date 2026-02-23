@@ -84,13 +84,15 @@ border-top-color:rgba(255,255,255,0);display:inline-block;animation:spin .9s lin
 
 /* Logo global (troca fácil em /assets/logo.png) */
 :root{
-  --logo-nav: 44px;
-  --logo-footer: 54px;
-  --logo-auth: 68px;
+  --logo-nav: 34px;
+  --logo-footer: 42px;
+  --logo-auth: 34px;
 }
 
 .app-logo{
   display:block;
+  max-width: 100%;
+  max-height: 100%;
   width: var(--logo-nav);
   height: var(--logo-nav);
   object-fit: contain;
