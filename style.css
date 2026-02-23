@@ -75,13 +75,31 @@ border-top-color:rgba(255,255,255,0);display:inline-block;animation:spin .9s lin
 
 
 /* Logo do site (substitui o ícone de escudo) */
-.brand-logo{
-  display:inline-block;
-  object-fit:contain;
-  image-rendering:auto;
-  filter: drop-shadow(0 6px 16px rgba(16, 185, 129, .22));
-}
+.brand-logo{display:inline-block;object-fit:contain;image-rendering:auto;}
 /* quando a logo estiver dentro de botões/bolhas pequenas */
 .brand-logo.w-5.h-5{ width:20px; height:20px; }
 .brand-logo.w-6.h-6{ width:24px; height:24px; }
 .brand-logo.h-5.w-5{ width:20px; height:20px; }
+
+
+/* Logo global (troca fácil em /assets/logo.png) */
+:root{
+  --logo-nav: 44px;
+  --logo-footer: 54px;
+  --logo-auth: 68px;
+}
+
+.app-logo{
+  display:block;
+  width: var(--logo-nav);
+  height: var(--logo-nav);
+  object-fit: contain;
+  image-rendering: auto;
+  filter: drop-shadow(0 6px 16px rgba(16, 185, 129, .18));
+}
+
+.app-logo--nav{ width: var(--logo-nav); height: var(--logo-nav); }
+.app-logo--footer{ width: var(--logo-footer); height: var(--logo-footer); }
+.app-logo--auth{ width: var(--logo-auth); height: var(--logo-auth); }
+
+.app-logo--feature{ width: 28px; height: 28px; }
