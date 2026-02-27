@@ -25,8 +25,8 @@
 .pm-wrap{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
 .pm-option{display:flex;align-items:center;gap:.55rem;padding:.75rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;transition:.15s;font-size:.875rem;color:#374151}
 .pm-option:hover{background:#f9fafb}
-.pm-circle{width:18px;height:18px;border-radius:999px;border:2px solid #d1d5db;display:inline-block;position:relative;flex:0 0 auto;transition:.2s;}
-.pm-option.pm-selected{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12); background-color: #ecfdf5;}
+.pm-circle{width:18px;height:18px;border-radius:999px;border:2px solid #d1d5db;display:inline-block;position:relative;flex:0 0 auto}
+.pm-option.pm-selected{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12)}
 .pm-option.pm-selected .pm-circle{border-color:#10b981;background:#10b981}
 .pm-option.pm-selected .pm-circle:after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(45deg)}
 
@@ -93,98 +93,84 @@
       </header>
 
       <div class="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
-        
-        <!-- Cabeçalho com Filtros e Botão Adicionar -->
         <div class="flex items-center justify-between">
           <div><h2 class="text-2xl font-bold text-gray-900">Membros</h2><p class="text-gray-500 text-sm mt-1" id="member-count">Carregando...</p></div>
-          
-          <div class="flex items-center gap-2 relative">
-            <!-- Dropdown Filtro Avançado -->
-            <div class="relative">
-              <button onclick="toggleFilterDropdown()" id="btn-filter" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
-                <i data-lucide="filter" class="w-4 h-4"></i> <span class="hidden sm:inline" id="filter-label">Todos</span>
-              </button>
-              
-              <!-- Menu de Opções (Painel Completo) -->
-              <div id="filter-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-4 transform origin-top-right transition-all">
-                
-                <button onclick="applyFilter('all', 'Todos')" class="w-full text-left px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 rounded-xl transition-colors mb-3">
-                  Exibir Todos
-                </button>
+          <div class="flex items-center gap-2">
+          <div class="relative">
+            <button id="filter-btn" type="button" class="flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 rounded-xl text-sm font-medium border border-gray-200 shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+              <i data-lucide="filter" class="w-4 h-4"></i>
+              <span class="hidden sm:inline" id="filter-label">Todos</span>
+              <i data-lucide="chevron-down" class="w-4 h-4 opacity-70"></i>
+            </button>
 
-                <!-- Filtro Tag -->
-                <div class="mb-3">
-                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Tag</p>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button onclick="applyFilter('with-tag', 'Com Tag')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-tag">
-                      <span class="pm-circle scale-[0.85]"></span> Com Tag
-                    </button>
-                    <button onclick="applyFilter('no-tag', 'Sem Tag')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-tag">
-                      <span class="pm-circle scale-[0.85]"></span> Sem Tag
-                    </button>
-                  </div>
-                </div>
+            
+            <div id="filter-menu" class="hidden absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden z-40">
+              <button class="filter-action w-full text-left px-4 py-3 text-sm hover:bg-gray-50" data-action="reset">Todos</button>
 
-                <!-- Filtro GG -->
-                <div class="mb-3">
-                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Guerra (GG)</p>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button onclick="applyFilter('with-gg', 'GG Batida')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-gg">
-                      <span class="pm-circle scale-[0.85]"></span> Bateu
-                    </button>
-                    <button onclick="applyFilter('no-gg', 'Faltou GG')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-gg">
-                      <span class="pm-circle scale-[0.85]"></span> Faltou
-                    </button>
-                  </div>
-                </div>
+              <div class="h-px bg-gray-100"></div>
 
-                <!-- Filtro Semanal -->
-                <div class="mb-3">
-                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Semanal</p>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button onclick="applyFilter('with-weekly', 'Semanal Batida')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-weekly">
-                      <span class="pm-circle scale-[0.85]"></span> Bateu
-                    </button>
-                    <button onclick="applyFilter('no-weekly', 'Faltou Semanal')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-weekly">
-                      <span class="pm-circle scale-[0.85]"></span> Faltou
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Filtro Todas as Metas -->
-                <div class="pt-2 border-t border-gray-100">
-                  <button onclick="applyFilter('all-met', 'Metas Batidas')" class="w-full px-3 py-2.5 text-sm font-bold text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors flex items-center justify-center gap-2">
-                    <i data-lucide="check-check" class="w-4 h-4"></i> Todas as Metas
+              <div class="px-4 pt-3 pb-2">
+                <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tag</div>
+                <div class="mt-2 flex gap-2">
+                  <button class="filter-pill flex-1 px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm flex items-center justify-center gap-2"
+                          data-dim="tag" data-val="with">
+                    <i data-lucide="check-circle" class="w-4 h-4 pill-on hidden"></i>
+                    <i data-lucide="circle" class="w-4 h-4 pill-off"></i>
+                    Com tag
+                  </button>
+                  <button class="filter-pill flex-1 px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm flex items-center justify-center gap-2"
+                          data-dim="tag" data-val="without">
+                    <i data-lucide="check-circle" class="w-4 h-4 pill-on hidden"></i>
+                    <i data-lucide="circle" class="w-4 h-4 pill-off"></i>
+                    Sem tag
                   </button>
                 </div>
-
               </div>
+
+              <div class="px-4 pt-2 pb-2">
+                <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide">GG</div>
+                <div class="mt-2 flex gap-2">
+                  <button class="filter-pill flex-1 px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm flex items-center justify-center gap-2"
+                          data-dim="gg" data-val="with">
+                    <i data-lucide="check-circle" class="w-4 h-4 pill-on hidden"></i>
+                    <i data-lucide="circle" class="w-4 h-4 pill-off"></i>
+                    Com GG
+                  </button>
+                  <button class="filter-pill flex-1 px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm flex items-center justify-center gap-2"
+                          data-dim="gg" data-val="without">
+                    <i data-lucide="check-circle" class="w-4 h-4 pill-on hidden"></i>
+                    <i data-lucide="circle" class="w-4 h-4 pill-off"></i>
+                    Sem GG
+                  </button>
+                </div>
+              </div>
+
+              <div class="px-4 pt-2 pb-3">
+                <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Semanal - Honra</div>
+                <div class="mt-2 flex gap-2">
+                  <button class="filter-pill flex-1 px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm flex items-center justify-center gap-2"
+                          data-dim="weekly" data-val="with">
+                    <i data-lucide="check-circle" class="w-4 h-4 pill-on hidden"></i>
+                    <i data-lucide="circle" class="w-4 h-4 pill-off"></i>
+                    Bateu
+                  </button>
+                  <button class="filter-pill flex-1 px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm flex items-center justify-center gap-2"
+                          data-dim="weekly" data-val="without">
+                    <i data-lucide="check-circle" class="w-4 h-4 pill-on hidden"></i>
+                    <i data-lucide="circle" class="w-4 h-4 pill-off"></i>
+                    Não bateu
+                  </button>
+                </div>
+              </div>
+
+              <div class="h-px bg-gray-100"></div>
+
+              <button class="filter-action w-full text-left px-4 py-3 text-sm hover:bg-gray-50" data-action="allMetas">
+                Todas as metas
+              </button>
             </div>
-
-            <!-- Botão Adicionar Original -->
-            <button onclick="openModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
-              <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
-            </button>
           </div>
         </div>
-
-        <div class="flex gap-3">
-          <div class="flex-1 relative">
-            <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
-            <input type="text" id="search-input" placeholder="Buscar por nick ou ID..." class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm transition-all bg-white">
-          </div>
-          <button onclick="loadMembers(true)" class="flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 hover:bg-gray-50 transition-colors" title="Atualizar">↻</button>
-        </div>
-
-        <div id="members-list" class="space-y-3">
-          <!-- Placeholder de carregamento -->
-           <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
-              <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
-              <div class="flex-1 space-y-2">
-                 <div class="h-4 bg-gray-200 rounded w-1/3"></div>
-                 <div class="h-3 bg-gray-100 rounded w-1/4"></div>
-              </div>
-           </div>
            <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
               <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
               <div class="flex-1 space-y-2">
@@ -255,6 +241,9 @@
       </div>
     </div>
 
+
+      
+      
         <hr class="border-gray-100">
 
         <!-- Toggles -->
@@ -304,76 +293,162 @@
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildContext } from './logic.js';
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+    // Inicialização IMEDIATA (menu + ícones). Isso evita o "botão do menu sumir"
+    // quando a lista ainda não renderizou.
     setupSidebar();
     initIcons();
     initPlayModePicker();
+    setupFilterDropdown();
     
+    // Variável para armazenar a lista na memória
     let membersCache = [];
-    let currentFilter = 'all';
+    // Filtro atual (dropdown)
+    let filterState = { tag: 'any', gg: 'any', weekly: 'any', allMetas: false };
 
+    function hasTruth(v){ return v === true; }
+
+    function applyFilter(list) {
+      const termo = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
+
+      let out = Array.isArray(list) ? list.slice() : [];
+      // Busca
+      if(termo) {
+        out = out.filter(m =>
+          (m.nick && String(m.nick).toLowerCase().includes(termo)) ||
+          (m.visibleId && String(m.visibleId).includes(termo))
+        );
+      }
+
+      // Filtros
+      if(filterState.allMetas) {
+        out = out.filter(m => hasTag(m) && hasTruth(m.guildWar) && hasTruth(m.weeklyMeta));
+        return out;
+      }
+
+      if(filterState.tag === 'with') out = out.filter(m => hasTag(m));
+      if(filterState.tag === 'without') out = out.filter(m => !hasTag(m));
+
+      if(filterState.gg === 'with') out = out.filter(m => hasTruth(m.guildWar));
+      if(filterState.gg === 'without') out = out.filter(m => !hasTruth(m.guildWar));
+
+      if(filterState.weekly === 'with') out = out.filter(m => hasTruth(m.weeklyMeta));
+      if(filterState.weekly === 'without') out = out.filter(m => !hasTruth(m.weeklyMeta));
+
+      return out;
+    }
+
+    function refreshListView(forceRender = true) {
+      renderList(applyFilter(membersCache), !!forceRender);
+    }
+
+    function buildFilterLabel() {
+      if(filterState.allMetas) return 'Todas as metas';
+      const parts = [];
+      if(filterState.tag !== 'any') parts.push('Tag');
+      if(filterState.gg !== 'any') parts.push('GG');
+      if(filterState.weekly !== 'any') parts.push('Semanal');
+      return parts.length ? 'Filtrando' : 'Todos';
+    }
+
+    function updateFilterUI() {
+      const menu = document.getElementById('filter-menu');
+      const label = document.getElementById('filter-label');
+      if(label) label.textContent = buildFilterLabel();
+
+      if(menu) {
+        // Pills
+        menu.querySelectorAll('.filter-pill').forEach(btn => {
+          const dim = btn.getAttribute('data-dim');
+          const val = btn.getAttribute('data-val');
+          const active = !filterState.allMetas && dim && (filterState[dim] === val);
+
+          const onI = btn.querySelector('.pill-on');
+          const offI = btn.querySelector('.pill-off');
+          if(onI) onI.classList.toggle('hidden', !active);
+          if(offI) offI.classList.toggle('hidden', active);
+
+          btn.classList.toggle('border-emerald-300', active);
+          btn.classList.toggle('bg-emerald-50', active);
+        });
+
+        // "Todas as metas"
+        const allBtn = menu.querySelector('[data-action="allMetas"]');
+        if(allBtn) {
+          allBtn.classList.toggle('bg-emerald-50', !!filterState.allMetas);
+        }
+      }
+
+      try { if(window.lucide) window.lucide.createIcons(); } catch(_) {}
+    }
+
+    function setupFilterDropdown() {
+      const btn = document.getElementById('filter-btn');
+      const menu = document.getElementById('filter-menu');
+
+      if(!btn || !menu) return;
+
+      const close = () => menu.classList.add('hidden');
+      const open = () => menu.classList.remove('hidden');
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if(menu.classList.contains('hidden')) open(); else close();
+      });
+
+      document.addEventListener('click', (e) => {
+        const t = e.target;
+        if(!menu.contains(t) && !btn.contains(t)) close();
+      });
+
+      menu.addEventListener('click', (e) => {
+        const pill = e.target.closest('.filter-pill');
+        const action = e.target.closest('.filter-action');
+
+        if(pill) {
+          const dim = pill.getAttribute('data-dim');
+          const val = pill.getAttribute('data-val');
+          if(dim && val) {
+            // Ao mexer em qualquer pill, sai do modo "Todas as metas"
+            if(filterState.allMetas) filterState.allMetas = false;
+
+            filterState[dim] = (filterState[dim] === val) ? 'any' : val;
+            updateFilterUI();
+            close();
+            refreshListView(true);
+          }
+          return;
+        }
+
+        if(action) {
+          const act = action.getAttribute('data-action');
+          if(act === 'reset') {
+            filterState = { tag: 'any', gg: 'any', weekly: 'any', allMetas: false };
+            updateFilterUI();
+            close();
+            refreshListView(true);
+            return;
+          }
+
+          if(act === 'allMetas') {
+            filterState.allMetas = !filterState.allMetas;
+            if(filterState.allMetas) {
+              filterState.tag = 'any';
+              filterState.gg = 'any';
+              filterState.weekly = 'any';
+            }
+            updateFilterUI();
+            close();
+            refreshListView(true);
+            return;
+          }
+        }
+      });
+
+      updateFilterUI();
+    }
+// Tag configurável (Firestore: configGuilda/{uid}.tagMembros)
     let memberTag = null;
     let hasTagManualOverride = false;
-
-    // ----- LOGICA DO NOVO FILTRO DROPDOWN -----
-    window.toggleFilterDropdown = () => {
-      document.getElementById('filter-dropdown').classList.toggle('hidden');
-    };
-
-    window.applyFilter = (filterKey, filterLabel) => {
-      currentFilter = filterKey;
-      document.getElementById('filter-label').innerText = filterLabel;
-      document.getElementById('filter-dropdown').classList.add('hidden');
-
-      // Atualiza visual dos botões check circle do filtro
-      document.querySelectorAll('[data-filter-btn]').forEach(btn => {
-        btn.classList.remove('pm-selected');
-      });
-      
-      const activeBtn = document.querySelector(`[data-filter-btn="${filterKey}"]`);
-      if (activeBtn) {
-        activeBtn.classList.add('pm-selected');
-      }
-
-      applyFiltersAndRender();
-    };
-
-    // Fechar dropdown ao clicar fora
-    document.addEventListener('click', (e) => {
-      const btn = document.getElementById('btn-filter');
-      const dropdown = document.getElementById('filter-dropdown');
-      if (btn && dropdown && !btn.contains(e.target) && !dropdown.contains(e.target)) {
-        dropdown.classList.add('hidden');
-      }
-    });
-
-    // Função central que aplica a busca + filtro dropdown juntos
-    function applyFiltersAndRender() {
-      const termo = document.getElementById('search-input').value.toLowerCase();
-      
-      const filtrados = membersCache.filter(m => {
-        // 1. Filtro de Busca (Texto)
-        const matchBusca = (m.nick && m.nick.toLowerCase().includes(termo)) || 
-                           (m.visibleId && String(m.visibleId).includes(termo));
-        if (!matchBusca) return false;
-
-        // 2. Filtros de Status (Dropdown)
-        if (currentFilter === 'with-tag') return m.hasTag;
-        if (currentFilter === 'no-tag') return !m.hasTag;
-
-        if (currentFilter === 'with-gg') return m.guildWar;
-        if (currentFilter === 'no-gg') return !m.guildWar;
-
-        if (currentFilter === 'with-weekly') return m.weeklyMeta;
-        if (currentFilter === 'no-weekly') return !m.weeklyMeta;
-
-        if (currentFilter === 'all-met') return (m.weeklyMeta && m.guildWar);
-
-        return true; // 'all'
-      });
-
-      renderList(filtrados, termo !== '' || currentFilter !== 'all');
-    }
-    // ------------------------------------------
 
     function escapeRegExp(str) {
       return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -381,6 +456,7 @@
 
     function stripKnownTags(nick) {
       const raw = String(nick || "").trim();
+      // Remove a tag configurada (se existir) e também tags antigas (compat)
       const candidates = [memberTag, "ᵒᵗᵏ", "otk"];
       for (const t of candidates) {
         if (!t) continue;
@@ -390,6 +466,8 @@
       return raw;
     }
 
+
+    // Garante que o nick fique com apenas 1 tag no começo (evita duplicar no editar)
     function normalizeNickWithTag(rawNick, tag, wantsTag) {
       const nick = (rawNick || '').trim();
       if (!wantsTag || !tag) return nick;
@@ -397,8 +475,10 @@
       const t = String(tag).trim();
       if (!t) return nick;
 
+      // remove repetições da tag no começo: "TAG TAG Nick" -> "Nick"
       const esc = escapeRegExp(t);
       let cleaned = nick.replace(new RegExp('^(?:' + esc + '\\s*)+', 'g'), '').trim();
+      // fallback case-insensitive (caso a tag venha com variação de maiúsculas/minúsculas)
       if (cleaned === nick) {
         cleaned = nick.replace(new RegExp('^(?:' + esc + '\\s*)+', 'gi'), '').trim();
       }
@@ -410,6 +490,7 @@
       const raw = String(nick || "");
       const t = String(memberTag || "").trim();
       if (!t) return false;
+      // Verifica se a tag aparece em qualquer parte do nick (case-insensitive)
       try {
         const re = new RegExp(escapeRegExp(t), 'i');
         return re.test(raw);
@@ -422,20 +503,29 @@
       const hasTagEl = document.getElementById('has-tag');
       const nickEl = document.getElementById('nick');
       if (!hasTagEl || !nickEl) return;
+
+      // Se o usuário marcou/desmarcou manualmente, não sobrescreve.
       if (hasTagManualOverride) return;
+
+      // Sem tag configurada, não temos como detectar automaticamente.
       if (!memberTag) return;
+
       hasTagEl.checked = nickHasMemberTag(nickEl.value);
     }
 
+
+    // playMode (multi select com visual "check circle" — pode marcar vários e desmarcar clicando)
     function getSelectedPlayModes() {
       const hidden = document.getElementById('play-mode');
       if (!hidden) return [];
       const raw = (hidden.value || '').trim();
       if (!raw) return [];
+      // Preferimos JSON (novo), mas aceitamos string antiga (compat)
       try {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed.filter(Boolean).map(v => String(v).trim()).filter(Boolean);
       } catch {}
+      // formato antigo: uma string única
       return [raw].filter(Boolean);
     }
 
@@ -452,9 +542,6 @@
 
       const set = new Set(list);
       wrap.querySelectorAll('.pm-option').forEach(btn => {
-        // Ignora os botões do filtro na aplicação do modal
-        if (btn.hasAttribute('data-filter-btn')) return;
-        
         const v = (btn.dataset.value || '').trim();
         const isSelected = set.has(v);
         btn.classList.toggle('pm-selected', isSelected);
@@ -475,7 +562,9 @@
       setSelectedPlayModes(current);
     }
 
+    // compat: chamadas antigas
     function applyPlayMode(value) {
+      // se vier string, vira seleção única; se vier array, multi
       if (Array.isArray(value)) setSelectedPlayModes(value);
       else setSelectedPlayModes(value ? [value] : []);
     }
@@ -483,36 +572,42 @@
     function initPlayModePicker() {
       const wrap = document.getElementById('playmode-wrap');
       if (!wrap) return;
+
+      // evita duplicar listener caso o modal abra várias vezes
       if (wrap.dataset.bound === '1') return;
       wrap.dataset.bound = '1';
 
       wrap.addEventListener('click', (e) => {
         const btn = e.target.closest('.pm-option');
-        if (!btn || btn.hasAttribute('data-filter-btn')) return;
+        if (!btn) return;
         togglePlayMode(btn.dataset.value || '');
       });
     }
 
+        // Se o usuário mexer no switch manualmente, a verificação automática não sobrescreve.
     document.addEventListener('change', (ev) => {
       if (ev && ev.target && ev.target.id === 'has-tag') {
         hasTagManualOverride = true;
       }
     });
 
+    // Atualiza automaticamente o "Tem tag?" conforme o nick muda (API/digitação)
     document.addEventListener('input', (ev) => {
       if (ev && ev.target && ev.target.id === 'nick') {
         syncHasTagToggleFromNick();
       }
     });
 
-    // --- LÓGICA DE CACHE ---
+// --- LÓGICA DE CACHE SEM PISCAR ---
+    // 1. Tenta carregar do cache IMEDIATAMENTE antes de qualquer auth
     const cachedMembersJSON = localStorage.getItem('membersList');
     if(cachedMembersJSON) {
          try {
              const cached = JSON.parse(cachedMembersJSON);
              if(Array.isArray(cached) && cached.length > 0) {
                  membersCache = cached;
-                 applyFiltersAndRender();
+                 // Renderiza instantaneamente, removendo os skeletons
+                 renderList(applyFilter(membersCache));
                  document.getElementById('member-count').textContent = `${membersCache.length} membros na guilda`;
              }
          } catch(e) { console.error("Erro cache:", e); }
@@ -523,8 +618,10 @@
       if(!user) return;
       document.getElementById('btn-logout').onclick = logout;
 
+      // Carrega a tag configurada (se existir)
       memberTag = await getMemberTagConfig();
 
+      // Se marcar "Tem Tag" sem tag configurada, avisa e desfaz
       const hasTagEl = document.getElementById('has-tag');
       if (hasTagEl) {
         hasTagEl.addEventListener('change', () => {
@@ -535,18 +632,26 @@
         });
       }
 
+      // Auto-verificação: se o nick já contém a tag, marca "Tem Tag" sozinho
       const nickEl = document.getElementById('nick');
       if (nickEl) {
         nickEl.addEventListener('input', syncHasTagToggleFromNick);
         nickEl.addEventListener('blur', syncHasTagToggleFromNick);
       }
       
+      // Carrega do servidor (Background Update)
+      // Se já temos cache, não passamos "true" para não mostrar loading visual
+      // Apenas atualiza se tiver dados novos
       loadMembers(false);
       
-      document.getElementById('search-input').addEventListener('input', applyFiltersAndRender);
+      // Busca (Search)
+      document.getElementById('search-input').addEventListener('input', () => {
+        refreshListView(true);
+      });
     });
 
     window.loadMembers = async function(forceRefresh = false) {
+      // Se for atualização forçada (botão refresh), mostra toast
       if(forceRefresh) {
          showToast('info', 'Atualizando lista...');
       }
@@ -557,26 +662,30 @@
         snap.forEach(d => newMembers.push({ id: d.id, ...d.data() }));
         newMembers.sort((a,b)=> String(a.nick).localeCompare(String(b.nick)));
         
+        // Verifica se os dados mudaram em relação ao cache atual
+        // Isso evita "piscar" o DOM se os dados forem idênticos
         const currentJSON = JSON.stringify(membersCache);
         const newJSON = JSON.stringify(newMembers);
 
         if (currentJSON !== newJSON || forceRefresh) {
+            // Se mudou ou forçado, atualiza tudo
             membersCache = newMembers;
             localStorage.setItem('membersList', newJSON);
-            
-            applyFiltersAndRender();
+            renderList(applyFilter(membersCache));
             document.getElementById('member-count').textContent = `${membersCache.length} membros na guilda`;
             
             if(forceRefresh) showToast('success', 'Lista atualizada.');
         } else {
-            console.log("Dados sincronizados.");
+            // Dados iguais, não faz nada (silencioso)
+            console.log("Dados sincronizados (sem alterações).");
         }
 
       } catch(err) {
         console.error(err);
+        // ✅ Nunca deixe a UI travada em "Carregando..."
         membersCache = [];
         localStorage.setItem('membersList', JSON.stringify([]));
-        applyFiltersAndRender();
+        renderList([]);
         document.getElementById('member-count').textContent = `0 membros na guilda`;
 
         if(forceRefresh) showToast('error', 'Erro ao buscar dados.');
@@ -586,15 +695,18 @@
     function renderList(list, isSearch = false) {
       const el = document.getElementById('members-list');
       
+      // Se a lista estiver vazia (e não for busca), mantemos um aviso
       if(list.length === 0) {
         if(isSearch) {
-           el.innerHTML = `<div class="text-center py-8 text-gray-400">Nenhum membro encontrado neste filtro/busca.</div>`;
+           el.innerHTML = `<div class="text-center py-8 text-gray-400">Nenhum membro encontrado na busca.</div>`;
         } else {
+           // Se realmente não tiver membros no banco, mostra aviso
            el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">Nenhum membro encontrado.</div>`;
         }
         return;
       }
 
+      // Renderiza HTML
       el.innerHTML = list.map(m => `
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
           <div class="w-full flex items-center gap-3 p-5 cursor-pointer" onclick="toggleDetails('${m.id}')">
@@ -683,8 +795,9 @@
       document.getElementById('has-tag').checked = m.hasTag;
       document.getElementById('join-date').value = m.joinDate;
       
+            // Recalcula automaticamente se o nick contém a tag
       syncHasTagToggleFromNick();
-      document.getElementById('modal-title').innerText = 'Editar Membro';
+document.getElementById('modal-title').innerText = 'Editar Membro';
       document.getElementById('modal').classList.remove('hidden');
     };
 
@@ -693,10 +806,12 @@
       try {
         await deleteDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id));
         showToast('success', 'Membro excluído.');
+        // Força refresh após excluir
         loadMembers(true);
       } catch(e) { showToast('error', 'Erro ao excluir.'); }
     };
 
+    // Busca de Nick (via /api/proxy no seu próprio domínio: sem CORS)
     window.fetchNick = async () => {
       const uid = document.getElementById('visible-id').value.trim();
       const feedback = document.getElementById('api-feedback');
@@ -713,6 +828,7 @@
         const data = await res.json().catch(() => ({}));
 
         const info = data?.AccountInfo;
+        // A Mitsuri mudou o JSON: pode vir como Name/Level ou AccountName/AccountLevel
         const name = info?.Name ?? info?.AccountName;
         const level = info?.Level ?? info?.AccountLevel;
 
@@ -735,11 +851,13 @@
       }
     };
 
+    // Salvar
     document.getElementById('member-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const id = document.getElementById('member-id').value;
       const visibleId = document.getElementById('visible-id').value.trim();
       
+      // Validação de duplicidade (verifica no cache para ser rápido)
       if(!id) {
         const exist = membersCache.find(m => m.visibleId === visibleId);
         if(exist) { showToast('error', 'Esse ID já existe.'); return; }
@@ -747,6 +865,8 @@
 
       const rawNick = document.getElementById('nick').value.trim();
       const hasTag = document.getElementById('has-tag').checked;
+      // Importante: marcar "Tem Tag" NÃO altera o nick.
+      // Algumas tags são estilizadas (fontes/símbolos diferentes), então o nick fica exatamente como o usuário digitou.
       const finalNick = rawNick;
 
       const payload = {
@@ -776,6 +896,7 @@
           showToast('success', 'Criado!');
         }
         closeModal();
+        // Força refresh após salvar
         loadMembers(true);
       } catch(err) {
         showToast('error', 'Erro ao salvar.');
