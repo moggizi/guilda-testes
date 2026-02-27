@@ -25,12 +25,38 @@
 .pm-wrap{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
 .pm-option{display:flex;align-items:center;gap:.55rem;padding:.75rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;transition:.15s;font-size:.875rem;color:#374151}
 .pm-option:hover{background:#f9fafb}
-.pm-circle{width:18px;height:18px;border-radius:999px;border:2px solid #d1d5db;display:inline-block;position:relative;flex:0 0 auto;transition:.2s;}
-.pm-option.pm-selected{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12); background-color: #ecfdf5;}
+.pm-circle{width:18px;height:18px;border-radius:999px;border:2px solid #d1d5db;display:inline-block;position:relative;flex:0 0 auto}
+.pm-option.pm-selected{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12)}
 .pm-option.pm-selected .pm-circle{border-color:#10b981;background:#10b981}
 .pm-option.pm-selected .pm-circle:after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(45deg)}
 
-  </style>
+  
+/* quick edit bottom-sheet */
+.qm-backdrop{background:rgba(0,0,0,.45)}
+.qm-sheet{max-height:88vh}
+.qm-sheet{animation:qmUp .18s ease-out}
+@keyframes qmUp{from{transform:translateY(14px);opacity:.6}to{transform:translateY(0);opacity:1}}
+
+.qc-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.75rem .85rem;border:1px solid #eef2f7;border-radius:16px;background:#fff}
+.qc-main{min-width:0}
+.qc-nick{font-weight:700;color:#111827;font-size:.875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qc-sub{font-size:.75rem;color:#9ca3af;margin-top:.1rem}
+
+.qc-toggles{display:flex;align-items:center;gap:.4rem;flex:0 0 auto}
+.qc-chip{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;padding:.45rem .55rem;border-radius:12px;border:1px solid #e5e7eb;background:#fff;color:#374151;font-size:.75rem;cursor:pointer;transition:.15s}
+.qc-chip:hover{background:#f9fafb}
+.qc-chip.qc-on{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12);background:#ecfdf5;color:#065f46}
+.qc-dot{width:16px;height:16px;border-radius:999px;border:2px solid #d1d5db;display:inline-block;position:relative;transition:.15s}
+.qc-chip.qc-on .qc-dot{border-color:#10b981;background:#10b981}
+.qc-chip.qc-on .qc-dot:after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(45deg)}
+
+.qm-savebar{position:sticky;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-top:1px solid #f3f4f6;padding:.75rem}
+
+/* pretty confirm */
+.cf-wrap{animation:cfIn .14s ease-out}
+@keyframes cfIn{from{transform:scale(.98);opacity:.6}to{transform:scale(1);opacity:1}}
+
+</style>
 </head>
 <body class="bg-gray-50/80">
 
@@ -93,79 +119,11 @@
       </header>
 
       <div class="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
-        
-        <!-- Cabeçalho com Filtros e Botão Adicionar -->
         <div class="flex items-center justify-between">
           <div><h2 class="text-2xl font-bold text-gray-900">Membros</h2><p class="text-gray-500 text-sm mt-1" id="member-count">Carregando...</p></div>
-          
-          <div class="flex items-center gap-2 relative">
-            <!-- Dropdown Filtro Avançado -->
-            <div class="relative">
-              <button onclick="toggleFilterDropdown()" id="btn-filter" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
-                <i data-lucide="filter" class="w-4 h-4"></i> <span class="hidden sm:inline" id="filter-label">Todos</span>
-              </button>
-              
-              <!-- Menu de Opções (Painel Completo) -->
-              <div id="filter-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-4 transform origin-top-right transition-all">
-                
-                <button onclick="applyFilter('all', 'Todos')" class="w-full text-left px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 rounded-xl transition-colors mb-3">
-                  Exibir Todos
-                </button>
-
-                <!-- Filtro Tag -->
-                <div class="mb-3">
-                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Tag</p>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button onclick="applyFilter('with-tag', 'Com Tag')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-tag">
-                      <span class="pm-circle scale-[0.85]"></span> Com Tag
-                    </button>
-                    <button onclick="applyFilter('no-tag', 'Sem Tag')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-tag">
-                      <span class="pm-circle scale-[0.85]"></span> Sem Tag
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Filtro GG -->
-                <div class="mb-3">
-                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Guerra (GG)</p>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button onclick="applyFilter('with-gg', 'GG Batida')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-gg">
-                      <span class="pm-circle scale-[0.85]"></span> Bateu
-                    </button>
-                    <button onclick="applyFilter('no-gg', 'Faltou GG')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-gg">
-                      <span class="pm-circle scale-[0.85]"></span> Faltou
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Filtro Semanal -->
-                <div class="mb-3">
-                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Semanal (honra)</p>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button onclick="applyFilter('with-weekly', 'Semanal Batida')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-weekly">
-                      <span class="pm-circle scale-[0.85]"></span> Bateu
-                    </button>
-                    <button onclick="applyFilter('no-weekly', 'Faltou Semanal')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-weekly">
-                      <span class="pm-circle scale-[0.85]"></span> Faltou
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Filtro Todas as Metas -->
-                <div class="pt-2 border-t border-gray-100">
-                  <button onclick="applyFilter('all-met', 'Metas Batidas')" class="w-full px-3 py-2.5 text-sm font-bold text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors flex items-center justify-center gap-2">
-                    <i data-lucide="check-check" class="w-4 h-4"></i> Todas as Metas
-                  </button>
-                </div>
-
-              </div>
-            </div>
-
-            <!-- Botão Adicionar Original -->
-            <button onclick="openModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
-              <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
-            </button>
-          </div>
+          <button onclick="openModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
+            <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
+          </button>
         </div>
 
         <div class="flex gap-3">
@@ -177,7 +135,7 @@
         </div>
 
         <div id="members-list" class="space-y-3">
-          <!-- Placeholder de carregamento -->
+          <!-- Placeholder de carregamento (Só aparece se não tiver cache) -->
            <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
               <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
               <div class="flex-1 space-y-2">
@@ -255,6 +213,9 @@
       </div>
     </div>
 
+
+      
+      
         <hr class="border-gray-100">
 
         <!-- Toggles -->
@@ -300,80 +261,346 @@
     </div>
   </div>
 
+  
+  <!-- MODAL (Edição Rápida) -->
+  <div id="quick-modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 qm-backdrop" onclick="closeQuickEdit()"></div>
+    <div class="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl qm-sheet overflow-y-auto shadow-2xl cf-wrap">
+      <div class="sticky top-0 bg-white/95 backdrop-blur border-b border-gray-100 p-4 flex items-center justify-between rounded-t-2xl z-10">
+        <div class="min-w-0">
+          <h3 class="text-lg font-bold text-gray-900">Edição rápida</h3>
+          <p class="text-xs text-gray-400 mt-0.5">Edite vários membros de uma vez</p>
+        </div>
+        <button onclick="closeQuickEdit()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <!-- Ações em massa -->
+        <div class="grid grid-cols-2 gap-3">
+          <button id="btn-reset-gg" onclick="confirmResetAll('gg')" class="py-3 rounded-xl border border-gray-200 bg-white text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-colors">
+            Zerar GG
+          </button>
+          <button id="btn-reset-weekly" onclick="confirmResetAll('weekly')" class="py-3 rounded-xl border border-gray-200 bg-white text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-colors">
+            Zerar Semanal
+          </button>
+        </div>
+
+        <!-- Lista -->
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-semibold text-gray-900">Membros</p>
+          <p id="quick-count" class="text-xs text-gray-400">0</p>
+        </div>
+
+        <div id="quick-list" class="space-y-2">
+          <div class="bg-gray-50 rounded-2xl border border-gray-100 p-4 text-sm text-gray-400">Carregando...</div>
+        </div>
+
+        <!-- Save bar -->
+        <div id="quick-savebar" class="qm-savebar hidden">
+          <button id="btn-quick-save" onclick="saveQuickEdits()" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold text-sm shadow-lg hover:shadow-xl transition-all active:scale-95">
+            Salvar alterações
+          </button>
+          <p class="text-[11px] text-gray-400 mt-2 text-center">Vai salvar tudo de uma vez</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRM (Bonito) -->
+  <div id="confirm-modal" class="fixed inset-0 z-[60] hidden items-center justify-center">
+    <div class="fixed inset-0 qm-backdrop" onclick="closeConfirm()"></div>
+    <div class="relative w-full max-w-sm mx-4 bg-white rounded-2xl shadow-2xl border border-gray-100 p-5 cf-wrap">
+      <div class="flex items-start gap-3">
+        <div id="confirm-icon" class="w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 flex-shrink-0">
+          <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+        </div>
+        <div class="min-w-0">
+          <p id="confirm-title" class="text-base font-bold text-gray-900">Confirmar</p>
+          <p id="confirm-msg" class="text-sm text-gray-500 mt-1">Você tem certeza?</p>
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-5">
+        <button onclick="closeConfirm()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-50">Cancelar</button>
+        <button id="confirm-ok" class="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600">Sim, fazer</button>
+      </div>
+      <p class="text-[11px] text-gray-400 mt-3 text-center">Ação irreversível</p>
+    </div>
+  </div>
+
+
   <script type="module">
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildContext } from './logic.js';
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+    // Inicialização IMEDIATA (menu + ícones). Isso evita o "botão do menu sumir"
+    // quando a lista ainda não renderizou.
     setupSidebar();
     initIcons();
     initPlayModePicker();
     
+    // Variável para armazenar a lista na memória
     let membersCache = [];
-    let currentFilter = 'all';
 
+    // Tag configurável (Firestore: configGuilda/{uid}.tagMembros)
     let memberTag = null;
     let hasTagManualOverride = false;
 
-    // ----- LOGICA DO NOVO FILTRO DROPDOWN -----
-    window.toggleFilterDropdown = () => {
-      document.getElementById('filter-dropdown').classList.toggle('hidden');
-    };
+    // ----- EDIÇÃO RÁPIDA (BOTTOM SHEET) -----
+    const pendingEdits = new Map(); // memberId -> { hasTag, guildWar, weeklyMeta }
+    let quickOpen = false;
 
-    window.applyFilter = (filterKey, filterLabel) => {
-      currentFilter = filterKey;
-      document.getElementById('filter-label').innerText = filterLabel;
-      document.getElementById('filter-dropdown').classList.add('hidden');
+    function setLoadingQuick(loading) {
+      const b1 = document.getElementById('btn-reset-gg');
+      const b2 = document.getElementById('btn-reset-weekly');
+      const b3 = document.getElementById('btn-quick-save');
+      [b1, b2, b3].forEach(b => { if (b) b.disabled = !!loading; });
+      if (b1) b1.classList.toggle('opacity-60', !!loading);
+      if (b2) b2.classList.toggle('opacity-60', !!loading);
+      if (b3) b3.classList.toggle('opacity-60', !!loading);
+    }
 
-      // Atualiza visual dos botões check circle do filtro
-      document.querySelectorAll('[data-filter-btn]').forEach(btn => {
-        btn.classList.remove('pm-selected');
-      });
-      
-      const activeBtn = document.querySelector(`[data-filter-btn="${filterKey}"]`);
-      if (activeBtn) {
-        activeBtn.classList.add('pm-selected');
+    function openQuickEdit() {
+      pendingEdits.clear();
+      quickOpen = true;
+      renderQuickList();
+      updateQuickSavebar();
+      document.getElementById('quick-modal').classList.remove('hidden');
+      initIcons();
+    }
+
+    function closeQuickEdit() {
+      quickOpen = false;
+      document.getElementById('quick-modal').classList.add('hidden');
+    }
+
+    window.openQuickEdit = openQuickEdit;
+    window.closeQuickEdit = closeQuickEdit;
+
+    function getEffectiveMember(m) {
+      const p = pendingEdits.get(m.id);
+      if (!p) return m;
+      return {
+        ...m,
+        hasTag: (typeof p.hasTag === 'boolean') ? p.hasTag : m.hasTag,
+        guildWar: (typeof p.guildWar === 'boolean') ? p.guildWar : m.guildWar,
+        weeklyMeta: (typeof p.weeklyMeta === 'boolean') ? p.weeklyMeta : m.weeklyMeta,
+      };
+    }
+
+    function toggleQuickField(memberId, field) {
+      const m = membersCache.find(x => x.id === memberId);
+      if (!m) return;
+
+      const current = getEffectiveMember(m)[field];
+      const next = !current;
+
+      const prev = pendingEdits.get(memberId) || {};
+      const updated = { ...prev, [field]: next };
+
+      // se voltou ao original e não tem mais nada diferente, remove da fila
+      const original = m[field];
+      const stillDiff = Object.keys(updated).some(k => typeof updated[k] === 'boolean' && updated[k] !== m[k]);
+
+      if (!stillDiff) pendingEdits.delete(memberId);
+      else pendingEdits.set(memberId, updated);
+
+      renderQuickList(); // re-render simples
+      updateQuickSavebar();
+    }
+
+    function updateQuickSavebar() {
+      const bar = document.getElementById('quick-savebar');
+      if (!bar) return;
+      bar.classList.toggle('hidden', pendingEdits.size === 0);
+    }
+
+    function renderQuickList() {
+      const listEl = document.getElementById('quick-list');
+      const countEl = document.getElementById('quick-count');
+      if (!listEl || !countEl) return;
+
+      const list = Array.isArray(membersCache) ? membersCache : [];
+      countEl.textContent = String(list.length);
+
+      if (!list.length) {
+        listEl.innerHTML = `<div class="bg-gray-50 rounded-2xl border border-gray-100 p-4 text-sm text-gray-400">Nenhum membro.</div>`;
+        return;
       }
 
-      applyFiltersAndRender();
-    };
+      listEl.innerHTML = list.map(m0 => {
+        const m = getEffectiveMember(m0);
+        const rowChanged = pendingEdits.has(m0.id);
 
-    // Fechar dropdown ao clicar fora
+        return `
+          <div class="qc-row ${rowChanged ? 'ring-2 ring-emerald-100' : ''}">
+            <div class="qc-main">
+              <div class="qc-nick">${m.nick || 'Sem Nick'}</div>
+              <div class="qc-sub">ID: ${m.visibleId || '-'}</div>
+            </div>
+
+            <div class="qc-toggles">
+              <button class="qc-chip ${m.hasTag ? 'qc-on' : ''}" onclick="toggleQuickField('${m0.id}','hasTag')" title="Tag">
+                <span class="qc-dot"></span><span>Tag</span>
+              </button>
+              <button class="qc-chip ${m.guildWar ? 'qc-on' : ''}" onclick="toggleQuickField('${m0.id}','guildWar')" title="GG">
+                <span class="qc-dot"></span><span>GG</span>
+              </button>
+              <button class="qc-chip ${m.weeklyMeta ? 'qc-on' : ''}" onclick="toggleQuickField('${m0.id}','weeklyMeta')" title="Semanal">
+                <span class="qc-dot"></span><span>Sem.</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      initIcons();
+    }
+
+    window.toggleQuickField = toggleQuickField;
+
+    async function saveQuickEdits() {
+      if (pendingEdits.size === 0) return;
+      setLoadingQuick(true);
+
+      try {
+        const guildId = getGuildContext().guildId;
+        const tasks = [];
+
+        pendingEdits.forEach((patch, memberId) => {
+          const payload = {
+            updatedAt: serverTimestamp()
+          };
+
+          if (typeof patch.hasTag === 'boolean') payload.hasTag = patch.hasTag;
+          if (typeof patch.guildWar === 'boolean') payload.guildWar = patch.guildWar;
+          if (typeof patch.weeklyMeta === 'boolean') payload.weeklyMeta = patch.weeklyMeta;
+
+          tasks.push(setDoc(doc(db, "guildas", guildId, "membros", memberId), payload, { merge: true }));
+        });
+
+        await Promise.all(tasks);
+
+        showToast('success', 'Alterações salvas!');
+        pendingEdits.clear();
+        updateQuickSavebar();
+
+        // Recarrega cache e tela sem quebrar o shimmer
+        await loadMembers(true);
+        if (quickOpen) renderQuickList();
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Erro ao salvar alterações.');
+      } finally {
+        setLoadingQuick(false);
+      }
+    }
+    window.saveQuickEdits = saveQuickEdits;
+
+    // ----- CONFIRM BONITO -----
+    let confirmAction = null;
+
+    function openConfirm({ title, msg, okText = 'Sim, fazer', danger = true, onConfirm }) {
+      confirmAction = onConfirm || null;
+
+      const modal = document.getElementById('confirm-modal');
+      const t = document.getElementById('confirm-title');
+      const m = document.getElementById('confirm-msg');
+      const ok = document.getElementById('confirm-ok');
+      const iconBox = document.getElementById('confirm-icon');
+
+      if (t) t.textContent = title || 'Confirmar';
+      if (m) m.textContent = msg || 'Você tem certeza?';
+      if (ok) ok.textContent = okText;
+
+      if (ok) {
+        ok.className = danger
+          ? 'flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600'
+          : 'flex-1 py-3 rounded-xl bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600';
+      }
+      if (iconBox) {
+        iconBox.className = danger
+          ? 'w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 flex-shrink-0'
+          : 'w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 flex-shrink-0';
+      }
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      initIcons();
+    }
+
+    function closeConfirm() {
+      confirmAction = null;
+      const modal = document.getElementById('confirm-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    window.closeConfirm = closeConfirm;
+
+    // Wire OK
     document.addEventListener('click', (e) => {
-      const btn = document.getElementById('btn-filter');
-      const dropdown = document.getElementById('filter-dropdown');
-      if (btn && dropdown && !btn.contains(e.target) && !dropdown.contains(e.target)) {
-        dropdown.classList.add('hidden');
+      if (e.target && e.target.id === 'confirm-ok') {
+        const fn = confirmAction;
+        closeConfirm();
+        if (typeof fn === 'function') fn();
       }
     });
 
-    // Função central que aplica a busca + filtro dropdown juntos
-    function applyFiltersAndRender() {
-      const termo = document.getElementById('search-input').value.toLowerCase();
-      
-      const filtrados = membersCache.filter(m => {
-        // 1. Filtro de Busca (Texto)
-        const matchBusca = (m.nick && m.nick.toLowerCase().includes(termo)) || 
-                           (m.visibleId && String(m.visibleId).includes(termo));
-        if (!matchBusca) return false;
-
-        // 2. Filtros de Status (Dropdown)
-        if (currentFilter === 'with-tag') return m.hasTag;
-        if (currentFilter === 'no-tag') return !m.hasTag;
-
-        if (currentFilter === 'with-gg') return m.guildWar;
-        if (currentFilter === 'no-gg') return !m.guildWar;
-
-        if (currentFilter === 'with-weekly') return m.weeklyMeta;
-        if (currentFilter === 'no-weekly') return !m.weeklyMeta;
-
-        if (currentFilter === 'all-met') return (m.weeklyMeta && m.guildWar);
-
-        return true; // 'all'
+    // ----- RESET EM MASSA -----
+    function confirmResetAll(kind) {
+      const title = (kind === 'gg') ? 'Zerar GG de todo mundo?' : 'Zerar Semanal de todo mundo?';
+      const msg = 'Isso vai colocar os pontos em 0 e marcar como não batido (false). Não tem como desfazer.';
+      openConfirm({
+        title,
+        msg,
+        okText: 'Sim, zerar',
+        danger: true,
+        onConfirm: () => resetAll(kind)
       });
-
-      renderList(filtrados, termo !== '' || currentFilter !== 'all');
     }
-    // ------------------------------------------
+    window.confirmResetAll = confirmResetAll;
+
+    async function resetAll(kind) {
+      setLoadingQuick(true);
+      try {
+        const guildId = getGuildContext().guildId;
+
+        // garante que temos a lista mais atual antes de aplicar
+        const snap = await getDocs(collection(db, "guildas", guildId, "membros"));
+        const tasks = [];
+
+        snap.forEach(d => {
+          const payload = { updatedAt: serverTimestamp() };
+
+          if (kind === 'gg') {
+            payload.guildWarMeta = 0;
+            payload.guildWar = false;
+          } else {
+            payload.weeklyMetaValue = 0;
+            payload.weeklyMeta = false;
+          }
+
+          tasks.push(setDoc(doc(db, "guildas", guildId, "membros", d.id), payload, { merge: true }));
+        });
+
+        await Promise.all(tasks);
+
+        showToast('success', 'Feito!');
+        pendingEdits.clear();
+        updateQuickSavebar();
+
+        await loadMembers(true);
+        if (quickOpen) renderQuickList();
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Erro ao zerar.');
+      } finally {
+        setLoadingQuick(false);
+      }
+    }
+    // ----------------------------------------
+
 
     function escapeRegExp(str) {
       return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -381,6 +608,7 @@
 
     function stripKnownTags(nick) {
       const raw = String(nick || "").trim();
+      // Remove a tag configurada (se existir) e também tags antigas (compat)
       const candidates = [memberTag, "ᵒᵗᵏ", "otk"];
       for (const t of candidates) {
         if (!t) continue;
@@ -390,6 +618,8 @@
       return raw;
     }
 
+
+    // Garante que o nick fique com apenas 1 tag no começo (evita duplicar no editar)
     function normalizeNickWithTag(rawNick, tag, wantsTag) {
       const nick = (rawNick || '').trim();
       if (!wantsTag || !tag) return nick;
@@ -397,8 +627,10 @@
       const t = String(tag).trim();
       if (!t) return nick;
 
+      // remove repetições da tag no começo: "TAG TAG Nick" -> "Nick"
       const esc = escapeRegExp(t);
       let cleaned = nick.replace(new RegExp('^(?:' + esc + '\\s*)+', 'g'), '').trim();
+      // fallback case-insensitive (caso a tag venha com variação de maiúsculas/minúsculas)
       if (cleaned === nick) {
         cleaned = nick.replace(new RegExp('^(?:' + esc + '\\s*)+', 'gi'), '').trim();
       }
@@ -410,6 +642,7 @@
       const raw = String(nick || "");
       const t = String(memberTag || "").trim();
       if (!t) return false;
+      // Verifica se a tag aparece em qualquer parte do nick (case-insensitive)
       try {
         const re = new RegExp(escapeRegExp(t), 'i');
         return re.test(raw);
@@ -422,20 +655,29 @@
       const hasTagEl = document.getElementById('has-tag');
       const nickEl = document.getElementById('nick');
       if (!hasTagEl || !nickEl) return;
+
+      // Se o usuário marcou/desmarcou manualmente, não sobrescreve.
       if (hasTagManualOverride) return;
+
+      // Sem tag configurada, não temos como detectar automaticamente.
       if (!memberTag) return;
+
       hasTagEl.checked = nickHasMemberTag(nickEl.value);
     }
 
+
+    // playMode (multi select com visual "check circle" — pode marcar vários e desmarcar clicando)
     function getSelectedPlayModes() {
       const hidden = document.getElementById('play-mode');
       if (!hidden) return [];
       const raw = (hidden.value || '').trim();
       if (!raw) return [];
+      // Preferimos JSON (novo), mas aceitamos string antiga (compat)
       try {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed.filter(Boolean).map(v => String(v).trim()).filter(Boolean);
       } catch {}
+      // formato antigo: uma string única
       return [raw].filter(Boolean);
     }
 
@@ -452,9 +694,6 @@
 
       const set = new Set(list);
       wrap.querySelectorAll('.pm-option').forEach(btn => {
-        // Ignora os botões do filtro na aplicação do modal
-        if (btn.hasAttribute('data-filter-btn')) return;
-        
         const v = (btn.dataset.value || '').trim();
         const isSelected = set.has(v);
         btn.classList.toggle('pm-selected', isSelected);
@@ -475,7 +714,9 @@
       setSelectedPlayModes(current);
     }
 
+    // compat: chamadas antigas
     function applyPlayMode(value) {
+      // se vier string, vira seleção única; se vier array, multi
       if (Array.isArray(value)) setSelectedPlayModes(value);
       else setSelectedPlayModes(value ? [value] : []);
     }
@@ -483,36 +724,42 @@
     function initPlayModePicker() {
       const wrap = document.getElementById('playmode-wrap');
       if (!wrap) return;
+
+      // evita duplicar listener caso o modal abra várias vezes
       if (wrap.dataset.bound === '1') return;
       wrap.dataset.bound = '1';
 
       wrap.addEventListener('click', (e) => {
         const btn = e.target.closest('.pm-option');
-        if (!btn || btn.hasAttribute('data-filter-btn')) return;
+        if (!btn) return;
         togglePlayMode(btn.dataset.value || '');
       });
     }
 
+        // Se o usuário mexer no switch manualmente, a verificação automática não sobrescreve.
     document.addEventListener('change', (ev) => {
       if (ev && ev.target && ev.target.id === 'has-tag') {
         hasTagManualOverride = true;
       }
     });
 
+    // Atualiza automaticamente o "Tem tag?" conforme o nick muda (API/digitação)
     document.addEventListener('input', (ev) => {
       if (ev && ev.target && ev.target.id === 'nick') {
         syncHasTagToggleFromNick();
       }
     });
 
-    // --- LÓGICA DE CACHE ---
+// --- LÓGICA DE CACHE SEM PISCAR ---
+    // 1. Tenta carregar do cache IMEDIATAMENTE antes de qualquer auth
     const cachedMembersJSON = localStorage.getItem('membersList');
     if(cachedMembersJSON) {
          try {
              const cached = JSON.parse(cachedMembersJSON);
              if(Array.isArray(cached) && cached.length > 0) {
                  membersCache = cached;
-                 applyFiltersAndRender();
+                 // Renderiza instantaneamente, removendo os skeletons
+                 renderList(membersCache);
                  document.getElementById('member-count').textContent = `${membersCache.length} membros na guilda`;
              }
          } catch(e) { console.error("Erro cache:", e); }
@@ -523,8 +770,10 @@
       if(!user) return;
       document.getElementById('btn-logout').onclick = logout;
 
+      // Carrega a tag configurada (se existir)
       memberTag = await getMemberTagConfig();
 
+      // Se marcar "Tem Tag" sem tag configurada, avisa e desfaz
       const hasTagEl = document.getElementById('has-tag');
       if (hasTagEl) {
         hasTagEl.addEventListener('change', () => {
@@ -535,18 +784,31 @@
         });
       }
 
+      // Auto-verificação: se o nick já contém a tag, marca "Tem Tag" sozinho
       const nickEl = document.getElementById('nick');
       if (nickEl) {
         nickEl.addEventListener('input', syncHasTagToggleFromNick);
         nickEl.addEventListener('blur', syncHasTagToggleFromNick);
       }
       
+      // Carrega do servidor (Background Update)
+      // Se já temos cache, não passamos "true" para não mostrar loading visual
+      // Apenas atualiza se tiver dados novos
       loadMembers(false);
       
-      document.getElementById('search-input').addEventListener('input', applyFiltersAndRender);
+      // Busca (Search)
+      document.getElementById('search-input').addEventListener('input', (e) => {
+        const termo = e.target.value.toLowerCase();
+        const filtrados = membersCache.filter(m => 
+          (m.nick && m.nick.toLowerCase().includes(termo)) || 
+          (m.visibleId && String(m.visibleId).includes(termo))
+        );
+        renderList(filtrados, true); // true para forçar render na busca
+      });
     });
 
     window.loadMembers = async function(forceRefresh = false) {
+      // Se for atualização forçada (botão refresh), mostra toast
       if(forceRefresh) {
          showToast('info', 'Atualizando lista...');
       }
@@ -557,26 +819,30 @@
         snap.forEach(d => newMembers.push({ id: d.id, ...d.data() }));
         newMembers.sort((a,b)=> String(a.nick).localeCompare(String(b.nick)));
         
+        // Verifica se os dados mudaram em relação ao cache atual
+        // Isso evita "piscar" o DOM se os dados forem idênticos
         const currentJSON = JSON.stringify(membersCache);
         const newJSON = JSON.stringify(newMembers);
 
         if (currentJSON !== newJSON || forceRefresh) {
+            // Se mudou ou forçado, atualiza tudo
             membersCache = newMembers;
             localStorage.setItem('membersList', newJSON);
-            
-            applyFiltersAndRender();
+            renderList(membersCache);
             document.getElementById('member-count').textContent = `${membersCache.length} membros na guilda`;
             
             if(forceRefresh) showToast('success', 'Lista atualizada.');
         } else {
-            console.log("Dados sincronizados.");
+            // Dados iguais, não faz nada (silencioso)
+            console.log("Dados sincronizados (sem alterações).");
         }
 
       } catch(err) {
         console.error(err);
+        // ✅ Nunca deixe a UI travada em "Carregando..."
         membersCache = [];
         localStorage.setItem('membersList', JSON.stringify([]));
-        applyFiltersAndRender();
+        renderList([]);
         document.getElementById('member-count').textContent = `0 membros na guilda`;
 
         if(forceRefresh) showToast('error', 'Erro ao buscar dados.');
@@ -586,15 +852,18 @@
     function renderList(list, isSearch = false) {
       const el = document.getElementById('members-list');
       
+      // Se a lista estiver vazia (e não for busca), mantemos um aviso
       if(list.length === 0) {
         if(isSearch) {
-           el.innerHTML = `<div class="text-center py-8 text-gray-400">Nenhum membro encontrado neste filtro/busca.</div>`;
+           el.innerHTML = `<div class="text-center py-8 text-gray-400">Nenhum membro encontrado na busca.</div>`;
         } else {
+           // Se realmente não tiver membros no banco, mostra aviso
            el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">Nenhum membro encontrado.</div>`;
         }
         return;
       }
 
+      // Renderiza HTML
       el.innerHTML = list.map(m => `
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
           <div class="w-full flex items-center gap-3 p-5 cursor-pointer" onclick="toggleDetails('${m.id}')">
@@ -683,8 +952,9 @@
       document.getElementById('has-tag').checked = m.hasTag;
       document.getElementById('join-date').value = m.joinDate;
       
+            // Recalcula automaticamente se o nick contém a tag
       syncHasTagToggleFromNick();
-      document.getElementById('modal-title').innerText = 'Editar Membro';
+document.getElementById('modal-title').innerText = 'Editar Membro';
       document.getElementById('modal').classList.remove('hidden');
     };
 
@@ -693,10 +963,12 @@
       try {
         await deleteDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id));
         showToast('success', 'Membro excluído.');
+        // Força refresh após excluir
         loadMembers(true);
       } catch(e) { showToast('error', 'Erro ao excluir.'); }
     };
 
+    // Busca de Nick (via /api/proxy no seu próprio domínio: sem CORS)
     window.fetchNick = async () => {
       const uid = document.getElementById('visible-id').value.trim();
       const feedback = document.getElementById('api-feedback');
@@ -713,6 +985,7 @@
         const data = await res.json().catch(() => ({}));
 
         const info = data?.AccountInfo;
+        // A Mitsuri mudou o JSON: pode vir como Name/Level ou AccountName/AccountLevel
         const name = info?.Name ?? info?.AccountName;
         const level = info?.Level ?? info?.AccountLevel;
 
@@ -735,11 +1008,13 @@
       }
     };
 
+    // Salvar
     document.getElementById('member-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const id = document.getElementById('member-id').value;
       const visibleId = document.getElementById('visible-id').value.trim();
       
+      // Validação de duplicidade (verifica no cache para ser rápido)
       if(!id) {
         const exist = membersCache.find(m => m.visibleId === visibleId);
         if(exist) { showToast('error', 'Esse ID já existe.'); return; }
@@ -747,6 +1022,8 @@
 
       const rawNick = document.getElementById('nick').value.trim();
       const hasTag = document.getElementById('has-tag').checked;
+      // Importante: marcar "Tem Tag" NÃO altera o nick.
+      // Algumas tags são estilizadas (fontes/símbolos diferentes), então o nick fica exatamente como o usuário digitou.
       const finalNick = rawNick;
 
       const payload = {
@@ -776,6 +1053,7 @@
           showToast('success', 'Criado!');
         }
         closeModal();
+        // Força refresh após salvar
         loadMembers(true);
       } catch(err) {
         showToast('error', 'Erro ao salvar.');
