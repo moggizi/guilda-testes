@@ -93,36 +93,32 @@
       </header>
 
       <div class="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
+        
+        <!-- Cabeçalho com Filtros e Botão Adicionar -->
         <div class="flex items-center justify-between">
           <div><h2 class="text-2xl font-bold text-gray-900">Membros</h2><p class="text-gray-500 text-sm mt-1" id="member-count">Carregando...</p></div>
-          <div class="relative flex items-center gap-2">
+          
+          <div class="flex items-center gap-2 relative">
+            <!-- Dropdown Filtro -->
+            <div class="relative">
+              <button onclick="toggleFilterDropdown()" id="btn-filter" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+                <i data-lucide="filter" class="w-4 h-4"></i> <span class="hidden sm:inline" id="filter-label">Todos</span>
+              </button>
+              
+              <!-- Menu de Opções -->
+              <div id="filter-dropdown" class="hidden absolute right-0 mt-2 w-44 bg-white rounded-xl shadow-lg border border-gray-100 z-50 overflow-hidden">
+                <button onclick="applyFilter('all', 'Todos')" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">Todos</button>
+                <button onclick="applyFilter('no-tag', 'Sem Tag')" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">Sem Tag</button>
+                <button onclick="applyFilter('no-weekly', 'Faltou Semanal')" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">Faltou Semanal</button>
+                <button onclick="applyFilter('no-war', 'Faltou GG')" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">Faltou GG</button>
+                <button onclick="applyFilter('all-met', 'Metas Batidas')" class="w-full text-left px-4 py-2.5 text-sm text-emerald-600 font-medium hover:bg-emerald-50 transition-colors border-t border-gray-50">Metas Batidas</button>
+              </div>
+            </div>
+
+            <!-- Botão Adicionar Original -->
             <button onclick="openModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
               <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
             </button>
-
-            <button id="filter-btn" type="button" class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors active:scale-95" aria-haspopup="menu" aria-expanded="false" title="Filtrar">
-              <i data-lucide="filter" class="w-4 h-4 text-gray-500"></i>
-              <span id="filter-label" class="hidden sm:inline">Todos</span>
-              <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
-            </button>
-
-            <div id="filter-menu" class="hidden absolute right-0 top-full mt-2 w-56 bg-white border border-gray-200 rounded-2xl shadow-xl shadow-black/5 p-1.5 z-40 animate-in" role="menu" aria-label="Filtros de membros">
-              <button type="button" class="filter-item w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between" data-filter="all" role="menuitem">
-                <span>Todos</span><i data-lucide="check" class="filter-check w-4 h-4 text-emerald-600 opacity-0"></i>
-              </button>
-              <button type="button" class="filter-item w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between" data-filter="noTag" role="menuitem">
-                <span>Sem tag</span><i data-lucide="check" class="filter-check w-4 h-4 text-emerald-600 opacity-0"></i>
-              </button>
-              <button type="button" class="filter-item w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between" data-filter="weeklyPending" role="menuitem">
-                <span>Semanal pend.</span><i data-lucide="check" class="filter-check w-4 h-4 text-emerald-600 opacity-0"></i>
-              </button>
-              <button type="button" class="filter-item w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between" data-filter="warPending" role="menuitem">
-                <span>Guerra pend.</span><i data-lucide="check" class="filter-check w-4 h-4 text-emerald-600 opacity-0"></i>
-              </button>
-              <button type="button" class="filter-item w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between" data-filter="allOk" role="menuitem">
-                <span>Tudo OK</span><i data-lucide="check" class="filter-check w-4 h-4 text-emerald-600 opacity-0"></i>
-              </button>
-            </div>
           </div>
         </div>
 
@@ -270,147 +266,60 @@
     setupSidebar();
     initIcons();
     initPlayModePicker();
-    bindFilterUi();
     
     // Variável para armazenar a lista na memória
     let membersCache = [];
-
-    // Estado de filtros/busca (UI)
-    let viewSearchTerm = '';
-    let viewFilter = 'all';
-
-    const FILTER_LABELS = {
-      all: 'Todos',
-      noTag: 'Sem tag',
-      weeklyPending: 'Semanal pend.',
-      warPending: 'Guerra pend.',
-      allOk: 'Tudo OK'
-    };
-
-    function applyView() {
-      const term = (viewSearchTerm || '').toLowerCase().trim();
-      const base = Array.isArray(membersCache) ? membersCache : [];
-
-      let list = base;
-
-      // Busca
-      if (term) {
-        list = list.filter(m =>
-          (m.nick && String(m.nick).toLowerCase().includes(term)) ||
-          (m.visibleId && String(m.visibleId).includes(term))
-        );
-      }
-
-      // Filtros
-      if (viewFilter === 'noTag') {
-        list = list.filter(m => !m.hasTag);
-      } else if (viewFilter === 'weeklyPending') {
-        // Interpretação atual: weeklyMeta = bateu meta semanal (true/false)
-        list = list.filter(m => !m.weeklyMeta);
-      } else if (viewFilter === 'warPending') {
-        // Interpretação atual: guildWar = bateu a guerra (true/false)
-        list = list.filter(m => !m.guildWar);
-      } else if (viewFilter === 'allOk') {
-        // "Bateu todas as metas" (inclui: guerra + semanal + tag)
-        list = list.filter(m => !!m.weeklyMeta && !!m.guildWar && !!m.hasTag);
-      }
-
-      const isFiltered = !!term || viewFilter !== 'all';
-      renderList(list, isFiltered);
-
-      // Contador (mostrando X de Y quando estiver filtrando/buscando)
-      const counter = document.getElementById('member-count');
-      if (counter) {
-        if (isFiltered) counter.textContent = `${list.length} de ${base.length} membros`;
-        else counter.textContent = `${base.length} membros na guilda`;
-      }
-
-      // Atualiza label/seleção do menu
-      const lbl = document.getElementById('filter-label');
-      if (lbl) lbl.textContent = FILTER_LABELS[viewFilter] || 'Todos';
-      updateFilterMenuChecks();
-    }
-
-    function closeFilterMenu() {
-      const menu = document.getElementById('filter-menu');
-      const btn = document.getElementById('filter-btn');
-      if (menu) menu.classList.add('hidden');
-      if (btn) btn.setAttribute('aria-expanded', 'false');
-    }
-
-    function toggleFilterMenu() {
-      const menu = document.getElementById('filter-menu');
-      const btn = document.getElementById('filter-btn');
-      if (!menu || !btn) return;
-      const isOpen = !menu.classList.contains('hidden');
-      if (isOpen) closeFilterMenu();
-      else {
-        menu.classList.remove('hidden');
-        btn.setAttribute('aria-expanded', 'true');
-        updateFilterMenuChecks();
-        try { initIcons(); } catch (_) {}
-      }
-    }
-
-    function updateFilterMenuChecks() {
-      const menu = document.getElementById('filter-menu');
-      if (!menu) return;
-      menu.querySelectorAll('.filter-item').forEach((it) => {
-        const key = it.dataset.filter || 'all';
-        const icon = it.querySelector('.filter-check');
-        const active = key === viewFilter;
-        it.classList.toggle('bg-emerald-50', active);
-        it.classList.toggle('text-emerald-700', active);
-        if (icon) icon.classList.toggle('opacity-0', !active);
-      });
-    }
-
-    function bindFilterUi() {
-      const btn = document.getElementById('filter-btn');
-      const menu = document.getElementById('filter-menu');
-      if (!btn || !menu) return;
-
-      if (btn.dataset.bound === '1') return;
-      btn.dataset.bound = '1';
-
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleFilterMenu();
-      });
-
-      menu.addEventListener('click', (e) => {
-        const item = e.target.closest('.filter-item');
-        if (!item) return;
-        e.preventDefault();
-        const key = item.dataset.filter || 'all';
-        viewFilter = key;
-        closeFilterMenu();
-        applyView();
-      });
-
-      // Fecha clicando fora
-      document.addEventListener('click', (e) => {
-        const t = e.target;
-        if (!t) return;
-        if (t.closest && (t.closest('#filter-menu') || t.closest('#filter-btn'))) return;
-        closeFilterMenu();
-      });
-
-      // Fecha com ESC
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeFilterMenu();
-      });
-
-      // Estado inicial
-      const lbl = document.getElementById('filter-label');
-      if (lbl) lbl.textContent = FILTER_LABELS[viewFilter] || 'Todos';
-      updateFilterMenuChecks();
-    }
+    
+    // Variável de estado para o filtro atual
+    let currentFilter = 'all';
 
     // Tag configurável (Firestore: configGuilda/{uid}.tagMembros)
     let memberTag = null;
     let hasTagManualOverride = false;
+
+    // ----- LOGICA DO NOVO FILTRO DROPDOWN -----
+    window.toggleFilterDropdown = () => {
+      document.getElementById('filter-dropdown').classList.toggle('hidden');
+    };
+
+    window.applyFilter = (filterKey, filterLabel) => {
+      currentFilter = filterKey;
+      document.getElementById('filter-label').innerText = filterLabel;
+      document.getElementById('filter-dropdown').classList.add('hidden');
+      applyFiltersAndRender();
+    };
+
+    // Fechar dropdown ao clicar fora
+    document.addEventListener('click', (e) => {
+      const btn = document.getElementById('btn-filter');
+      const dropdown = document.getElementById('filter-dropdown');
+      if (btn && dropdown && !btn.contains(e.target) && !dropdown.contains(e.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    // Função central que aplica a busca + filtro dropdown juntos
+    function applyFiltersAndRender() {
+      const termo = document.getElementById('search-input').value.toLowerCase();
+      
+      const filtrados = membersCache.filter(m => {
+        // 1. Filtro de Busca (Texto)
+        const matchBusca = (m.nick && m.nick.toLowerCase().includes(termo)) || 
+                           (m.visibleId && String(m.visibleId).includes(termo));
+        if (!matchBusca) return false;
+
+        // 2. Filtro de Status (Dropdown)
+        if (currentFilter === 'no-tag') return !m.hasTag;
+        if (currentFilter === 'no-weekly') return !m.weeklyMeta;
+        if (currentFilter === 'no-war') return !m.guildWar;
+        if (currentFilter === 'all-met') return (m.weeklyMeta && m.guildWar);
+
+        return true; // 'all'
+      });
+
+      renderList(filtrados, termo !== '' || currentFilter !== 'all');
+    }
+    // ------------------------------------------
 
     function escapeRegExp(str) {
       return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -418,7 +327,6 @@
 
     function stripKnownTags(nick) {
       const raw = String(nick || "").trim();
-      // Remove a tag configurada (se existir) e também tags antigas (compat)
       const candidates = [memberTag, "ᵒᵗᵏ", "otk"];
       for (const t of candidates) {
         if (!t) continue;
@@ -428,8 +336,6 @@
       return raw;
     }
 
-
-    // Garante que o nick fique com apenas 1 tag no começo (evita duplicar no editar)
     function normalizeNickWithTag(rawNick, tag, wantsTag) {
       const nick = (rawNick || '').trim();
       if (!wantsTag || !tag) return nick;
@@ -437,10 +343,8 @@
       const t = String(tag).trim();
       if (!t) return nick;
 
-      // remove repetições da tag no começo: "TAG TAG Nick" -> "Nick"
       const esc = escapeRegExp(t);
       let cleaned = nick.replace(new RegExp('^(?:' + esc + '\\s*)+', 'g'), '').trim();
-      // fallback case-insensitive (caso a tag venha com variação de maiúsculas/minúsculas)
       if (cleaned === nick) {
         cleaned = nick.replace(new RegExp('^(?:' + esc + '\\s*)+', 'gi'), '').trim();
       }
@@ -452,7 +356,6 @@
       const raw = String(nick || "");
       const t = String(memberTag || "").trim();
       if (!t) return false;
-      // Verifica se a tag aparece em qualquer parte do nick (case-insensitive)
       try {
         const re = new RegExp(escapeRegExp(t), 'i');
         return re.test(raw);
@@ -465,29 +368,20 @@
       const hasTagEl = document.getElementById('has-tag');
       const nickEl = document.getElementById('nick');
       if (!hasTagEl || !nickEl) return;
-
-      // Se o usuário marcou/desmarcou manualmente, não sobrescreve.
       if (hasTagManualOverride) return;
-
-      // Sem tag configurada, não temos como detectar automaticamente.
       if (!memberTag) return;
-
       hasTagEl.checked = nickHasMemberTag(nickEl.value);
     }
 
-
-    // playMode (multi select com visual "check circle" — pode marcar vários e desmarcar clicando)
     function getSelectedPlayModes() {
       const hidden = document.getElementById('play-mode');
       if (!hidden) return [];
       const raw = (hidden.value || '').trim();
       if (!raw) return [];
-      // Preferimos JSON (novo), mas aceitamos string antiga (compat)
       try {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed.filter(Boolean).map(v => String(v).trim()).filter(Boolean);
       } catch {}
-      // formato antigo: uma string única
       return [raw].filter(Boolean);
     }
 
@@ -524,9 +418,7 @@
       setSelectedPlayModes(current);
     }
 
-    // compat: chamadas antigas
     function applyPlayMode(value) {
-      // se vier string, vira seleção única; se vier array, multi
       if (Array.isArray(value)) setSelectedPlayModes(value);
       else setSelectedPlayModes(value ? [value] : []);
     }
@@ -534,8 +426,6 @@
     function initPlayModePicker() {
       const wrap = document.getElementById('playmode-wrap');
       if (!wrap) return;
-
-      // evita duplicar listener caso o modal abra várias vezes
       if (wrap.dataset.bound === '1') return;
       wrap.dataset.bound = '1';
 
@@ -546,30 +436,28 @@
       });
     }
 
-        // Se o usuário mexer no switch manualmente, a verificação automática não sobrescreve.
     document.addEventListener('change', (ev) => {
       if (ev && ev.target && ev.target.id === 'has-tag') {
         hasTagManualOverride = true;
       }
     });
 
-    // Atualiza automaticamente o "Tem tag?" conforme o nick muda (API/digitação)
     document.addEventListener('input', (ev) => {
       if (ev && ev.target && ev.target.id === 'nick') {
         syncHasTagToggleFromNick();
       }
     });
 
-// --- LÓGICA DE CACHE SEM PISCAR ---
-    // 1. Tenta carregar do cache IMEDIATAMENTE antes de qualquer auth
+    // --- LÓGICA DE CACHE SEM PISCAR ---
     const cachedMembersJSON = localStorage.getItem('membersList');
     if(cachedMembersJSON) {
          try {
              const cached = JSON.parse(cachedMembersJSON);
              if(Array.isArray(cached) && cached.length > 0) {
                  membersCache = cached;
-                 // Renderiza instantaneamente, removendo os skeletons
-                 applyView();
+                 // Chamando a função de filtro no lugar do renderList antigo
+                 applyFiltersAndRender();
+                 document.getElementById('member-count').textContent = `${membersCache.length} membros na guilda`;
              }
          } catch(e) { console.error("Erro cache:", e); }
     }
@@ -579,10 +467,8 @@
       if(!user) return;
       document.getElementById('btn-logout').onclick = logout;
 
-      // Carrega a tag configurada (se existir)
       memberTag = await getMemberTagConfig();
 
-      // Se marcar "Tem Tag" sem tag configurada, avisa e desfaz
       const hasTagEl = document.getElementById('has-tag');
       if (hasTagEl) {
         hasTagEl.addEventListener('change', () => {
@@ -593,27 +479,19 @@
         });
       }
 
-      // Auto-verificação: se o nick já contém a tag, marca "Tem Tag" sozinho
       const nickEl = document.getElementById('nick');
       if (nickEl) {
         nickEl.addEventListener('input', syncHasTagToggleFromNick);
         nickEl.addEventListener('blur', syncHasTagToggleFromNick);
       }
       
-      // Carrega do servidor (Background Update)
-      // Se já temos cache, não passamos "true" para não mostrar loading visual
-      // Apenas atualiza se tiver dados novos
       loadMembers(false);
       
-      // Busca (Search)
-      document.getElementById('search-input').addEventListener('input', (e) => {
-        viewSearchTerm = (e.target.value || '');
-        applyView();
-      });
+      // A busca agora aciona a função de filtros que varre texto e dropdown
+      document.getElementById('search-input').addEventListener('input', applyFiltersAndRender);
     });
 
     window.loadMembers = async function(forceRefresh = false) {
-      // Se for atualização forçada (botão refresh), mostra toast
       if(forceRefresh) {
          showToast('info', 'Atualizando lista...');
       }
@@ -624,29 +502,29 @@
         snap.forEach(d => newMembers.push({ id: d.id, ...d.data() }));
         newMembers.sort((a,b)=> String(a.nick).localeCompare(String(b.nick)));
         
-        // Verifica se os dados mudaram em relação ao cache atual
-        // Isso evita "piscar" o DOM se os dados forem idênticos
         const currentJSON = JSON.stringify(membersCache);
         const newJSON = JSON.stringify(newMembers);
 
         if (currentJSON !== newJSON || forceRefresh) {
-            // Se mudou ou forçado, atualiza tudo
             membersCache = newMembers;
             localStorage.setItem('membersList', newJSON);
-            applyView();
+            
+            // Re-aplicar os filtros e atualizar a UI
+            applyFiltersAndRender();
+            
+            document.getElementById('member-count').textContent = `${membersCache.length} membros na guilda`;
             
             if(forceRefresh) showToast('success', 'Lista atualizada.');
         } else {
-            // Dados iguais, não faz nada (silencioso)
             console.log("Dados sincronizados (sem alterações).");
         }
 
       } catch(err) {
         console.error(err);
-        // ✅ Nunca deixe a UI travada em "Carregando..."
         membersCache = [];
         localStorage.setItem('membersList', JSON.stringify([]));
-        applyView();
+        applyFiltersAndRender();
+        document.getElementById('member-count').textContent = `0 membros na guilda`;
 
         if(forceRefresh) showToast('error', 'Erro ao buscar dados.');
       }
@@ -655,18 +533,15 @@
     function renderList(list, isSearch = false) {
       const el = document.getElementById('members-list');
       
-      // Se a lista estiver vazia (e não for busca), mantemos um aviso
       if(list.length === 0) {
         if(isSearch) {
-           el.innerHTML = `<div class="text-center py-8 text-gray-400">Nenhum membro encontrado.</div>`;
+           el.innerHTML = `<div class="text-center py-8 text-gray-400">Nenhum membro encontrado neste filtro/busca.</div>`;
         } else {
-           // Se realmente não tiver membros no banco, mostra aviso
            el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">Nenhum membro encontrado.</div>`;
         }
         return;
       }
 
-      // Renderiza HTML
       el.innerHTML = list.map(m => `
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
           <div class="w-full flex items-center gap-3 p-5 cursor-pointer" onclick="toggleDetails('${m.id}')">
@@ -755,9 +630,8 @@
       document.getElementById('has-tag').checked = m.hasTag;
       document.getElementById('join-date').value = m.joinDate;
       
-            // Recalcula automaticamente se o nick contém a tag
       syncHasTagToggleFromNick();
-document.getElementById('modal-title').innerText = 'Editar Membro';
+      document.getElementById('modal-title').innerText = 'Editar Membro';
       document.getElementById('modal').classList.remove('hidden');
     };
 
@@ -766,12 +640,10 @@ document.getElementById('modal-title').innerText = 'Editar Membro';
       try {
         await deleteDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id));
         showToast('success', 'Membro excluído.');
-        // Força refresh após excluir
         loadMembers(true);
       } catch(e) { showToast('error', 'Erro ao excluir.'); }
     };
 
-    // Busca de Nick (via /api/proxy no seu próprio domínio: sem CORS)
     window.fetchNick = async () => {
       const uid = document.getElementById('visible-id').value.trim();
       const feedback = document.getElementById('api-feedback');
@@ -788,7 +660,6 @@ document.getElementById('modal-title').innerText = 'Editar Membro';
         const data = await res.json().catch(() => ({}));
 
         const info = data?.AccountInfo;
-        // A Mitsuri mudou o JSON: pode vir como Name/Level ou AccountName/AccountLevel
         const name = info?.Name ?? info?.AccountName;
         const level = info?.Level ?? info?.AccountLevel;
 
@@ -811,13 +682,11 @@ document.getElementById('modal-title').innerText = 'Editar Membro';
       }
     };
 
-    // Salvar
     document.getElementById('member-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const id = document.getElementById('member-id').value;
       const visibleId = document.getElementById('visible-id').value.trim();
       
-      // Validação de duplicidade (verifica no cache para ser rápido)
       if(!id) {
         const exist = membersCache.find(m => m.visibleId === visibleId);
         if(exist) { showToast('error', 'Esse ID já existe.'); return; }
@@ -825,8 +694,6 @@ document.getElementById('modal-title').innerText = 'Editar Membro';
 
       const rawNick = document.getElementById('nick').value.trim();
       const hasTag = document.getElementById('has-tag').checked;
-      // Importante: marcar "Tem Tag" NÃO altera o nick.
-      // Algumas tags são estilizadas (fontes/símbolos diferentes), então o nick fica exatamente como o usuário digitou.
       const finalNick = rawNick;
 
       const payload = {
@@ -856,7 +723,6 @@ document.getElementById('modal-title').innerText = 'Editar Membro';
           showToast('success', 'Criado!');
         }
         closeModal();
-        // Força refresh após salvar
         loadMembers(true);
       } catch(err) {
         showToast('error', 'Erro ao salvar.');
