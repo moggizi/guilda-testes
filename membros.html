@@ -30,7 +30,12 @@
 .pm-option.pm-selected .pm-circle{border-color:#10b981;background:#10b981}
 .pm-option.pm-selected .pm-circle:after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(45deg)}
 
-  </style>
+  
+/* dropdown filtro */
+@keyframes popMenu{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+#filter-menu{animation:popMenu .12s ease-out}
+
+</style>
 </head>
 <body class="bg-gray-50/80">
 
@@ -95,9 +100,40 @@
       <div class="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
         <div class="flex items-center justify-between">
           <div><h2 class="text-2xl font-bold text-gray-900">Membros</h2><p class="text-gray-500 text-sm mt-1" id="member-count">Carregando...</p></div>
+          <div class="relative flex items-center gap-2">
+          <button id="filter-btn" type="button" class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm" aria-haspopup="menu" aria-expanded="false" title="Filtrar lista">
+            <i data-lucide="list-filter" class="w-4 h-4 text-gray-500"></i>
+            <span id="filter-label" class="hidden sm:inline">Todos</span>
+          </button>
+
+          <div id="filter-menu" class="hidden absolute right-0 top-[calc(100%+10px)] w-56 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden z-20" role="menu">
+            <button type="button" data-filter="all" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between" role="menuitem">
+              <span>Todos</span>
+              <i data-lucide="check" class="w-4 h-4 text-emerald-600 hidden" data-check="all"></i>
+            </button>
+            <button type="button" data-filter="noTag" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between" role="menuitem">
+              <span>Sem tag</span>
+              <i data-lucide="check" class="w-4 h-4 text-emerald-600 hidden" data-check="noTag"></i>
+            </button>
+            <button type="button" data-filter="noWeekly" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between" role="menuitem">
+              <span>Sem semanal</span>
+              <i data-lucide="check" class="w-4 h-4 text-emerald-600 hidden" data-check="noWeekly"></i>
+            </button>
+            <button type="button" data-filter="noWar" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between" role="menuitem">
+              <span>Sem GG</span>
+              <i data-lucide="check" class="w-4 h-4 text-emerald-600 hidden" data-check="noWar"></i>
+            </button>
+            <div class="h-px bg-gray-100"></div>
+            <button type="button" data-filter="allMetas" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between" role="menuitem">
+              <span>Bateu tudo</span>
+              <i data-lucide="check" class="w-4 h-4 text-emerald-600 hidden" data-check="allMetas"></i>
+            </button>
+          </div>
+
           <button onclick="openModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
             <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
           </button>
+        </div>
         </div>
 
         <div class="flex gap-3">
@@ -244,9 +280,137 @@
     setupSidebar();
     initIcons();
     initPlayModePicker();
+
+    // Dropdown de filtro
+    const __filterBtn = document.getElementById('filter-btn');
+    const __filterMenu = document.getElementById('filter-menu');
+
+    if (__filterBtn && __filterMenu) {
+      __filterBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFilterMenu();
+      });
+
+      __filterMenu.addEventListener('click', (e) => {
+        const opt = e.target.closest('button[data-filter]');
+        if (!opt) return;
+        const key = (opt.dataset.filter || 'all').trim();
+        currentFilter = key || 'all';
+        closeFilterMenu();
+        applyFiltersAndRender();
+      });
+
+      document.addEventListener('click', (e) => {
+        const wrap = e.target.closest('.relative');
+        // se clicou fora do bloco do filtro, fecha
+        if (!e.target.closest('#filter-btn') && !e.target.closest('#filter-menu')) {
+          closeFilterMenu();
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeFilterMenu();
+      });
+
+      // estado inicial
+      applyFiltersAndRender();
+      closeFilterMenu();
+    }
+
     
     // Variável para armazenar a lista na memória
     let membersCache = [];
+
+    // Filtro da lista (dropdown)
+    let currentFilter = 'all';
+    let currentSearch = '';
+
+    function getFilterLabel(key) {
+      if (key === 'noTag') return 'Sem tag';
+      if (key === 'noWeekly') return 'Sem semanal';
+      if (key === 'noWar') return 'Sem GG';
+      if (key === 'allMetas') return 'Bateu tudo';
+      return 'Todos';
+    }
+
+    function applyFilters(list) {
+      let out = Array.isArray(list) ? list.slice() : [];
+
+      // filtro por status
+      switch (currentFilter) {
+        case 'noTag':
+          out = out.filter(m => !m?.hasTag);
+          break;
+        case 'noWeekly':
+          out = out.filter(m => !m?.weeklyMeta);
+          break;
+        case 'noWar':
+          out = out.filter(m => !m?.guildWar);
+          break;
+        case 'allMetas':
+          out = out.filter(m => !!m?.weeklyMeta && !!m?.guildWar && !!m?.hasTag);
+          break;
+        default:
+          break;
+      }
+
+      // busca
+      const termo = (currentSearch || '').toLowerCase().trim();
+      if (termo) {
+        out = out.filter(m =>
+          (m.nick && String(m.nick).toLowerCase().includes(termo)) ||
+          (m.visibleId && String(m.visibleId).includes(termo))
+        );
+      }
+
+      return out;
+    }
+
+    function applyFiltersAndRender() {
+      const filtered = applyFilters(membersCache);
+      const isFiltered = (currentFilter !== 'all') || ((currentSearch || '').trim().length > 0);
+      renderList(filtered, isFiltered);
+
+      // label do botão
+      const lbl = document.getElementById('filter-label');
+      if (lbl) lbl.textContent = getFilterLabel(currentFilter);
+
+      // checkzinho no menu
+      const menu = document.getElementById('filter-menu');
+      if (menu) {
+        menu.querySelectorAll('[data-check]').forEach(i => i.classList.add('hidden'));
+        const check = menu.querySelector('[data-check= + currentFilter + ]');
+        if (check) check.classList.remove('hidden');
+      }
+
+      // ícones dentro do dropdown
+      initIcons();
+    }
+
+    function closeFilterMenu() {
+      const btn = document.getElementById('filter-btn');
+      const menu = document.getElementById('filter-menu');
+      if (!btn || !menu) return;
+      menu.classList.add('hidden');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    function toggleFilterMenu() {
+      const btn = document.getElementById('filter-btn');
+      const menu = document.getElementById('filter-menu');
+      if (!btn || !menu) return;
+      const willOpen = menu.classList.contains('hidden');
+      if (willOpen) {
+        menu.classList.remove('hidden');
+        btn.setAttribute('aria-expanded', 'true');
+        // garante check e ícones atualizados
+        applyFiltersAndRender();
+      } else {
+        closeFilterMenu();
+      }
+    }
+
 
     // Tag configurável (Firestore: configGuilda/{uid}.tagMembros)
     let memberTag = null;
@@ -409,8 +573,9 @@
              if(Array.isArray(cached) && cached.length > 0) {
                  membersCache = cached;
                  // Renderiza instantaneamente, removendo os skeletons
-                 renderList(membersCache);
+                 applyFiltersAndRender();
                  document.getElementById('member-count').textContent = `${membersCache.length} membros na guilda`;
+                 closeFilterMenu();
              }
          } catch(e) { console.error("Erro cache:", e); }
     }
@@ -448,12 +613,8 @@
       
       // Busca (Search)
       document.getElementById('search-input').addEventListener('input', (e) => {
-        const termo = e.target.value.toLowerCase();
-        const filtrados = membersCache.filter(m => 
-          (m.nick && m.nick.toLowerCase().includes(termo)) || 
-          (m.visibleId && String(m.visibleId).includes(termo))
-        );
-        renderList(filtrados, true); // true para forçar render na busca
+        currentSearch = e.target.value || '';
+        applyFiltersAndRender();
       });
     });
 
@@ -478,7 +639,7 @@
             // Se mudou ou forçado, atualiza tudo
             membersCache = newMembers;
             localStorage.setItem('membersList', newJSON);
-            renderList(membersCache);
+            applyFiltersAndRender();
             document.getElementById('member-count').textContent = `${membersCache.length} membros na guilda`;
             
             if(forceRefresh) showToast('success', 'Lista atualizada.');
@@ -492,8 +653,10 @@
         // ✅ Nunca deixe a UI travada em "Carregando..."
         membersCache = [];
         localStorage.setItem('membersList', JSON.stringify([]));
-        renderList([]);
+        membersCache = [];
+        applyFiltersAndRender();
         document.getElementById('member-count').textContent = `0 membros na guilda`;
+        closeFilterMenu();
 
         if(forceRefresh) showToast('error', 'Erro ao buscar dados.');
       }
@@ -505,7 +668,7 @@
       // Se a lista estiver vazia (e não for busca), mantemos um aviso
       if(list.length === 0) {
         if(isSearch) {
-           el.innerHTML = `<div class="text-center py-8 text-gray-400">Nenhum membro encontrado na busca.</div>`;
+           el.innerHTML = `<div class="text-center py-8 text-gray-400">Nenhum membro encontrado.</div>`;
         } else {
            // Se realmente não tiver membros no banco, mostra aviso
            el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">Nenhum membro encontrado.</div>`;
