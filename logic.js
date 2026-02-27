@@ -42,6 +42,89 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app);
 
+
+// --- Cache simples (localStorage) --------------------------------------------
+// Objetivo: evitar refetch do Firestore a cada troca de tela.
+// Usa TTL e serializa Timestamp para number (ms) para poder salvar.
+
+function __cacheNow() { return Date.now(); }
+
+function __cacheGetRaw(key) {
+  try { return localStorage.getItem(key); } catch (_) { return null; }
+}
+
+function __cacheSetRaw(key, raw) {
+  try { localStorage.setItem(key, raw); } catch (_) {}
+}
+
+function __cacheGet(key, ttlMs) {
+  try {
+    const raw = __cacheGetRaw(key);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj.ts !== 'number') return null;
+    if (ttlMs && (__cacheNow() - obj.ts) > ttlMs) return null;
+    return obj.value ?? null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function __cacheSet(key, value) {
+  try {
+    __cacheSetRaw(key, JSON.stringify({ ts: __cacheNow(), value }));
+  } catch (_) {}
+}
+
+function __toPlain(v) {
+  if (v == null) return v;
+  if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') return v;
+  // Timestamp (Firestore)
+  if (v && typeof v.toMillis === 'function') return v.toMillis();
+  if (v && typeof v.seconds === 'number' && typeof v.nanoseconds === 'number') return (v.seconds * 1000);
+  if (Array.isArray(v)) return v.map(__toPlain);
+  if (typeof v === 'object') {
+    const out = {};
+    for (const k of Object.keys(v)) out[k] = __toPlain(v[k]);
+    return out;
+  }
+  return v;
+}
+
+export function invalidateCache(prefix) {
+  // Remove entradas do cache por prefixo (ex: "guildcache_v1:<gid>:")
+  try {
+    const keys = Object.keys(localStorage || {});
+    for (const k of keys) {
+      if (k.startsWith(prefix)) localStorage.removeItem(k);
+    }
+  } catch (_) {}
+}
+
+export async function getGuildSubcollectionCached(sub, ttlMs = 120000) {
+  const ctx = getGuildContext();
+  if (!ctx || !ctx.guildId) throw new Error("Sem guildId no contexto");
+  const key = `guildcache_v1:${ctx.guildId}:${sub}`;
+  const cached = __cacheGet(key, ttlMs);
+  if (cached) return cached;
+
+  const snap = await getDocs(collection(db, "guildas", ctx.guildId, sub));
+  const value = snap.docs.map(d => ({ id: d.id, ...__toPlain(d.data() || {}) }));
+  __cacheSet(key, value);
+  return value;
+}
+
+export async function warmupGuildCache() {
+  // Pre-carrega o básico para trocar de tela sem refazer leituras.
+  // (Se tiver muita coisa, reduza aqui para só o que você usa sempre.)
+  try {
+    await Promise.allSettled([
+      getGuildSubcollectionCached("membros", 5 * 60 * 1000),
+      getGuildSubcollectionCached("lines", 5 * 60 * 1000),
+      getGuildSubcollectionCached("campeonatos", 5 * 60 * 1000),
+    ]);
+  } catch (_) {}
+}
 // --- Contexto da Guilda -----------------------------------------------------
 let __guildCtx = null;
 
@@ -679,6 +762,13 @@ export function checkAuth(redirectToLogin = true) {
       try { applyVipUiAndGates(vipTier); } catch (_) {}
 
       try { await __refreshCeoStatus(emailLower); } catch (_) {}
+      try {
+        if (!sessionStorage.getItem('guildWarm_v1')) {
+          sessionStorage.setItem('guildWarm_v1', '1');
+          warmupGuildCache();
+        }
+      } catch (_) {}
+
       try { applyCeoNavVisibility(); } catch (_) {}
 
 

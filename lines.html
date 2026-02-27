@@ -171,7 +171,7 @@
 
   <script type="module">
 
-    import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildContext } from './logic.js';
+    import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildContext, getGuildSubcollectionCached } from './logic.js';
     import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
@@ -404,8 +404,8 @@
     async function fetchMembersFromDB() {
       if (!guildId) return;
       try {
-        const snap = await getDocs(collection(db, 'guildas', guildId, 'membros'));
-        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const docs = await getGuildSubcollectionCached('membros', 2 * 60 * 1000);
+        const arr = docs.map(d => ({ id: d.id, ...d }));
         // mantém no mesmo cache usado na tela de membros (ajuda a seleção aqui e lá)
         members = arr;
         try { localStorage.setItem(keyMembers(), JSON.stringify(arr)); } catch(_) {}
@@ -416,8 +416,8 @@
 
     async function fetchLinesFromDB() {
       if (!guildId) return [];
-      const snap = await getDocs(collection(db, 'guildas', guildId, 'lines'));
-      const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const docs = await getGuildSubcollectionCached('lines', 2 * 60 * 1000);
+       const arr = docs.map(d => ({ id: d.id, ...d }));
       // garante shape
       return arr.map((l) => ({
         id: l.id,

@@ -374,7 +374,7 @@
   </div>
 
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildContext } from './logic.js';
+    import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildContext, getGuildSubcollectionCached } from './logic.js';
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
@@ -786,9 +786,8 @@
       }
 
       try {
-        const snap = await getDocs(collection(db, "guildas", getGuildContext().guildId, "membros"));
-        const newMembers = [];
-        snap.forEach(d => newMembers.push({ id: d.id, ...d.data() }));
+        const docs = await getGuildSubcollectionCached("membros", 2 * 60 * 1000);
+        const newMembers = docs.map(d => ({ id: d.id, ...d }));
         newMembers.sort((a,b)=> String(a.nick).localeCompare(String(b.nick)));
         
         const currentJSON = JSON.stringify(membersCache);

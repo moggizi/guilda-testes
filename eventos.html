@@ -179,8 +179,8 @@
 <script>lucide.createIcons();</script>
 <script type="module">
 
-import { db, initIcons } from './logic.js';
-import { collection, getDocs, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { db, initIcons, getGuildSubcollectionCached } from './logic.js';
+import { collection, getDocs, getDoc, doc, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 initIcons();
 
@@ -523,33 +523,39 @@ async function loadEventsFromGuildas() {
 
   const items = [];
   try {
-    const gSnap = await getDocs(query(collection(db, "guildas"), limit(250)));
-    const guilds = gSnap.docs.map(d => ({ id: d.id, data: d.data() || {} }));
+    // Otimização: não varrer TODAS as guildas (isso estoura as cotas).
+    // Carrega apenas os campeonatos da guilda atual.
+    const ctx = getGuildContext();
+    const gid = ctx.guildId;
+    let gname = "Guilda";
+    try {
+      const gDoc = await getDoc(doc(db, "guildas", gid));
+      if (gDoc.exists()) {
+        const gd = gDoc.data() || {};
+        gname = (gd.name || gd.nome || gname).toString().trim() || gname;
+      }
+    } catch (_) {}
 
-    for (const g of guilds) {
-      const gid = g.id;
-      const gname = (g.data.name || g.data.nome || "").toString().trim() || "Guilda";
-      try {
-        const cSnap = await getDocs(query(collection(db, "guildas", gid, "campeonatos"), limit(200)));
-        for (const c of cSnap.docs) {
-          const data = c.data() || {};
-          const title = (data.title || data.titulo || data.name || data.nome || "Evento").toString().trim();
-          const description = (data.description || data.descricao || "").toString().trim();
-          const guildName = (data.guildName || data.guild || gname || "Guilda").toString().trim();
-          const createdAtMs = Number(data.createdAtMs ?? data.updatedAtMs ?? 0) || 0;
+    try {
+      const list = await getGuildSubcollectionCached("campeonatos", 60 * 1000);
+      for (const c of (list || [])) {
+        const data = c || {};
+        const title = (data.title || data.titulo || data.name || data.nome || "Evento").toString().trim();
+        const description = (data.description || data.descricao || "").toString().trim();
+        const guildName = (data.guildName || data.guild || gname || "Guilda").toString().trim();
+        const createdAtMs = Number(data.createdAtMs ?? data.updatedAtMs ?? 0) || 0;
 
-          items.push({
-            id: c.id,
-            guildId: gid,
-            guildName,
-            title,
-            description,
-            dateText: createdAtMs ? new Date(createdAtMs).toLocaleString('pt-BR') : "",
-            raw: data
-          });
-        }
-      } catch (_) {}
-    }
+        items.push({
+          id: data.id || "",
+          guildId: gid,
+          guildName,
+          title,
+          description,
+          dateText: createdAtMs ? new Date(createdAtMs).toLocaleString('pt-BR') : "",
+          raw: data
+        });
+      }
+    } catch (_) {}
 
     items.sort((a,b) => (b.raw?.createdAtMs||0) - (a.raw?.createdAtMs||0));
     allItems = items;

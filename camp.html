@@ -206,9 +206,9 @@
 
   
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db } from './logic.js';
+    import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db, getGuildSubcollectionCached } from './logic.js';
     import {
-      collection, doc, setDoc, deleteDoc, onSnapshot,
+      collection, doc, setDoc, deleteDoc, getDocs,
       query, orderBy, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
