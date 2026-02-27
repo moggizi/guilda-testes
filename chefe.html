@@ -168,7 +168,7 @@
 
   <script type="module">
     import { checkAuth, setupSidebar, initIcons, logout, db, ensureCeoStatus, applyCeoNavVisibility, showToast, getVipTier } from './logic.js';
-    import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, writeBatch, query, where, serverTimestamp, Timestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, writeBatch, query, where, serverTimestamp, Timestamp, setDoc, getCountFromServer } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
 
@@ -228,6 +228,65 @@ function fmtDate(ts) {
     let allGuilds = [];
     let allSolicita = [];
 
+    // Cache de contagem de membros (para mostrar no card antes de abrir os detalhes)
+    const membersCountCache = new Map();
+
+    function createdAtToMs(v) {
+      if (!v) return 0;
+      if (typeof v === 'number' && isFinite(v)) return v;
+      if (v && typeof v.toMillis === 'function') return v.toMillis();
+      if (v && typeof v.seconds === 'number') return v.seconds * 1000;
+      return 0;
+    }
+
+    async function fetchMembersCount(gid) {
+      if (membersCountCache.has(gid)) return membersCountCache.get(gid);
+      try {
+        // Preferível: count() no servidor (bem mais leve que getDocs)
+        const res = await getCountFromServer(collection(db, 'guildas', gid, 'membros'));
+        const n = res.data().count ?? 0;
+        membersCountCache.set(gid, n);
+        return n;
+      } catch (e) {
+        // Fallback: lê docs (mais pesado, mas evita ficar sem)
+        try {
+          const memSnap = await getDocs(collection(db, 'guildas', gid, 'membros'));
+          const n = memSnap.size;
+          membersCountCache.set(gid, n);
+          return n;
+        } catch (_) {
+          membersCountCache.set(gid, null);
+          return null;
+        }
+      }
+    }
+
+    async function hydrateMembersCounts(guildList) {
+      // Atualiza só os cards que estão na tela agora
+      const gids = (guildList || []).map(g => g.id).filter(Boolean);
+
+      // Limite simples de concorrência pra não bombardear o Firestore
+      const CONCURRENCY = 8;
+      let i = 0;
+
+      async function worker() {
+        while (i < gids.length) {
+          const gid = gids[i++];
+          if (membersCountCache.has(gid) && membersCountCache.get(gid) != null) {
+            const el = document.querySelector(`[data-members-count="${gid}"]`);
+            if (el) el.textContent = String(membersCountCache.get(gid));
+            continue;
+          }
+
+          const n = await fetchMembersCount(gid);
+          const el = document.querySelector(`[data-members-count="${gid}"]`);
+          if (el) el.textContent = (n == null ? '—' : String(n));
+        }
+      }
+
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, gids.length) }, () => worker()));
+    }
+
     // Boot
     checkAuth().then(async (user) => {
       if (!user) return;
@@ -278,6 +337,9 @@ function fmtDate(ts) {
           };
         });
 
+        // Ordem: mais recente em cima (por createdAt)
+        allGuilds.sort((a, b) => createdAtToMs(b.createdAt) - createdAtToMs(a.createdAt));
+
         allSolicita = sSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         
         document.getElementById('stat-guilds').textContent = allGuilds.length;
@@ -301,6 +363,9 @@ function fmtDate(ts) {
         const matchesVip = (vf === 'all') ? true : (normalizeVip(g.vip) === vf);
         return matchesQ && matchesVip;
       });
+
+      // Mantém sempre a ordem de criação (mais recente primeiro)
+      filtered.sort((a, b) => createdAtToMs(b.createdAt) - createdAtToMs(a.createdAt));
 
       const grid = document.getElementById('guilds-grid');
       if (filtered.length === 0) {
@@ -332,6 +397,10 @@ function fmtDate(ts) {
               <i data-lucide="shield-check" class="w-3.5 h-3.5 text-blue-500"></i>
               <span><b>Admins:</b> ${g.admins.length}</span>
             </div>
+            <div class="flex items-center gap-2 text-[11px] text-gray-500">
+              <i data-lucide="users" class="w-3.5 h-3.5 text-emerald-600"></i>
+              <span><b>Membros:</b> <span class="font-bold text-gray-700" data-members-count="${g.id}">—</span></span>
+            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-2">
@@ -345,6 +414,7 @@ function fmtDate(ts) {
         </div>
       `).join('');
       initIcons();
+      hydrateMembersCounts(filtered);
     }
 
     // Detalhes da Guilda
@@ -567,6 +637,7 @@ function fmtDate(ts) {
         </div>
       `).join('');
       initIcons();
+      hydrateMembersCounts(filtered);
     }
 
     
