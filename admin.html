@@ -258,17 +258,39 @@
       await load();
     });
 
-    async function load() {
+    async function load(forceRefresh = false) {
+      const key = guildCacheKey();
+
+      // Cache-first: se tiver no localStorage, usa e NÃO busca no Firestore (evita piscar + evita leitura).
+      if (!forceRefresh) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const cached = JSON.parse(raw) || {};
+            cached.admins = Array.isArray(cached.admins) ? cached.admins : [];
+            cached.leaders = Array.isArray(cached.leaders) ? cached.leaders : [];
+            cached.playerEmail = (cached.playerEmail || "").toString().toLowerCase().trim() || null;
+
+            renderPlayerAccess(cached.playerEmail);
+            securityData = cached;
+            renderList('admins', securityData.admins);
+            renderList('leaders', securityData.leaders);
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // Sem cache: 1 leitura (ou quando for forçado)
       try {
         const snap = await getDoc(doc(db, "configGuilda", getGuildContext().guildId));
         const newData = snap.exists() ? (snap.data() || {}) : {};
         newData.admins = Array.isArray(newData.admins) ? newData.admins : [];
         newData.leaders = Array.isArray(newData.leaders) ? newData.leaders : [];
         newData.playerEmail = (newData.playerEmail || "").toString().toLowerCase().trim() || null;
-        
+
         renderPlayerAccess(newData.playerEmail);
         securityData = newData;
-        localStorage.setItem(guildCacheKey(), JSON.stringify(newData));
+        try { localStorage.setItem(key, JSON.stringify(newData)); } catch (_) {}
         renderList('admins', securityData.admins);
         renderList('leaders', securityData.leaders);
       } catch (e) {

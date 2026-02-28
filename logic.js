@@ -466,13 +466,16 @@ async function __refreshCeoStatus(emailLower) {
   }
 }
 
-export async function ensureCeoStatus() {
+export async function ensureCeoStatus(forceRefresh = false) {
+  // Cache-first: evita ler Firestore em toda tela.
   try {
+    if (!forceRefresh) return !!__isCeo;
     const user = auth.currentUser;
     const email = cleanEmail(user?.email);
-    return await __refreshCeoStatus(email);
+    const v = await __refreshCeoStatus(email);
+    return !!v;
   } catch (_) {
-    return false;
+    return !!__isCeo;
   }
 }
 
@@ -848,9 +851,44 @@ export function checkAuth(redirectToLogin = true) {
 
         __maybeDowngradeVipSync();
 
+        // Atualiza UI imediatamente (sem buscar Firestore)
+        try {
+          const roleEl = document.getElementById("user-role");
+          if (roleEl) roleEl.textContent = __guildCtx.role || "Membro";
+        } catch(_) {}
+
+        try { applyVipUiAndGates(__guildCtx.vipTier); } catch(_) {}
+        try { applyCeoNavVisibility(); } catch(_) {}
+
         resolve(user);
         return;
       }
+
+      // ✅ Fallback: se não tem hub_usercache_v1, mas existe guildCtx_cache_v1 válido (evita leitura do Firestore).
+      try {
+        if (__guildCtx && __guildCtx.uid === user.uid && cleanEmail(__guildCtx.email) === emailLower && __guildCtx.guildId) {
+          // tenta recuperar CEO do cache também
+          try {
+            const raw = localStorage.getItem(__CEO_LS_KEY);
+            if (raw) {
+              const c = JSON.parse(raw);
+              if (c && c.email === emailLower) __isCeo = !!c.isCeo;
+            }
+          } catch(_) {}
+
+          __maybeDowngradeVipSync();
+
+          try {
+            const roleEl = document.getElementById("user-role");
+            if (roleEl) roleEl.textContent = __guildCtx.role || "Membro";
+          } catch(_) {}
+          try { applyVipUiAndGates(__guildCtx.vipTier); } catch(_) {}
+          try { applyCeoNavVisibility(); } catch(_) {}
+
+          resolve(user);
+          return;
+        }
+      } catch(_) {}
 
       // Se acabou de logar (index.html seta sessionStorage), faz preload UMA vez e já cacheia tudo.
       try {
