@@ -91,6 +91,17 @@ function __toPlain(v) {
   return v;
 }
 
+function __lsJsonGet(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (_) { return null; }
+}
+function __lsJsonSet(key, obj) {
+  try { localStorage.setItem(key, JSON.stringify(obj)); } catch (_) {}
+}
+
 export function invalidateCache(prefix) {
   // Remove entradas do cache por prefixo (ex: "guildcache_v1:<gid>:")
   try {
@@ -119,6 +130,7 @@ export async function warmupGuildCache() {
   // (Se tiver muita coisa, reduza aqui para só o que você usa sempre.)
   try {
     await Promise.allSettled([
+      getConfigGuildaCachedData(getGuildContext()?.guildId, 30 * 60 * 1000),
       getGuildSubcollectionCached("membros", 5 * 60 * 1000),
       getGuildSubcollectionCached("lines", 5 * 60 * 1000),
       getGuildSubcollectionCached("campeonatos", 5 * 60 * 1000),
@@ -149,13 +161,15 @@ try {
 
 const __CEO_LS_KEY = 'ceo_cache_v1';
 let __isCeo = false;
+let __ceoCacheEmail = null;
+let __ceoCacheTs = 0;
+const __CEO_TTL_MS = 10 * 60 * 1000;
 try {
-  const raw = localStorage.getItem(__CEO_LS_KEY);
-  if (raw) {
-    const cached = JSON.parse(raw);
-    if (cached && cached.email && cached.ts && (Date.now() - cached.ts) < 10 * 60 * 1000) {
-      __isCeo = !!cached.isCeo;
-    }
+  const cached = __lsJsonGet(__CEO_LS_KEY);
+  if (cached && cached.email && cached.ts && (Date.now() - cached.ts) < __CEO_TTL_MS) {
+    __isCeo = !!cached.isCeo;
+    __ceoCacheEmail = String(cached.email);
+    __ceoCacheTs = Number(cached.ts) || 0;
   }
 } catch (_) {}
 
@@ -254,7 +268,9 @@ async function __refreshCeoStatus(emailLower) {
     const ok = list.map(cleanEmail).includes(email);
     __isCeo = ok;
     try {
-      localStorage.setItem(__CEO_LS_KEY, JSON.stringify({ email, isCeo: ok, ts: Date.now() }));
+      __lsJsonSet(__CEO_LS_KEY, { email, isCeo: ok, ts: Date.now() });
+      __ceoCacheEmail = email;
+      __ceoCacheTs = Date.now();
     } catch (_) {}
     return ok;
   } catch (_) {
@@ -263,10 +279,15 @@ async function __refreshCeoStatus(emailLower) {
   }
 }
 
-export async function ensureCeoStatus() {
+export async function ensureCeoStatus(force = false) {
   try {
     const user = auth.currentUser;
     const email = cleanEmail(user?.email);
+    if (!email) return false;
+
+    if (!force && __ceoCacheEmail === email && __ceoCacheTs && (Date.now() - __ceoCacheTs) < __CEO_TTL_MS) {
+      return !!__isCeo;
+    }
     return await __refreshCeoStatus(email);
   } catch (_) {
     return false;
@@ -362,14 +383,29 @@ async function findGuildByEmail(emailLower) {
   return null;
 }
 
+async function getConfigGuildaCachedData(guildId, ttlMs = 10 * 60 * 1000) {
+  if (!guildId) return null;
+  const key = `configGuilda_cache_v1:${guildId}`;
+  const cached = __cacheGet(key, ttlMs);
+  if (cached) return cached;
+
+  try {
+    const snap = await getDoc(doc(db, "configGuilda", guildId));
+    const data = snap.exists() ? (snap.data() || {}) : null;
+    if (data) __cacheSet(key, __toPlain(data));
+    return data ? __toPlain(data) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function resolveRoleInGuild(guildId, email) {
   const e = cleanEmail(email);
   if (!guildId || !e) return "Membro";
 
   try {
-    const snap = await getDoc(doc(db, "configGuilda", guildId));
-    if (snap.exists()) {
-      const data = snap.data() || {};
+    const data = await getConfigGuildaCachedData(guildId);
+    if (data) {
       const leaders = Array.isArray(data.leaders) ? data.leaders : [];
       const admins = Array.isArray(data.admins) ? data.admins : [];
 
@@ -512,9 +548,8 @@ export async function getMemberTagConfig() {
   } catch (_) {}
 
   try {
-    const snap = await getDoc(doc(db, "configGuilda", guildId));
-    if (!snap.exists()) return null;
-    const data = snap.data() || {};
+    const data = await getConfigGuildaCachedData(guildId);
+    if (!data) return null;
     const tag = (data.tagMembros || "").toString().trim();
     if (tag) {
       try { localStorage.setItem(`tagMembros_${guildId}`, JSON.stringify({ value: tag, ts: Date.now() })); } catch (_) {}
@@ -630,12 +665,29 @@ export function checkAuth(redirectToLogin = true) {
       // 0) Primeiro tenta resolver pela coleção /users (mais rápida e evita logout indevido)
       let roleHint = null;
       let userProfile = null;
+
+      // 0) Tenta usar o contexto já salvo (evita leitura ao trocar de tela)
       try {
-        const uSnap = await getDoc(doc(db, "users", user.uid));
-        if (uSnap.exists()) {
-          userProfile = uSnap.data() || {};
+        if (__guildCtx && __guildCtx.uid === user.uid) {
+          if (__guildCtx.guildId) guildId = String(__guildCtx.guildId);
+          if (__guildCtx.role) roleHint = String(__guildCtx.role);
+        }
+      } catch (_) {}
+      try {
+        const upKey = `userProfile_cache_v1:${user.uid}`;
+        const cachedUp = __cacheGet(upKey, 10 * 60 * 1000);
+        if (cachedUp) {
+          userProfile = cachedUp;
           if (userProfile.guildId) guildId = String(userProfile.guildId);
           if (userProfile.role) roleHint = String(userProfile.role);
+        } else {
+          const uSnap = await getDoc(doc(db, "users", user.uid));
+          if (uSnap.exists()) {
+            userProfile = uSnap.data() || {};
+            __cacheSet(upKey, __toPlain(userProfile));
+            if (userProfile.guildId) guildId = String(userProfile.guildId);
+            if (userProfile.role) roleHint = String(userProfile.role);
+          }
         }
       } catch (_) {}
 
@@ -761,7 +813,12 @@ export function checkAuth(redirectToLogin = true) {
       } catch (_) {}
       try { applyVipUiAndGates(vipTier); } catch (_) {}
 
-      try { await __refreshCeoStatus(emailLower); } catch (_) {}
+      try {
+        if (!sessionStorage.getItem('ceoWarm_v1')) {
+          sessionStorage.setItem('ceoWarm_v1', '1');
+          await ensureCeoStatus(false);
+        }
+      } catch (_) {}
       try {
         if (!sessionStorage.getItem('guildWarm_v1')) {
           sessionStorage.setItem('guildWarm_v1', '1');

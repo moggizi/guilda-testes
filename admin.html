@@ -230,6 +230,22 @@
       return `securityConfig_${ctx?.guildId || "unknown"}`;
     };
 
+    const readSecurityCache = () => {
+      try {
+        const raw = localStorage.getItem(guildCacheKey());
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (obj && obj.value && typeof obj.ts === 'number') return obj.value;
+        // compat antigo
+        if (obj && (obj.admins || obj.leaders)) return obj;
+        return null;
+      } catch (_) { return null; }
+    };
+    const writeSecurityCache = (val) => {
+      try { localStorage.setItem(guildCacheKey(), JSON.stringify({ ts: Date.now(), value: val })); } catch (_) {}
+    };
+
+
     let currentEmail = '';
     try {
       const ctx = getGuildContext();
@@ -260,6 +276,17 @@
 
     async function load() {
       try {
+        const cached = readSecurityCache();
+        if (cached) {
+          securityData = cached;
+          securityData.admins = Array.isArray(securityData.admins) ? securityData.admins : [];
+          securityData.leaders = Array.isArray(securityData.leaders) ? securityData.leaders : [];
+          renderPlayerAccess(getPlayerEmailForGuild());
+          renderList('admins', securityData.admins);
+          renderList('leaders', securityData.leaders);
+          return; // NÃO refaz leitura ao entrar na tela
+        }
+
         const snap = await getDoc(doc(db, "configGuilda", getGuildContext().guildId));
         const newData = snap.exists() ? (snap.data() || {}) : {};
         newData.admins = Array.isArray(newData.admins) ? newData.admins : [];
@@ -268,7 +295,7 @@
         
         renderPlayerAccess(newData.playerEmail);
         securityData = newData;
-        localStorage.setItem(guildCacheKey(), JSON.stringify(newData));
+        writeSecurityCache(newData);
         renderList('admins', securityData.admins);
         renderList('leaders', securityData.leaders);
       } catch (e) {
@@ -371,7 +398,7 @@
     }
 
     async function saveSecurity() {
-      localStorage.setItem(guildCacheKey(), JSON.stringify(securityData));
+      writeSecurityCache(securityData);
       await setDoc(doc(db, 'configGuilda', getGuildContext().guildId), {
         admins: securityData.admins || [],
         leaders: securityData.leaders || [],

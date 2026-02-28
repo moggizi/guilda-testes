@@ -172,6 +172,24 @@
 
     setupSidebar();
 
+    // --- CACHE (evita refetch ao trocar de tela) ---
+    const CHEFE_CACHE_KEY = 'chefeData_cache_v1';
+    const CHEFE_TTL_MS = 3 * 60 * 1000;
+    const readChefeCache = () => {
+      try {
+        const raw = localStorage.getItem(CHEFE_CACHE_KEY);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (!obj || typeof obj.ts !== 'number') return null;
+        if ((Date.now() - obj.ts) > CHEFE_TTL_MS) return null;
+        return obj.value || null;
+      } catch (_) { return null; }
+    };
+    const writeChefeCache = (value) => {
+      try { localStorage.setItem(CHEFE_CACHE_KEY, JSON.stringify({ ts: Date.now(), value })); } catch (_) {}
+    };
+    // ---------------------------------------------
+
     // Normalização corrigida (incluindo erro do Business)
     function normalizeVip(v) {
       const s = (v || 'free').toString().toLowerCase().trim();
@@ -301,7 +319,7 @@ function fmtDate(ts) {
       
       applyCeoNavVisibility();
       syncGlobalVip();
-      loadData();
+      loadData(true);
     });
 
     function syncGlobalVip() {
@@ -310,7 +328,21 @@ function fmtDate(ts) {
       if (label) label.textContent = tier;
     }
 
-    async function loadData() {
+    async function loadData(force = false) {
+      try {
+        if (!force) {
+          const cached = readChefeCache();
+          if (cached?.allGuilds && cached?.allSolicita) {
+            allGuilds = cached.allGuilds;
+            allSolicita = cached.allSolicita;
+            document.getElementById('stat-guildas').textContent = allGuilds.length;
+            document.getElementById('stat-solicita').textContent = allSolicita.filter(s => s.status === 'pendente').length;
+            writeChefeCache({ allGuilds, allSolicita });
+        renderGuilds();
+            return; // NÃO refaz leitura ao entrar na tela
+          }
+        }
+
       try {
         const [gSnap, cSnap, sSnap] = await Promise.all([
           getDocs(collection(db, 'guildas')),
@@ -504,7 +536,7 @@ function fmtDate(ts) {
           try { await updateDoc(doc(db, 'guildas', gid), patch); } catch(_) {}
           showToast('success', `Plano da guilda ${g.name} alterado para ${nv.toUpperCase()}`);
           closeDrawer();
-          loadData();
+          loadData(true);
         } catch(e) { console.error('VIP save error:', e); showToast('error', 'Erro ao salvar VIP.'); }
       };
 
@@ -525,7 +557,7 @@ function fmtDate(ts) {
 
           showToast('success', 'Nome da guilda atualizado.');
           closeDrawer();
-          loadData();
+          loadData(true);
         } catch (e) {
           console.error('NAME save error:', e);
           showToast('error', 'Erro ao salvar nome da guilda.');
@@ -590,7 +622,7 @@ function fmtDate(ts) {
         await commitDeletes(refsToDelete);
 
         showToast('success', 'Guilda e todos os vínculos eliminados com sucesso.');
-        loadData();
+        loadData(true);
       } catch(e) {
         console.error('FULL DELETE ERROR:', e);
         const details = (e && (e.code || e.message)) ? ` (${e.code || e.message})` : '';
@@ -680,7 +712,7 @@ function fmtDate(ts) {
 
         showToast('success', 'Upgrade aprovado e ativo para a guilda!');
         loadSolicita();
-        loadData();
+        loadData(true);
       } catch (e) {
         console.error(e);
         showToast('error', 'Erro ao aprovar: ' + (e?.message || e));
