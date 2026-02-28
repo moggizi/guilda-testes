@@ -184,10 +184,9 @@
   </div>
 
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, db, consumeLoginToasts, getGuildContext, applyVipUiAndGates, getVipTier, getVipRemainingDays, getVipExpiresAtMs } from './logic.js';
-    import { doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { checkAuth, setupSidebar, initIcons, logout, db, consumeLoginToasts, getGuildContext, applyVipUiAndGates, getVipTier } from './logic.js';
+    import { collection, getDocs, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // Função de normalização idêntica à do upgrade.html
     function normalizeTier(raw){
       const s = (raw || 'free').toString().toLowerCase().trim();
       if (s.includes('buss') || s.includes('business')) return 'business';
@@ -196,197 +195,177 @@
       return 'free';
     }
 
-    setupSidebar();
+    const GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
 
-    let currentStats = null;
-
-    let __lastMembersHash = null;
-
-    function __membersLsKey() {
-      const gid = getGuildContext()?.guildId;
-      return gid ? `membersList_${gid}` : 'membersList';
+    function getMembersCacheKey(guildId){
+      return `membersList_${guildId}`;
     }
 
-    function __dashboardStatsKey() {
-      const gid = getGuildContext()?.guildId;
-      return gid ? `dashboard_stats_${gid}` : 'dashboard_stats';
+    function safeParseJSON(raw, fallback){
+      try { return JSON.parse(raw); } catch { return fallback; }
     }
 
-    function __readJSON(key) {
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) return null;
-        return JSON.parse(raw);
-      } catch (_) { return null; }
+    function normalizeMembers(list){
+      const arr = Array.isArray(list) ? list.slice() : [];
+      // garante consistência (evita comparar diferente só por ordem)
+      arr.sort((a,b)=> String(a.nick||'').localeCompare(String(b.nick||'')));
+      return arr;
     }
 
-    function __writeJSON(key, value) {
-      try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+    function calcStats(members){
+      const total = members.length;
+      const hasTag = members.filter(m => !!m.hasTag).length;
+      const guildWar = members.filter(m => !!m.guildWar).length;
+      const weeklyMeta = members.filter(m => !!m.weeklyMeta).length;
+      return { total, hasTag, guildWar, weeklyMeta };
     }
 
-    function __renderFromMembersCache() {
-      const key = __membersLsKey();
+    function renderFromMembersCache(){
+      const ctx = getGuildContext();
+      if(!ctx?.guildId) return;
+
+      const key = getMembersCacheKey(ctx.guildId);
       const raw = localStorage.getItem(key);
-      if (raw) __lastMembersHash = raw;
-      const cachedMembers = __readJSON(key);
-      if (!Array.isArray(cachedMembers) || cachedMembers.length === 0) return false;
-
-      const stats = calculateStats(cachedMembers);
-      currentStats = stats;
-      __writeJSON(__dashboardStatsKey(), stats);
+      const members = normalizeMembers(safeParseJSON(raw || '[]', []));
+      const stats = calcStats(members);
       updateUI(stats);
-      return true;
     }
 
-    function __renderFromStatsCache() {
-      const cachedStats = __readJSON(__dashboardStatsKey());
-      if (!cachedStats) return false;
-      currentStats = cachedStats;
-      updateUI(cachedStats);
-      return true;
-    }
+    // Sidebar + render imediato (cache)
+    setupSidebar();
+    renderFromMembersCache();
 
-    function __updateVipPill() {
-      try {
-        const tier = normalizeTier(getVipTier());
-        const pillName = document.getElementById('current-plan-name');
-        if (pillName) pillName.textContent = tier.toUpperCase();
+    // Mantém o dashboard sempre refletindo o cache mais recente (quando outra aba atualiza)
+    window.addEventListener('storage', (e) => {
+      const ctx = getGuildContext();
+      if(!ctx?.guildId) return;
+      if (e.key === getMembersCacheKey(ctx.guildId)) {
+        renderFromMembersCache();
+      }
+      // se o VIP atualizar via listener, sidebar pode mudar
+      if (e.key === GUILDCTX_LS_KEY) {
+        try {
+          const cached = safeParseJSON(e.newValue || '{}', {});
+          const tier = normalizeTier(cached?.vipTier || getVipTier());
+          const pillName = document.getElementById('current-plan-name');
+          if (pillName) pillName.textContent = tier.toUpperCase();
+          applyVipUiAndGates(cached?.vipTier || getVipTier());
+        } catch {}
+      }
+    });
 
-        
-        const ctx = getGuildContext();
-        applyVipUiAndGates(ctx?.vipTier || getVipTier());
-      } catch (_) {}
-    }
-
-    // 1) Render imediato: primeiro tenta stats cache, depois tenta members cache
-    if (!__renderFromStatsCache()) __renderFromMembersCache();
-
-    // 2) Auth
+    // Auth
     checkAuth().then(async (user) => {
       if(!user) return;
       document.getElementById('btn-logout').onclick = logout;
       consumeLoginToasts();
 
-      // VIP: cache imediato + "tempo real" (listener em 1 doc)
-      __updateVipPill();
+      const ctx = getGuildContext();
+      if(!ctx?.guildId) return;
 
+      // Plano: mostrar só o nome aqui (dias ficam no menu lateral)
       try {
-        const ctx = getGuildContext();
-        if (ctx?.guildId) {
-          // Preferência: configGuilda/{guildId}. Se não existir, tenta guildas/{guildId}.
-          const ref1 = doc(db, 'configGuilda', ctx.guildId);
-          const snap1 = await getDoc(ref1);
-          if (snap1.exists()) {
-            onSnapshot(ref1, (s) => {
-              const d = s.exists() ? (s.data() || {}) : {};
-              if (d.vipTier != null) ctx.vipTier = d.vipTier;
-              if (d.vipExpiresAt != null) {
-                const v = d.vipExpiresAt;
-                // Timestamp ou ms
-                const ms = (typeof v?.toMillis === 'function') ? v.toMillis() : Number(v);
-                ctx.vipExpiresAtMs = isFinite(ms) ? ms : null;
-              } else if ('vipExpiresAt' in d) {
-                ctx.vipExpiresAtMs = null;
-              }
-              // salva no cache do contexto também
-              try {
-                const raw = localStorage.getItem('guildCtx_cache_v1');
-                const cached = raw ? (JSON.parse(raw) || {}) : {};
-                cached.vipTier = ctx.vipTier;
-                cached.vipExpiresAtMs = ctx.vipExpiresAtMs;
-                cached.ts = Date.now();
-                localStorage.setItem('guildCtx_cache_v1', JSON.stringify(cached));
-              } catch (_) {}
-              __updateVipPill();
-            });
-          } else {
-            const ref2 = doc(db, 'guildas', ctx.guildId);
-            onSnapshot(ref2, (s) => {
-              const d = s.exists() ? (s.data() || {}) : {};
-              if (d.vipTier != null) ctx.vipTier = d.vipTier;
-              // alguns lugares podem guardar só o tier aqui
-              try {
-                const raw = localStorage.getItem('guildCtx_cache_v1');
-                const cached = raw ? (JSON.parse(raw) || {}) : {};
-                cached.vipTier = ctx.vipTier;
-                cached.ts = Date.now();
-                localStorage.setItem('guildCtx_cache_v1', JSON.stringify(cached));
-              } catch (_) {}
-              __updateVipPill();
-            });
-          }
-        }
-      } catch (_) {}
+        const tier = normalizeTier(getVipTier());
+        const pillName = document.getElementById('current-plan-name');
+        if (pillName) pillName.textContent = tier.toUpperCase();
+        applyVipUiAndGates(ctx?.vipTier || getVipTier());
+      } catch {}
 
-      // Recalcula stats do cache quando o cache de membros mudar (outra aba/dispositivo).
-      function __renderFromMembersCacheKey(lsKey) {
-        const cachedMembers = __readJSON(lsKey);
-        if (!Array.isArray(cachedMembers) || cachedMembers.length === 0) return false;
-        const stats = calculateStats(cachedMembers);
-        currentStats = stats;
-        __writeJSON(__dashboardStatsKey(), stats);
-        updateUI(stats);
-        return true;
-      }
+      // Garante que o cache de membros exista no login (1 leitura só se estiver vazio)
+      await ensureMembersCacheLoaded(ctx.guildId);
 
-      function __refreshStatsFromCacheSmart() {
-        const gid = getGuildContext()?.guildId;
-        const key = gid ? `membersList_${gid}` : __membersLsKey();
-        const raw = localStorage.getItem(key);
-        if (!raw) return false;
-        if (raw === __lastMembersHash) return true;
-        __lastMembersHash = raw;
-        return __renderFromMembersCacheKey(key) || __renderFromStatsCache();
-      }
+      // Render pós-garantia (pega cache atualizado)
+      renderFromMembersCache();
 
-      window.addEventListener('storage', (ev) => {
-        if (!ev || !ev.key) return;
-        const gid = getGuildContext()?.guildId;
-        const expectedKey = gid ? `membersList_${gid}` : null;
-
-        if (ev.key.startsWith('membersList_')) {
-          if (!expectedKey || ev.key === expectedKey) {
-            __lastMembersHash = ev.newValue || null;
-            __renderFromMembersCacheKey(ev.key);
-          }
-          return;
-        }
-
-        if (ev.key === __dashboardStatsKey()) {
-          if (!__refreshStatsFromCacheSmart()) __renderFromStatsCache();
-        }
-      });
-
-      // fallback: se o dashboard ficar aberto, checa o cache às vezes (zero leitura Firestore)
-      setInterval(__refreshStatsFromCacheSmart, 2500);
-        }
-      });
-
-      // Mantém os "dias restantes" atualizando (sem read extra)
-      setInterval(__updateVipPill, 60 * 1000);
+      // VIP em tempo real (1 doc)
+      startVipRealtime(ctx.guildId);
     });
 
-    function calculateStats(members) {
-      const total = members.length;
-      return {
-        total,
-        guildWar: members.filter(m => m.guildWar).length,
-        weeklyMeta: members.filter(m => m.weeklyMeta).length,
-        hasTag: members.filter(m => m.hasTag).length
-      };
+    async function ensureMembersCacheLoaded(guildId){
+      const key = getMembersCacheKey(guildId);
+      const raw = localStorage.getItem(key);
+      const cached = safeParseJSON(raw || '[]', []);
+      if (Array.isArray(cached) && cached.length > 0) return;
+
+      // cache vazio -> 1 leitura para popular (e depois tudo é local)
+      try {
+        const snap = await getDocs(collection(db, "guildas", guildId, "membros"));
+        const members = [];
+        snap.forEach(d => members.push({ id: d.id, ...d.data() }));
+        const normalized = normalizeMembers(members);
+        localStorage.setItem(key, JSON.stringify(normalized));
+      } catch (e) {
+        console.warn("Falha ao popular cache de membros:", e);
+      }
+    }
+
+    function toMs(v){
+      try {
+        if (!v) return null;
+        if (typeof v === 'number') return v;
+        if (typeof v === 'string') {
+          const n = Number(v);
+          if (isFinite(n)) return n;
+          const t = Date.parse(v);
+          return isNaN(t) ? null : t;
+        }
+        if (typeof v === 'object') {
+          if (typeof v.toMillis === 'function') return v.toMillis();
+          if (typeof v.seconds === 'number') return v.seconds * 1000;
+        }
+      } catch {}
+      return null;
+    }
+
+    function updateGuildCtxCache(patch){
+      const prev = safeParseJSON(localStorage.getItem(GUILDCTX_LS_KEY) || '{}', {});
+      const next = { ...prev, ...patch, ts: Date.now() };
+      localStorage.setItem(GUILDCTX_LS_KEY, JSON.stringify(next));
+      return next;
+    }
+
+    function startVipRealtime(guildId){
+      // fonte principal: configGuilda/{guildId} (tem vipTier e vipExpiresAt em vários projetos)
+      const ref1 = doc(db, 'configGuilda', guildId);
+      const unsub1 = onSnapshot(ref1, (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data() || {};
+        const vipTier = normalizeTier(data.vipTier ?? data.vip ?? data.planoVip ?? data.planoVIP ?? data.vipLevel ?? data.vipPlano ?? data.vipName ?? data.plano ?? data.plan ?? data.tier);
+        const vipExpiresAtMs = toMs(data.vipExpiresAt ?? data.vipExpiresAtMs ?? data.expiresAt ?? data.expireAt ?? data.expiraEm ?? data.expire ?? data.expiration);
+        const cached = updateGuildCtxCache({ vipTier, vipExpiresAtMs });
+        const pillName = document.getElementById('current-plan-name');
+        if (pillName) pillName.textContent = normalizeTier(cached.vipTier).toUpperCase();
+        applyVipUiAndGates(cached.vipTier);
+      }, () => {});
+
+      // fallback: guildas/{guildId} (caso VIP esteja direto na guilda)
+      const ref2 = doc(db, 'guildas', guildId);
+      const unsub2 = onSnapshot(ref2, (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data() || {};
+        const vipTier = normalizeTier(data.vipTier ?? data.vip ?? data.planoVip ?? data.planoVIP ?? data.vipLevel ?? data.vipPlano ?? data.vipName ?? data.plano ?? data.plan ?? data.tier);
+        if (!vipTier) return;
+        const cached = updateGuildCtxCache({ vipTier });
+        const pillName = document.getElementById('current-plan-name');
+        if (pillName) pillName.textContent = normalizeTier(cached.vipTier).toUpperCase();
+        applyVipUiAndGates(cached.vipTier);
+      }, () => {});
+
+      // evita warning lint
+      window.__vipUnsub = () => { try{unsub1();}catch{} try{unsub2();}catch{} };
     }
 
     function updateUI(data) {
       const { total, guildWar, weeklyMeta, hasTag } = data;
 
       document.getElementById('stat-total').innerText = total;
-      
+
       document.getElementById('stat-war').innerText = guildWar;
       document.getElementById('stat-war-sub').innerText = `de ${total}`;
-      
+
       document.getElementById('stat-meta').innerText = weeklyMeta;
       document.getElementById('stat-meta-sub').innerText = `de ${total}`;
-      
+
       document.getElementById('stat-tag').innerText = hasTag;
       document.getElementById('stat-tag-sub').innerText = `de ${total}`;
 
@@ -421,7 +400,7 @@
         </div>
       `;
 
-      document.getElementById('summary-container').innerHTML = 
+      document.getElementById('summary-container').innerHTML =
         renderBar("Participação na Guerra", guildWar, "from-emerald-400 to-green-500") +
         renderBar("Meta Semanal Cumprida", weeklyMeta, "from-violet-400 to-purple-500") +
         renderBar("Membros com Tag", hasTag, "from-amber-400 to-orange-500");
