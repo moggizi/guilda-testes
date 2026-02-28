@@ -21,7 +21,7 @@
     <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:static">
       <div class="flex items-center justify-between p-5 border-b border-gray-100">
         <div class="flex items-center gap-3">
-          <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
+          <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav" onerror="this.src='https://via.placeholder.com/40'">
           <div>
             <h1 class="font-bold text-gray-900 text-lg leading-tight">Guilda e eventos</h1>
             <p id="vip-label" class="text-xs text-gray-500">Guilda: <span class="font-bold text-gray-800 uppercase">free</span></p>
@@ -128,7 +128,7 @@
         <div id="guilds-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           <div class="col-span-full py-20 text-center space-y-3">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
-            <p class="text-gray-500 font-medium">A sincronizar dados do Firestore...</p>
+            <p class="text-gray-500 font-medium">A carregar dados...</p>
           </div>
         </div>
 
@@ -167,12 +167,13 @@
   </div>
 
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, db, ensureCeoStatus, applyCeoNavVisibility, showToast, getVipTier, getCachedCeoCore, refreshCeoCore, getCachedMembers, refreshMembers, getCachedLines, refreshLines, getCachedCamps, refreshCamps } from './logic.js';
+    // Corrigido: Remoção de imports que não existiam no logic.js (refreshCeoCore, etc)
+    import { checkAuth, setupSidebar, initIcons, logout, db, ensureCeoStatus, applyCeoNavVisibility, showToast, getVipTier } from './logic.js';
     import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, writeBatch, query, where, serverTimestamp, Timestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
 
-    // Normalização corrigida (incluindo erro do Business)
+    // Normalização
     function normalizeVip(v) {
       const s = (v || 'free').toString().toLowerCase().trim();
       if (s.includes('buss') || s.includes('business')) return 'business';
@@ -181,22 +182,21 @@
       return 'free';
     }
 
-    // Formatação de data
-    
-    // VIP expiração por tier (reinicia sempre a partir de agora)
+    // VIP expiração por tier
     function vipDurationDays(tier) {
       const t = normalizeVip(tier);
       if (t === 'plus' || t === 'pro') return 30;
       if (t === 'business') return 365;
       return null;
     }
+    
     function buildVipExpiresAt(tier) {
       const days = vipDurationDays(tier);
       if (!days) return null;
       return Date.now() + days * 24 * 60 * 60 * 1000;
     }
 
-function fmtDate(ts) {
+    function fmtDate(ts) {
       if(!ts) return '—';
       const d = ts.toMillis ? new Date(ts.toMillis()) : new Date(ts);
       return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
@@ -206,7 +206,6 @@ function fmtDate(ts) {
       if (v == null) return null;
       if (typeof v === 'number' && isFinite(v)) return v;
       if (typeof v === 'string' && v.trim() !== '' && isFinite(Number(v))) return Number(v);
-      // Firestore Timestamp
       if (v && typeof v.toMillis === 'function') return v.toMillis();
       if (v && typeof v.seconds === 'number') return v.seconds * 1000;
       return null;
@@ -226,7 +225,7 @@ function fmtDate(ts) {
     }
 
     let allGuilds = [];
-    let allSolicita = [];
+    window.allSolicita = []; // Agora guardado no window para acesso global
 
     // Boot
     checkAuth().then(async (user) => {
@@ -242,7 +241,7 @@ function fmtDate(ts) {
       
       applyCeoNavVisibility();
       syncGlobalVip();
-      loadData();
+      loadData(false); // Chama o carregamento com cache = true (force = false)
     });
 
     function syncGlobalVip() {
@@ -251,31 +250,53 @@ function fmtDate(ts) {
       if (label) label.textContent = tier;
     }
 
-    async function loadData(force=false) {
-      try {
-        // Cache-first: se existir e não for refresh, evita Firestore
-        if (!force) {
-          const cached = getCachedCeoCore();
-          if (Array.isArray(cached.guildas) && Array.isArray(cached.configGuilda) && Array.isArray(cached.solicita)) {
-            hydrateFromSnapshots(cached.guildas, cached.configGuilda, cached.solicita);
-            return;
-          }
+    // Busca dados do Firebase diretamente no arquivo
+    async function fetchCeoDataFromFirebase() {
+      const guildasSnap = await getDocs(collection(db, 'guildas'));
+      const configSnap = await getDocs(collection(db, 'configGuilda'));
+
+      const guildasArr = guildasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const configArr = configSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      return { guildas: guildasArr, configGuilda: configArr };
+    }
+
+    // Carregamento principal (Usa cache LocalStorage + Background Sync)
+    async function loadData(force = false) {
+      const cachedGuildas = localStorage.getItem('hub_ceo_guildas_v1');
+      const cachedConfig = localStorage.getItem('hub_ceo_config_v1');
+
+      // Se tiver em cache e não for reload forçado, hidrata instantâneo
+      if (cachedGuildas && cachedConfig && !force) {
+        try {
+          const pGuildas = JSON.parse(cachedGuildas).items;
+          const pConfig = JSON.parse(cachedConfig).items;
+          hydrateFromSnapshots(pGuildas, pConfig);
+        } catch (e) {
+          console.error("Erro no cache:", e);
         }
+      }
 
-        if (force) showToast('info', 'Atualizando…');
+      if (force) showToast('info', 'A sincronizar com Firebase...');
+      
+      // Sempre busca em background para garantir dados atualizados
+      try {
+        const { guildas, configGuilda } = await fetchCeoDataFromFirebase();
+        
+        // Salva novo cache
+        localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: guildas }));
+        localStorage.setItem('hub_ceo_config_v1', JSON.stringify({ ts: Date.now(), items: configGuilda }));
 
-        const { guildas, configGuilda, solicita } = await refreshCeoCore();
-        hydrateFromSnapshots(guildas, configGuilda, solicita);
+        hydrateFromSnapshots(guildas, configGuilda);
 
-        if (force) showToast('success', 'Atualizado!');
+        if (force) showToast('success', 'Atualizado com sucesso!');
       } catch (e) {
         console.error(e);
-        if (force) showToast('error', 'Falha ao atualizar.');
+        if (force) showToast('error', 'Falha ao atualizar dados do servidor.');
       }
     }
 
-    function hydrateFromSnapshots(guildasArr, configArr, solicitaArr) {
-      // guildasArr/configArr/solicitaArr já vêm em formato {id,...data}
+    function hydrateFromSnapshots(guildasArr, configArr) {
       const configMap = {};
       (configArr || []).forEach(d => { configMap[d.id] = d; });
 
@@ -284,23 +305,31 @@ function fmtDate(ts) {
       window.allGuildas = (guildasArr || []).map(d => ({
         id: d.id,
         ...d,
+        vip: configMap[d.id]?.vipTier || configMap[d.id]?.vip || d.vipTier || d.vip || 'free',
+        vipExpiresAt: configMap[d.id]?.vipExpiresAt || d.vipExpiresAt,
+        leaders: configMap[d.id]?.leaders || (d.ownerEmail ? [d.ownerEmail] : []),
+        admins: configMap[d.id]?.admins || [],
         ownerUid: d.ownerUid || configMap[d.id]?.ownerUid || configMap[d.id]?.uid || null,
       }));
 
-      window.allSolicita = (solicitaArr || []).map(d => ({ id: d.id, ...d }));
-
+      allGuilds = window.allGuildas;
+      
+      const statGuilds = document.getElementById('stat-guilds');
+      if (statGuilds) statGuilds.textContent = allGuilds.length;
+      
       renderGuilds();
-      renderSolicita();
-      persistCeoCoreCache();
+      updateSolicitacoesBadge(); // Atualiza apenas o contador de badges
     }
-
-    function persistCeoCoreCache() {
-      try {
-        localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas || [] }));
-        localStorage.setItem('hub_ceo_config_v1', JSON.stringify({ ts: Date.now(), items: window.allConfigGuilda || [] }));
-        localStorage.setItem('hub_ceo_solicita_v1', JSON.stringify({ ts: Date.now(), items: window.allSolicita || [] }));
-      } catch (_) {}
-    }
+    
+    // Atualiza contagem das pendentes em tempo real
+    async function updateSolicitacoesBadge() {
+        try {
+            const snap = await getDocs(collection(db, 'solicita'));
+            const data = snap.docs.map(d => d.data());
+            const pendentes = data.filter(s => s.status === 'pendente').length;
+            const badgeEl = document.getElementById('stat-solicita');
+            if(badgeEl) badgeEl.textContent = pendentes;
+        } catch(e) {}
     }
 
     function renderGuilds() {
@@ -308,9 +337,9 @@ function fmtDate(ts) {
       const vf = (document.getElementById('vip-filter')?.value || 'all');
       const filtered = allGuilds.filter(g => {
         const matchesQ =
-          g.name.toLowerCase().includes(q) ||
-          g.id.toLowerCase().includes(q) ||
-          g.leaders.join(' ').toLowerCase().includes(q);
+          (g.name && g.name.toLowerCase().includes(q)) ||
+          (g.id && g.id.toLowerCase().includes(q)) ||
+          (g.leaders && g.leaders.join(' ').toLowerCase().includes(q));
 
         const matchesVip = (vf === 'all') ? true : (normalizeVip(g.vip) === vf);
         return matchesQ && matchesVip;
@@ -326,7 +355,7 @@ function fmtDate(ts) {
         <div class="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm hover:shadow-xl transition-all duration-300 group">
           <div class="flex items-start justify-between mb-4">
             <div class="min-w-0">
-              <h4 class="font-black text-gray-900 truncate text-lg">${g.name}</h4>
+              <h4 class="font-black text-gray-900 truncate text-lg">${g.name || 'Sem nome'}</h4>
               <p class="text-[10px] text-gray-400 font-mono tracking-tighter">${g.id}</p>
             </div>
             <div class="flex flex-col items-end gap-2">
@@ -340,11 +369,11 @@ function fmtDate(ts) {
           <div class="space-y-2 mb-5">
             <div class="flex items-center gap-2 text-[11px] text-gray-500">
               <i data-lucide="crown" class="w-3.5 h-3.5 text-amber-500"></i>
-              <span class="truncate"><b>Líder:</b> ${g.leaders[0] || '—'}</span>
+              <span class="truncate"><b>Líder:</b> ${g.leaders && g.leaders[0] ? g.leaders[0] : '—'}</span>
             </div>
             <div class="flex items-center gap-2 text-[11px] text-gray-500">
               <i data-lucide="shield-check" class="w-3.5 h-3.5 text-blue-500"></i>
-              <span><b>Admins:</b> ${g.admins.length}</span>
+              <span><b>Admins:</b> ${g.admins ? g.admins.length : 0}</span>
             </div>
           </div>
 
@@ -352,7 +381,7 @@ function fmtDate(ts) {
             <button onclick="window.openDetails('${g.id}')" class="py-2.5 rounded-xl bg-gray-50 text-gray-900 text-[11px] font-bold hover:bg-gray-100 transition border border-gray-100">
               DETALHES
             </button>
-            <button onclick="window.fullDeleteGuild('${g.id}', '${g.name}')" class="py-2.5 rounded-xl bg-red-50 text-red-600 text-[11px] font-bold hover:bg-red-100 transition border border-red-100">
+            <button onclick="window.fullDeleteGuild('${g.id}', '${g.name ? g.name.replace(/'/g, "\\'") : 'Guilda'}')" class="py-2.5 rounded-xl bg-red-50 text-red-600 text-[11px] font-bold hover:bg-red-100 transition border border-red-100">
               ELIMINAR TUDO
             </button>
           </div>
@@ -367,7 +396,7 @@ function fmtDate(ts) {
       if(!g) return;
 
       const body = document.getElementById('drawer-body');
-      document.getElementById('drawer-title').textContent = g.name;
+      document.getElementById('drawer-title').textContent = g.name || 'Detalhes';
       document.getElementById('drawer-content').innerHTML = `
         <div class="space-y-6 animate-in slide-in-from-right duration-300">
           <div class="p-4 bg-gray-50 rounded-2xl border border-gray-100">
@@ -397,7 +426,7 @@ function fmtDate(ts) {
 
           <div class="p-4 bg-white rounded-2xl border border-gray-100">
             <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">Renomear Guilda</p>
-            <input id="edit-guild-name" type="text" value="${g.name.replaceAll('"','&quot;')}" class="w-full p-3 rounded-xl border border-gray-200 bg-white text-sm font-bold" />
+            <input id="edit-guild-name" type="text" value="${(g.name||'').replaceAll('"','&quot;')}" class="w-full p-3 rounded-xl border border-gray-200 bg-white text-sm font-bold" />
             <button id="btn-save-name" class="w-full mt-3 py-3 rounded-xl bg-gray-900 text-white font-black text-xs hover:bg-black transition">SALVAR NOME</button>
             <p class="mt-2 text-[10px] text-gray-400">Atualiza o nome em <b>guildas</b> e <b>configGuilda</b>.</p>
           </div>
@@ -406,12 +435,12 @@ function fmtDate(ts) {
             <p class="text-[10px] font-bold text-gray-400 uppercase mb-3">Administração</p>
             <div class="space-y-2">
                <div class="p-3 bg-white border border-gray-100 rounded-xl">
-                  <p class="text-[10px] text-amber-600 font-bold uppercase">Líderes (${g.leaders.length})</p>
-                  <p class="text-xs text-gray-700 break-all mt-1">${g.leaders.join('<br>')}</p>
+                  <p class="text-[10px] text-amber-600 font-bold uppercase">Líderes (${g.leaders?g.leaders.length:0})</p>
+                  <p class="text-xs text-gray-700 break-all mt-1">${g.leaders?g.leaders.join('<br>'):'—'}</p>
                </div>
                <div class="p-3 bg-white border border-gray-100 rounded-xl">
-                  <p class="text-[10px] text-blue-600 font-bold uppercase">Admins (${g.admins.length})</p>
-                  <p class="text-xs text-gray-700 break-all mt-1">${g.admins.length > 0 ? g.admins.join('<br>') : 'Nenhum administrador.'}</p>
+                  <p class="text-[10px] text-blue-600 font-bold uppercase">Admins (${g.admins?g.admins.length:0})</p>
+                  <p class="text-xs text-gray-700 break-all mt-1">${(g.admins && g.admins.length > 0) ? g.admins.join('<br>') : 'Nenhum administrador.'}</p>
                </div>
             </div>
           </div>
@@ -444,28 +473,25 @@ function fmtDate(ts) {
           const expiresAtMs = buildVipExpiresAt(nv);
           const patch = { vipTier: nv, vipExpiresAt: expiresAtMs, updatedAtMs: Date.now() };
           await updateDoc(doc(db, 'configGuilda', gid), patch);
-          // fallback: alguns lugares usam /guildas
           try { await updateDoc(doc(db, 'guildas', gid), patch); } catch(_) {}
           showToast('success', `Plano da guilda ${g.name} alterado para ${nv.toUpperCase()}`);
           closeDrawer();
-          try { const gx = window.allGuildas.find(x=>x.id===gid); if (gx) gx.vipTier = nv; } catch(_) {}
+          try { const gx = window.allGuildas.find(x=>x.id===gid); if (gx) {gx.vipTier = nv; gx.vip = nv; gx.vipExpiresAt = expiresAtMs;} } catch(_) {}
           renderGuilds();
-          persistCeoCoreCache();
+          
+          // Re-salva no localStorage
+          localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas }));
         } catch(e) { console.error('VIP save error:', e); showToast('error', 'Erro ao salvar VIP.'); }
       };
 
-
-      // Salvar nome da guilda (Chefe)
       document.getElementById('btn-save-name').onclick = async () => {
         const newName = (document.getElementById('edit-guild-name').value || '').trim();
         if (!newName) { showToast('error', 'Nome inválido.'); return; }
         const patchName = { name: newName, updatedAtMs: Date.now(), updatedAt: serverTimestamp() };
         try {
-          // configGuilda pode não existir em alguns casos -> setDoc merge
           try { await updateDoc(doc(db, 'configGuilda', gid), patchName); }
           catch(_) { await setDoc(doc(db, 'configGuilda', gid), patchName, { merge: true }); }
 
-          // guildas
           try { await updateDoc(doc(db, 'guildas', gid), patchName); }
           catch(_) { await setDoc(doc(db, 'guildas', gid), patchName, { merge: true }); }
 
@@ -473,7 +499,8 @@ function fmtDate(ts) {
           closeDrawer();
           try { const gx = window.allGuildas.find(x=>x.id===gid); if (gx) gx.name = newName; } catch(_) {}
           renderGuilds();
-          persistCeoCoreCache();
+          
+          localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas }));
         } catch (e) {
           console.error('NAME save error:', e);
           showToast('error', 'Erro ao salvar nome da guilda.');
@@ -481,16 +508,13 @@ function fmtDate(ts) {
       };
     };
 
-    // ELIMINAR TUDO (REQUISITO DA VERONICA)
     window.fullDeleteGuild = async (gid, name) => {
       if(!confirm(`⚠️ REALMENTE QUER EXCLUIR TUDO DA GUILDA: ${name}?\n\nIsso apagará Membros, Lines, Campeonatos, Configurações e todos os UTILIZADORES vinculados ao ID da guilda.\n\nEsta ação é irreversível!`)) return;
 
       showToast('info', 'A eliminar dados... por favor aguarde.');
 
-      // Firestore limita 500 operações por batch.
-      // Então deletamos em "lotes" para não estourar quando a guilda é grande.
       const commitDeletes = async (refs) => {
-        const CHUNK = 450; // margem de segurança
+        const CHUNK = 450;
         for (let i = 0; i < refs.length; i += CHUNK) {
           const b = writeBatch(db);
           refs.slice(i, i + CHUNK).forEach((r) => b.delete(r));
@@ -501,37 +525,26 @@ function fmtDate(ts) {
       try {
         const refsToDelete = [];
 
-        // 1) Subcoleções (membros / lines / campeonatos)
         try {
           const memSnap = await getDocs(collection(db, 'guildas', gid, 'membros'));
           memSnap.forEach((d) => refsToDelete.push(d.ref));
-        } catch (e) {
-          console.warn('Delete membros: sem permissão/leitura?', e);
-        }
+        } catch (e) {}
 
         try {
           const lineSnap = await getDocs(collection(db, 'guildas', gid, 'lines'));
           lineSnap.forEach((d) => refsToDelete.push(d.ref));
-        } catch (e) {
-          console.warn('Delete lines: sem permissão/leitura?', e);
-        }
+        } catch (e) {}
 
         try {
           const campSnap = await getDocs(collection(db, 'guildas', gid, 'campeonatos'));
           campSnap.forEach((d) => refsToDelete.push(d.ref));
-        } catch (e) {
-          console.warn('Delete campeonatos: sem permissão/leitura?', e);
-        }
+        } catch (e) {}
 
-        // 2) Users vinculados (onde guildId == gid)
         try {
           const userSnap = await getDocs(query(collection(db, 'users'), where('guildId', '==', gid)));
           userSnap.forEach((d) => refsToDelete.push(d.ref));
-        } catch (e) {
-          console.warn('Delete users: sem permissão/leitura?', e);
-        }
+        } catch (e) {}
 
-        // 3) Docs principais (sempre por último)
         refsToDelete.push(doc(db, 'configGuilda', gid));
         refsToDelete.push(doc(db, 'guildas', gid));
 
@@ -540,11 +553,19 @@ function fmtDate(ts) {
         showToast('success', 'Guilda e todos os vínculos eliminados com sucesso.');
         try {
           window.allGuildas = (window.allGuildas || []).filter(x => x.id !== gid);
+          allGuilds = window.allGuildas;
           window.allSolicita = (window.allSolicita || []).filter(s => (s.guildId || s.gid) !== gid);
         } catch(_) {}
+        
+        localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas }));
+        
         renderGuilds();
-        renderSolicita();
-        persistCeoCoreCache();
+        const statGuilds = document.getElementById('stat-guilds');
+        if (statGuilds) statGuilds.textContent = allGuilds.length;
+        
+        if (!document.getElementById('solicita-panel').classList.contains('hidden')) {
+           loadSolicita();
+        }
       } catch(e) {
         console.error('FULL DELETE ERROR:', e);
         const details = (e && (e.code || e.message)) ? ` (${e.code || e.message})` : '';
@@ -552,48 +573,55 @@ function fmtDate(ts) {
       }
     };
 
-    // Solicitações
+    // Solicitações (Busca em tempo real sempre que for aberto)
     async function loadSolicita() {
       const grid = document.getElementById('solicita-grid');
-      grid.innerHTML = `<div class="col-span-full py-10 text-center text-gray-400">A carregar solicitações...</div>`;
+      grid.innerHTML = `<div class="col-span-full py-10 text-center text-gray-400">A carregar solicitações do servidor...</div>`;
       
-      const snap = await getDocs(collection(db, 'solicita'));
-      allSolicita = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      try {
+        const snap = await getDocs(collection(db, 'solicita'));
+        window.allSolicita = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      if(allSolicita.length === 0) {
-        grid.innerHTML = `<div class="col-span-full py-10 text-center text-gray-400">Sem solicitações no momento.</div>`;
-        return;
+        const pendentesCount = window.allSolicita.filter(s => s.status === 'pendente').length;
+        document.getElementById('stat-solicita').textContent = pendentesCount;
+
+        if(window.allSolicita.length === 0) {
+          grid.innerHTML = `<div class="col-span-full py-10 text-center text-gray-400">Sem solicitações no momento.</div>`;
+          return;
+        }
+
+        grid.innerHTML = window.allSolicita.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).map(s => `
+          <div class="bg-gray-50 border border-gray-100 p-4 rounded-2xl shadow-sm hover:bg-white transition">
+            <div class="flex justify-between items-start mb-3">
+               <div class="min-w-0">
+                  <p class="text-[10px] font-black text-emerald-600 uppercase tracking-widest">${s.plano || 'FREE'}</p>
+                  <h5 class="font-bold text-gray-900 text-sm truncate">${s.email || '—'}</h5>
+               </div>
+               <span class="px-2 py-0.5 rounded-lg text-[9px] font-bold ${s.status === 'pendente' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'} uppercase">
+                  ${s.status || 'pendente'}
+               </span>
+            </div>
+            <div class="text-[10px] text-gray-500 space-y-1 mb-4">
+               <p><b>Titular:</b> ${s.nomePagador || '—'}</p>
+               <p><b>Data:</b> ${fmtDate(s.createdAt)}</p>
+            </div>
+            <div class="flex gap-2">
+               <button onclick="window.approveSolicita('${s.id}', '${s.plano}')" 
+                       class="flex-1 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition">APROVAR</button>
+               <button onclick="window.rejectSolicita('${s.id}')" 
+                       class="px-3 py-2 bg-gray-200 text-gray-600 rounded-xl text-[10px] font-bold hover:bg-gray-300 transition">REJEITAR</button>
+               <button onclick="window.deleteSolicita('${s.id}')" 
+                       class="px-3 py-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+        `).join('');
+        initIcons();
+      } catch (e) {
+         console.error(e);
+         grid.innerHTML = `<div class="col-span-full py-10 text-center text-red-500">Erro ao carregar solicitações.</div>`;
       }
-
-      grid.innerHTML = allSolicita.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).map(s => `
-        <div class="bg-gray-50 border border-gray-100 p-4 rounded-2xl shadow-sm hover:bg-white transition">
-          <div class="flex justify-between items-start mb-3">
-             <div class="min-w-0">
-                <p class="text-[10px] font-black text-emerald-600 uppercase tracking-widest">${s.plano || 'FREE'}</p>
-                <h5 class="font-bold text-gray-900 text-sm truncate">${s.email || '—'}</h5>
-             </div>
-             <span class="px-2 py-0.5 rounded-lg text-[9px] font-bold ${s.status === 'pendente' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'} uppercase">
-                ${s.status || 'pendente'}
-             </span>
-          </div>
-          <div class="text-[10px] text-gray-500 space-y-1 mb-4">
-             <p><b>Titular:</b> ${s.nomePagador || '—'}</p>
-             <p><b>Data:</b> ${fmtDate(s.createdAt)}</p>
-          </div>
-          <div class="flex gap-2">
-             <button onclick="window.approveSolicita('${s.id}', '${s.plano}')" 
-                     class="flex-1 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition">APROVAR</button>
-             <button onclick="window.rejectSolicita('${s.id}')" 
-                     class="px-3 py-2 bg-gray-200 text-gray-600 rounded-xl text-[10px] font-bold hover:bg-gray-300 transition">REJEITAR</button>
-             <button onclick="window.deleteSolicita('${s.id}')" 
-                     class="px-3 py-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
-          </div>
-        </div>
-      `).join('');
-      initIcons();
     }
 
-    
     window.approveSolicita = async (sid, plano) => {
       try {
         const uid = sid; // agora o docId da solicitação é o UID
@@ -606,7 +634,6 @@ function fmtDate(ts) {
         const normalizedPlano = normalizeVip(plano);
         const expiresAtMs = buildVipExpiresAt(normalizedPlano);
 
-        // salva em configGuilda (cria se não existir)
         await setDoc(doc(db, 'configGuilda', gid), {
           vipTier: normalizedPlano,
           vipExpiresAt: expiresAtMs,
@@ -614,7 +641,6 @@ function fmtDate(ts) {
           updatedAtMs: Date.now()
         }, { merge: true });
 
-        // mantém VIP sincronizado em guildas também
         await setDoc(doc(db, 'guildas', gid), {
           vipTier: normalizedPlano,
           vipExpiresAt: expiresAtMs,
@@ -622,7 +648,6 @@ function fmtDate(ts) {
           updatedAtMs: Date.now()
         }, { merge: true });
 
-        // marca solicitação como aprovada
         await updateDoc(doc(db, 'solicita', sid), {
           status: 'aprovado',
           approvedVipTier: normalizedPlano,
@@ -633,19 +658,22 @@ function fmtDate(ts) {
 
         showToast('success', 'Upgrade aprovado e ativo para a guilda!');
         try {
-          window.allSolicita = (window.allSolicita || []).filter(x => x.id !== sid);
           const gx = (window.allGuildas || []).find(x => x.id === gid);
-          if (gx) gx.vipTier = normalizedPlano;
+          if (gx) {
+            gx.vipTier = normalizedPlano;
+            gx.vip = normalizedPlano;
+            gx.vipExpiresAt = expiresAtMs;
+          }
+          localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas }));
         } catch(_) {}
+        
         renderGuilds();
-        renderSolicita();
-        persistCeoCoreCache();
+        loadSolicita(); // recarrega modal
       } catch (e) {
         console.error(e);
         showToast('error', 'Erro ao aprovar: ' + (e?.message || e));
       }
     };
-
 
     window.rejectSolicita = async (sid) => {
        await updateDoc(doc(db, 'solicita', sid), { status: 'recusado', updatedAt: serverTimestamp() });
