@@ -438,6 +438,24 @@
       if (!guildId) return [];
       const snap = await getDocs(collection(db, 'guildas', guildId, 'lines'));
       const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Migração leve: se doc antigo não tiver memberIds mas tiver members, grava memberIds (ajuda anti-duplicação)
+      try {
+        const fixes = [];
+        for (const d of snap.docs) {
+          const data = d.data() || {};
+          const hasMemberIds = Array.isArray(data.memberIds) && data.memberIds.length > 0;
+          const hasMembers = Array.isArray(data.members) && data.members.length > 0;
+          if (!hasMemberIds && hasMembers) {
+            const ids = data.members.map(m => m?.id).filter(Boolean).map(v => String(v));
+            if (ids.length) {
+              fixes.push(updateDoc(doc(db, 'guildas', guildId, 'lines', d.id), { memberIds: ids }).catch(()=>{}));
+            }
+          }
+        }
+        if (fixes.length) Promise.all(fixes).catch(()=>{});
+      } catch (_) {}
+
       // garante shape
       return arr.map((l) => ({
         id: l.id,
@@ -671,17 +689,32 @@
 
         showToast('info', 'Salvando...');
 
-        // Anti-duplicação leve (só no salvar): checa no Firestore se algum membro já está em outra line
-        // (máx 4 membros => até 4 consultas com limit(1))
+        // Anti-duplicação leve (só no salvar):
+        // checa no Firestore se algum membro já está em outra line
+        // OBS: tenta como string e como number (pra não falhar com docs antigos)
         try {
-          for (const mid of selectedMemberIds) {
-            const qx = query(collection(db, 'guildas', guildId, 'lines'), where('memberIds', 'array-contains', String(mid)), limit(1));
-            const sx = await getDocs(qx);
-            if (!sx.empty) {
-              const d0 = sx.docs[0];
-              if (!editingLineId || d0.id !== String(editingLineId)) {
-                showToast('warn', 'Esse membro já está em outra line. Aperta ↻ pra sincronizar.');
-                return;
+          const mids = (selectedMemberIds || []).map(String);
+          for (const midStr of mids) {
+            const candidates = [midStr];
+            const asNum = Number(midStr);
+            if (!Number.isNaN(asNum) && String(asNum) === midStr && asNum !== midStr) {
+              // (na prática aqui não entra, mas mantém por segurança)
+            }
+            if (!Number.isNaN(asNum) && String(asNum) === midStr) candidates.push(asNum);
+
+            for (const val of candidates) {
+              const qx = query(
+                collection(db, 'guildas', guildId, 'lines'),
+                where('memberIds', 'array-contains', val),
+                limit(1)
+              );
+              const sx = await getDocs(qx);
+              if (!sx.empty) {
+                const d0 = sx.docs[0];
+                if (!editingLineId || d0.id !== String(editingLineId)) {
+                  showToast('warn', 'Esse membro já está em outra line. Aperta ↻ pra sincronizar.');
+                  return;
+                }
               }
             }
           }
@@ -731,8 +764,16 @@
           if (c?.guildId) guildId = c.guildId;
         }
         if (!guildId) throw new Error('Guilda não resolvida.');
+
         await deleteDoc(doc(db, 'guildas', guildId, 'lines', editingLineId));
-        await loadLines(false);
+
+        // Atualiza cache local (sem reler Firestore)
+        const before = Array.isArray(lines) ? lines : [];
+        lines = before.filter(l => String(l.id) !== String(editingLineId));
+        saveCached(lines);
+        renderLines(lines);
+
+        editingLineId = null;
         closeLineModal();
         showToast('success', 'Line excluída!');
       } catch(e) {
