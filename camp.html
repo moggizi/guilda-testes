@@ -212,7 +212,9 @@
       query, orderBy, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+    // CARREGA OS ÍCONES IMEDIATAMENTE INDEPENDENTE DE TER DADOS!
     setupSidebar();
+    initIcons();
 
     // Dropdown de quedas (fixo 1..20)
     const dropsSel = document.getElementById('camp-drops');
@@ -847,4 +849,3 @@
 
 </body>
 </html>
-
