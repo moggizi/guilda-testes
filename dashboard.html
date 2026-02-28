@@ -83,7 +83,7 @@
           
           <span id="current-plan-pill" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-50 text-gray-600 text-sm border border-gray-200 whitespace-nowrap ml-auto">
             <i data-lucide="sparkles" class="w-4 h-4 text-emerald-500"></i>
-            <span>Plano atual: <b id="current-plan-name">—</b></span> <span class="text-gray-400">•</span> <span id="vip-days" class="text-gray-500">—</span>
+            <span>Plano atual: <b id="current-plan-name">—</b></span>
           </span>
         </div>
       </header>
@@ -200,6 +200,8 @@
 
     let currentStats = null;
 
+    let __lastMembersHash = null;
+
     function __membersLsKey() {
       const gid = getGuildContext()?.guildId;
       return gid ? `membersList_${gid}` : 'membersList';
@@ -223,7 +225,10 @@
     }
 
     function __renderFromMembersCache() {
-      const cachedMembers = __readJSON(__membersLsKey());
+      const key = __membersLsKey();
+      const raw = localStorage.getItem(key);
+      if (raw) __lastMembersHash = raw;
+      const cachedMembers = __readJSON(key);
       if (!Array.isArray(cachedMembers) || cachedMembers.length === 0) return false;
 
       const stats = calculateStats(cachedMembers);
@@ -247,13 +252,7 @@
         const pillName = document.getElementById('current-plan-name');
         if (pillName) pillName.textContent = tier.toUpperCase();
 
-        const daysEl = document.getElementById('vip-days');
-        const days = getVipRemainingDays();
-        if (daysEl) {
-          if (days == null) daysEl.textContent = 'sem validade';
-          else daysEl.textContent = `${days} dia${days === 1 ? '' : 's'}`;
-        }
-
+        
         const ctx = getGuildContext();
         applyVipUiAndGates(ctx?.vipTier || getVipTier());
       } catch (_) {}
@@ -319,12 +318,47 @@
         }
       } catch (_) {}
 
-      // Recalcula stats do cache sempre que outro admin mexer (mesmo navegador/aba)
+      // Recalcula stats do cache quando o cache de membros mudar (outra aba/dispositivo).
+      function __renderFromMembersCacheKey(lsKey) {
+        const cachedMembers = __readJSON(lsKey);
+        if (!Array.isArray(cachedMembers) || cachedMembers.length === 0) return false;
+        const stats = calculateStats(cachedMembers);
+        currentStats = stats;
+        __writeJSON(__dashboardStatsKey(), stats);
+        updateUI(stats);
+        return true;
+      }
+
+      function __refreshStatsFromCacheSmart() {
+        const gid = getGuildContext()?.guildId;
+        const key = gid ? `membersList_${gid}` : __membersLsKey();
+        const raw = localStorage.getItem(key);
+        if (!raw) return false;
+        if (raw === __lastMembersHash) return true;
+        __lastMembersHash = raw;
+        return __renderFromMembersCacheKey(key) || __renderFromStatsCache();
+      }
+
       window.addEventListener('storage', (ev) => {
-        if (!ev) return;
-        if (ev.key === __membersLsKey() || ev.key === __dashboardStatsKey()) {
-          // members manda mais confiança que stats
-          if (!__renderFromMembersCache()) __renderFromStatsCache();
+        if (!ev || !ev.key) return;
+        const gid = getGuildContext()?.guildId;
+        const expectedKey = gid ? `membersList_${gid}` : null;
+
+        if (ev.key.startsWith('membersList_')) {
+          if (!expectedKey || ev.key === expectedKey) {
+            __lastMembersHash = ev.newValue || null;
+            __renderFromMembersCacheKey(ev.key);
+          }
+          return;
+        }
+
+        if (ev.key === __dashboardStatsKey()) {
+          if (!__refreshStatsFromCacheSmart()) __renderFromStatsCache();
+        }
+      });
+
+      // fallback: se o dashboard ficar aberto, checa o cache às vezes (zero leitura Firestore)
+      setInterval(__refreshStatsFromCacheSmart, 2500);
         }
       });
 
