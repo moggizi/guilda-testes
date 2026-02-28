@@ -89,6 +89,80 @@ export function getVipExpiresAtMs() {
   return (__guildCtx && __guildCtx.vipExpiresAtMs != null) ? Number(__guildCtx.vipExpiresAtMs) : null;
 }
 
+// --- UI: aplica cache no menu lateral (sem esperar Firebase) -----------------
+function __applyCachedSidebarNow() {
+  try {
+    const roleEl = document.getElementById("user-role");
+    const emailEl = document.getElementById("user-email");
+
+    if (__guildCtx) {
+      if (emailEl) {
+        const curE = (emailEl.textContent || "").trim();
+        if (!curE) emailEl.textContent = __guildCtx.email || "";
+      }
+      if (roleEl) {
+        const cur = (roleEl.textContent || "").trim();
+        if (!cur || cur === "...") roleEl.textContent = __guildCtx.role || "Membro";
+      }
+
+      // VIP label (mantém dias no menu como já existe)
+      try { applyVipUiAndGates(__guildCtx.vipTier || 'free'); } catch (_) {}
+
+      // CEO visibilidade com o cache (pode estar desatualizado, mas evita "...")
+      try { applyCeoNavVisibility(); } catch (_) {}
+    } else {
+      // Mesmo sem guildCtx, ainda aplica o cache de CEO se existir
+      try { applyCeoNavVisibility(); } catch (_) {}
+    }
+  } catch (_) {}
+}
+
+// Auto: roda o quanto antes (quando o DOM existir)
+(function __bootCachedSidebar() {
+  try {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    const run = () => __applyCachedSidebarNow();
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", run, { once: true });
+    } else {
+      run();
+    }
+
+    // Atualiza se outra aba mudar o cache (ex: entrou em Membros e atualizou role/vip)
+    window.addEventListener("storage", (e) => {
+      try {
+        if (!e) return;
+
+        if (e.key === __GUILDCTX_LS_KEY && e.newValue) {
+          const cached = JSON.parse(e.newValue);
+          if (cached && cached.guildId && cached.uid && cached.email && cached.role) {
+            __guildCtx = {
+              guildId: String(cached.guildId),
+              guildName: cached.guildName ? String(cached.guildName) : null,
+              role: String(cached.role),
+              email: String(cached.email),
+              uid: String(cached.uid),
+              vipTier: cached.vipTier ? String(cached.vipTier) : 'free',
+              vipExpiresAtMs: (cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null)
+            };
+          }
+          __applyCachedSidebarNow();
+        }
+
+        if (e.key === __CEO_LS_KEY && e.newValue) {
+          const cached = JSON.parse(e.newValue);
+          if (cached && cached.email && cached.ts && (Date.now() - cached.ts) < 10 * 60 * 1000) {
+            __isCeo = !!cached.isCeo;
+          }
+          __applyCachedSidebarNow();
+        }
+      } catch (_) {}
+    });
+  } catch (_) {}
+})();
+
 
 function __maybeDowngradeVipSync() {
   try {
@@ -844,72 +918,6 @@ export function applyVipUiAndGates(tierRaw) {
     }
   } catch (_) {}
 })();
-
-
-export function applyCachedUserUi() {
-  try {
-    if (!__guildCtx) return;
-
-    const roleEl = document.getElementById("user-role");
-    if (roleEl && __guildCtx.role) roleEl.textContent = String(__guildCtx.role);
-
-    const emailEl = document.getElementById("user-email");
-    if (emailEl) {
-      const email = (auth.currentUser?.email || __guildCtx.email || "").toString();
-      if (email) emailEl.textContent = email;
-    }
-
-    // VIP e CEO também podem ser aplicados do cache, sem esperar o checkAuth terminar.
-    try { applyVipUiAndGates(__guildCtx.vipTier); } catch (_) {}
-    try { applyCeoNavVisibility(); } catch (_) {}
-  } catch (_) {}
-}
-
-// Aplica o cache o mais cedo possível (evita "..." no menu lateral).
-(function __ctxAutoApply() {
-  try {
-    const run = () => applyCachedUserUi();
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run);
-    else run();
-  } catch (_) {}
-})();
-
-// Se o cache mudar em outra aba, atualiza o menu sem recarregar.
-try {
-  window.addEventListener("storage", (ev) => {
-    if (!ev) return;
-    if (ev.key === __GUILDCTX_LS_KEY) {
-      try {
-        const raw = localStorage.getItem(__GUILDCTX_LS_KEY);
-        if (!raw) return;
-        const cached = JSON.parse(raw);
-        if (cached && cached.guildId && cached.uid && cached.email && cached.role) {
-          __guildCtx = {
-            guildId: String(cached.guildId),
-            guildName: cached.guildName ? String(cached.guildName) : null,
-            role: String(cached.role),
-            vipTier: cached.vipTier ? String(cached.vipTier) : 'free',
-            vipExpiresAtMs: (cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null),
-            email: String(cached.email),
-            uid: String(cached.uid)
-          };
-          applyCachedUserUi();
-        }
-      } catch (_) {}
-    }
-    if (ev.key === __CEO_LS_KEY) {
-      try {
-        const raw = localStorage.getItem(__CEO_LS_KEY);
-        if (!raw) return;
-        const cached = JSON.parse(raw);
-        if (cached && cached.ts && (Date.now() - cached.ts) < 10 * 60 * 1000) {
-          __isCeo = !!cached.isCeo;
-          applyCeoNavVisibility();
-        }
-      } catch (_) {}
-    }
-  });
-} catch (_) {}
 
 export function setupSidebar() {
   const sidebar = document.getElementById("sidebar");
