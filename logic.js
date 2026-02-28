@@ -51,6 +51,7 @@ const __LS = {
   lines: (gid) => `hub_lines_v1_${gid}`,
   eventos: (gid) => `hub_eventos_v1_${gid}`,
   camps: (gid) => `hub_camps_v1_${gid}`,
+  guildConfig: (gid) => `hub_guildcfg_v1_${gid}`,
   // CEO (core)
   ceoGuildas: 'hub_ceo_guildas_v1',
   ceoConfig: 'hub_ceo_config_v1',
@@ -120,6 +121,20 @@ export function getCachedCamps(guildId) {
   if (!guildId) return null;
   const c = __lsGet(__LS.camps(guildId));
   return Array.isArray(c?.items) ? c.items : null;
+}
+
+export function getCachedGuildConfig(guildId) {
+  if (!guildId) return null;
+  const c = __lsGet(__LS.guildConfig(guildId));
+  return (c && c.items) ? c.items : null;
+}
+
+export async function refreshGuildConfig(guildId) {
+  if (!guildId) throw new Error('guildId inválido');
+  const snap = await getDoc(doc(db, 'configGuilda', guildId));
+  const data = snap.exists() ? (snap.data() || {}) : {};
+  __lsSet(__LS.guildConfig(guildId), { ts: Date.now(), items: data });
+  return data;
 }
 
 export function setCachedMembers(guildId, items) {
@@ -231,6 +246,29 @@ export async function preloadLoginCache(user) {
     const cfgSnap = await getDoc(doc(db, "configGuilda", guildId));
     cfg = cfgSnap.exists() ? (cfgSnap.data() || {}) : {};
   } catch (_) {}
+
+  // Cacheia configGuilda mínima (evita leituras em Ajustes/Admin/Dashboard)
+  try {
+    __lsSet(__LS.guildConfig(guildId), {
+      ts: Date.now(),
+      items: {
+        admins: Array.isArray(cfg.admins) ? cfg.admins : [],
+        leaders: Array.isArray(cfg.leaders) ? cfg.leaders : [],
+        players: Array.isArray(cfg.players) ? cfg.players : [],
+        vipTier: cfg.vipTier ?? cfg.vip ?? cfg.planoVip ?? cfg.planoVIP ?? cfg.vipLevel ?? cfg.vipPlano ?? cfg.vipName ?? cfg.plano ?? cfg.plan ?? cfg.tier ?? 'free',
+        vipExpiresAt: cfg.vipExpiresAt ?? cfg.vipExpiraEm ?? cfg.vipExpireAt ?? cfg.expiresAt ?? cfg.vipExpires ?? null,
+        tagMembros: cfg.tagMembros ?? ''
+      }
+    });
+    // compat (admin antigo): securityConfig_{guildId}
+    try {
+      localStorage.setItem(`securityConfig_${guildId}`, JSON.stringify({
+        admins: Array.isArray(cfg.admins) ? cfg.admins : [],
+        leaders: Array.isArray(cfg.leaders) ? cfg.leaders : [],
+        players: Array.isArray(cfg.players) ? cfg.players : []
+      }));
+    } catch(_) {}
+  } catch(_) {}
 
   // role (sem ficar consultando depois)
   let role = null;
@@ -572,8 +610,28 @@ async function resolveRoleInGuild(guildId, email) {
   const e = cleanEmail(email);
   if (!guildId || !e) return "Membro";
 
+  // cache-first (evita leituras e "pisca" em páginas que só precisam validar)
+  try {
+    const cached = getCachedGuildConfig(guildId);
+    if (cached) {
+      const leaders = Array.isArray(cached.leaders) ? cached.leaders : [];
+      const admins = Array.isArray(cached.admins) ? cached.admins : [];
+      const players = Array.isArray(cached.players) ? cached.players : [];
+
+      const leadersL = uniq(leaders.map((x) => cleanEmail(x))).filter(Boolean);
+      const adminsL = uniq(admins.map((x) => cleanEmail(x))).filter(Boolean);
+      const playersL = uniq(players.map((x) => cleanEmail(x))).filter(Boolean);
+
+      if (leadersL.includes(e)) return "Líder";
+      if (adminsL.includes(e)) return "Admin";
+      if (playersL.includes(e)) return "Jogador";
+      return "Membro";
+    }
+  } catch(_) {}
+
   try {
     const snap = await getDoc(doc(db, "configGuilda", guildId));
+(doc(db, "configGuilda", guildId));
     if (snap.exists()) {
       const data = snap.data() || {};
       const leaders = Array.isArray(data.leaders) ? data.leaders : [];
@@ -701,7 +759,7 @@ export async function finalizeSignup(user, username) {
   return { guildId: user.uid };
 }
 
-export async function getMemberTagConfig() {
+export async function getMemberTagConfig(force = false) {
   let guildId = null;
   try {
     guildId = requireGuildId();
@@ -709,6 +767,7 @@ export async function getMemberTagConfig() {
     return null;
   }
 
+  // 1) Cache específico (mais rápido)
   try {
     const raw = localStorage.getItem(`tagMembros_${guildId}`);
     if (raw) {
@@ -717,20 +776,33 @@ export async function getMemberTagConfig() {
     }
   } catch (_) {}
 
+  // 2) Cache da configGuilda (preload do login)
   try {
-    const snap = await getDoc(doc(db, "configGuilda", guildId));
-    if (!snap.exists()) return null;
-    const data = snap.data() || {};
+    const cfg = getCachedGuildConfig(guildId);
+    const tag2 = (cfg?.tagMembros || '').toString().trim();
+    if (tag2) {
+      try { localStorage.setItem(`tagMembros_${guildId}`, JSON.stringify({ value: tag2, ts: Date.now() })); } catch (_) {}
+      return tag2;
+    }
+  } catch (_) {}
+
+  // 3) Sem refresh: não lê Firestore (evita "pisca")
+  if (!force) return null;
+
+  // 4) Refresh manual (Ajustes pode chamar com force=true)
+  try {
+    const data = await refreshGuildConfig(guildId);
     const tag = (data.tagMembros || "").toString().trim();
     if (tag) {
       try { localStorage.setItem(`tagMembros_${guildId}`, JSON.stringify({ value: tag, ts: Date.now() })); } catch (_) {}
       return tag;
     }
     return null;
-  } catch (e) {
+  } catch (_) {
     return null;
   }
 }
+
 
 export async function setMemberTagConfig(tag) {
   const clean = (tag || "").toString().trim();
@@ -743,6 +815,11 @@ export async function setMemberTagConfig(tag) {
     { merge: true }
   );
   try { localStorage.setItem(`tagMembros_${guildId}`, JSON.stringify({ value: clean, ts: Date.now() })); } catch (_) {}
+  // mantém config cache sincronizada
+  try {
+    const prev = getCachedGuildConfig(guildId) || {};
+    __lsSet(__LS.guildConfig(guildId), { ts: Date.now(), items: { ...prev, tagMembros: clean } });
+  } catch(_) {}
   return true;
 }
 

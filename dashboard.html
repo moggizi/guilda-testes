@@ -184,10 +184,7 @@
   </div>
 
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, db, consumeLoginToasts, getGuildContext, applyVipUiAndGates, getVipTier, getCachedMembers, refreshMembers } from './logic.js';
-    import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-    // Função de normalização idêntica à do upgrade.html
+    import { checkAuth, setupSidebar, initIcons, logout, db, consumeLoginToasts, getGuildContext, applyVipUiAndGates, getVipTier, getCachedMembers, refreshMembers } from './logic.js';    // Função de normalização idêntica à do upgrade.html
     function normalizeTier(raw){
       const s = (raw || 'free').toString().toLowerCase().trim();
       if (s.includes('buss') || s.includes('business')) return 'business';
@@ -242,13 +239,7 @@
     async function loadDashboard() {
       try {
         const ctx = getGuildContext();
-        if(!ctx?.guildId) return;
-
-        const snap = await getDocs(collection(db, "guildas", ctx.guildId, "membros"));
-        const members = [];
-        snap.forEach(d => members.push(d.data()));
-
-        const newStats = calculateStats(members);
+        if(!ctx?.guildId) return;        const newStats = calculateStats(members);
         
         if (JSON.stringify(newStats) !== JSON.stringify(currentStats)) {
             localStorage.setItem('dashboard_stats', JSON.stringify(newStats));
