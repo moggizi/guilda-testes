@@ -6,6 +6,16 @@
   <title>Admin - Guilda HUB</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script type="module">
+    import { getGuildContext } from './logic.js';
+    // Proteção instantânea com cache: se for admin, expulsa na hora
+    try {
+      const ctx = getGuildContext();
+      if (ctx && ctx.role === 'Admin') {
+        window.location.replace('dashboard.html');
+      }
+    } catch (_) {}
+  </script>
   <script>
     tailwind.config = { theme: { extend: { colors: { emerald: { 50:'#ecfdf5', 100:'#d1fae5', 200:'#a7f3d0', 400:'#34d399', 500:'#10b981', 600:'#059669', 700:'#047857'} } } } }
   </script>
@@ -120,7 +130,7 @@
           </div>
         </div>
 
-        <!-- Card Acesso Jogador (Com mt-8 de espaçamento) -->
+        <!-- Card Acesso Jogador -->
         <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm mt-8">
           <div class="flex justify-between items-center mb-4">
             <h3 class="font-bold text-gray-900 flex items-center gap-2">
@@ -137,11 +147,11 @@
           <div id="player-create-box" class="space-y-3">
             <div class="text-xs text-gray-500">E-mail do Jogador (definido por você)</div>
             <div class="space-y-2">
-              <input id="player-email" type="email" placeholder="ex: jogador.minhaguilda@gmail.com"
-                class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400" />
+              <input id="player-email" type="email" placeholder="ex: jogador.minhaguilda@gmail.com" disabled
+                class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 cursor-not-allowed opacity-70" />
               <div class="flex items-center justify-between gap-3 text-xs text-gray-400">
                 <span>Sugestão rápida:</span>
-                <button id="btn-fill-player-email" class="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1 rounded-lg font-bold hover:bg-gray-50">Usar sugestão</button>
+                <button id="btn-fill-player-email" disabled class="text-xs bg-gray-100 border border-gray-200 text-gray-400 px-3 py-1 rounded-lg font-bold cursor-not-allowed opacity-70">Usar sugestão</button>
               </div>
               <code id="player-email-preview" class="block text-xs text-gray-700 break-all bg-gray-50 border border-gray-200 rounded-xl p-3">jogador.{guildId}@guildahub.app</code>
             </div>
@@ -149,12 +159,12 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs text-gray-500 mb-1">Senha do Jogador</label>
-                <input id="player-pass" type="password" minlength="6" placeholder="Mínimo 6 caracteres"
-                  class="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
+                <input id="player-pass" type="password" minlength="6" placeholder="Mínimo 6 caracteres" disabled
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 cursor-not-allowed opacity-70" />
               </div>
               <div class="flex items-end">
-                <button id="btn-create-player-disabled-beta" class="w-full px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700">
-                  Criar acesso ao Jogador
+                <button id="btn-create-player-disabled-beta" class="w-full px-4 py-2 rounded-xl bg-gray-400 text-white font-bold cursor-not-allowed opacity-70" disabled title="Em desenvolvimento">
+                  Recurso em desenvolvimento
                 </button>
               </div>
             </div>
@@ -225,6 +235,8 @@
     });
     
     let securityData = { admins: [], leaders: [] };
+    let hasLoadedFromCache = false;
+
     const guildCacheKey = () => {
       const ctx = getGuildContext();
       return `securityConfig_${ctx?.guildId || "unknown"}`;
@@ -236,6 +248,7 @@
       currentEmail = String(ctx?.email || '').toLowerCase().trim();
     } catch (_) {}
 
+    // --- CARREGAMENTO INSTANTÂNEO DO CACHE ---
     try {
       const cachedSec = localStorage.getItem(guildCacheKey());
       if (cachedSec) {
@@ -243,6 +256,7 @@
         renderPlayerAccess(securityData.playerEmail);
         renderList('admins', securityData.admins || []);
         renderList('leaders', securityData.leaders || []);
+        hasLoadedFromCache = true;
       }
     } catch (_) {}
 
@@ -255,42 +269,24 @@
         applyVipUI(ctx0?.vipTier || 'free');
         currentEmail = String(user?.email || '').toLowerCase().trim();
       } catch (_) {}
-      await load();
+      
+      // Só carrega do Firebase se não achou cache
+      if (!hasLoadedFromCache) {
+        await load();
+      }
     });
 
-    async function load(forceRefresh = false) {
-      const key = guildCacheKey();
-
-      // Cache-first: se tiver no localStorage, usa e NÃO busca no Firestore (evita piscar + evita leitura).
-      if (!forceRefresh) {
-        try {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            const cached = JSON.parse(raw) || {};
-            cached.admins = Array.isArray(cached.admins) ? cached.admins : [];
-            cached.leaders = Array.isArray(cached.leaders) ? cached.leaders : [];
-            cached.playerEmail = (cached.playerEmail || "").toString().toLowerCase().trim() || null;
-
-            renderPlayerAccess(cached.playerEmail);
-            securityData = cached;
-            renderList('admins', securityData.admins);
-            renderList('leaders', securityData.leaders);
-            return;
-          }
-        } catch (_) {}
-      }
-
-      // Sem cache: 1 leitura (ou quando for forçado)
+    async function load() {
       try {
         const snap = await getDoc(doc(db, "configGuilda", getGuildContext().guildId));
         const newData = snap.exists() ? (snap.data() || {}) : {};
         newData.admins = Array.isArray(newData.admins) ? newData.admins : [];
         newData.leaders = Array.isArray(newData.leaders) ? newData.leaders : [];
         newData.playerEmail = (newData.playerEmail || "").toString().toLowerCase().trim() || null;
-
+        
         renderPlayerAccess(newData.playerEmail);
         securityData = newData;
-        try { localStorage.setItem(key, JSON.stringify(newData)); } catch (_) {}
+        localStorage.setItem(guildCacheKey(), JSON.stringify(newData));
         renderList('admins', securityData.admins);
         renderList('leaders', securityData.leaders);
       } catch (e) {
@@ -331,7 +327,7 @@
     }
 
     function getPlayerEmailForGuild() {
-      return `jogador.${getGuildContext().guildId}@guildahub.app`.toLowerCase();
+      return `jogador.${getGuildContext()?.guildId || 'id'}@guildahub.app`.toLowerCase();
     }
 
     function renderPlayerAccess(email) {
@@ -346,10 +342,9 @@
       }
     }
 
-    document.getElementById('btn-fill-player-email')?.addEventListener('click', () => {
-      const email = getPlayerEmailForGuild();
-      document.getElementById('player-email').value = email;
-      document.getElementById('player-email-preview').textContent = email;
+    // Botões desativados de jogador não farão nada
+    document.getElementById('btn-create-player-disabled-beta')?.addEventListener('click', async () => {
+      showToast('info', 'Em breve! Este recurso ainda está em desenvolvimento.');
     });
 
     document.getElementById('btn-add-admin')?.addEventListener('click', () => addAccess('admins'));
@@ -393,7 +388,10 @@
     }
 
     async function saveSecurity() {
+      // Salva no cache instantaneamente
       localStorage.setItem(guildCacheKey(), JSON.stringify(securityData));
+      
+      // Salva no Firebase
       await setDoc(doc(db, 'configGuilda', getGuildContext().guildId), {
         admins: securityData.admins || [],
         leaders: securityData.leaders || [],
@@ -401,35 +399,25 @@
       }, { merge: true });
     }
 
-    document.getElementById('btn-create-player-disabled-beta')?.addEventListener('click', async () => {
-      const email = document.getElementById('player-email').value;
-      const pass = document.getElementById('player-pass').value;
-      try {
-        showToast('info', 'Criando acesso...');
-        await createPlayer_DISABLED_BETAAccess(getGuildContext().guildId, email, pass);
-        showToast('success', 'Acesso do Jogador criado!');
-        await load();
-      } catch (e) { showToast('error', 'Erro ao criar.'); }
-    });
   </script>
 
   <!-- OTK Footer -->
-<footer id="otk-footer" class="mt-12 border-t border-emerald-500/10 text-slate-700">
-  <div class="mx-auto w-full max-w-5xl px-4 py-10">
-    <div class="flex flex-col items-center gap-4">
-      <div class="flex items-center justify-center gap-3">
-        <a href="https://instagram.com/ottakubrasil" target="_blank" class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"><i data-lucide="instagram" class="h-5 w-5"></i></a>
-        <a href="https://instagram.com/gameotk" target="_blank" class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"><i data-lucide="instagram" class="h-5 w-5"></i></a>
-        <a href="https://ottakubrasil.online" target="_blank" class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"><i data-lucide="globe" class="h-5 w-5"></i></a>
-      </div>
-      <div class="text-center">
-        <p class="text-sm font-semibold tracking-wide text-slate-800">Ottakubrasil • Guilda Hub</p>
-        <p class="mt-2 max-w-xl text-xs leading-relaxed text-slate-600">Central de guilda e eventos: organização, velocidade e controle para facilitar sua vida no dia a dia.</p>
-        <p class="mt-4 text-xs text-slate-500">© Ottakubrasil • 2026</p>
+  <footer id="otk-footer" class="mt-12 border-t border-emerald-500/10 text-slate-700">
+    <div class="mx-auto w-full max-w-5xl px-4 py-10">
+      <div class="flex flex-col items-center gap-4">
+        <div class="flex items-center justify-center gap-3">
+          <a href="https://instagram.com/ottakubrasil" target="_blank" class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"><i data-lucide="instagram" class="h-5 w-5"></i></a>
+          <a href="https://instagram.com/gameotk" target="_blank" class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"><i data-lucide="instagram" class="h-5 w-5"></i></a>
+          <a href="https://ottakubrasil.online" target="_blank" class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"><i data-lucide="globe" class="h-5 w-5"></i></a>
+        </div>
+        <div class="text-center">
+          <p class="text-sm font-semibold tracking-wide text-slate-800">Ottakubrasil • Guilda Hub</p>
+          <p class="mt-2 max-w-xl text-xs leading-relaxed text-slate-600">Central de guilda e eventos: organização, velocidade e controle para facilitar sua vida no dia a dia.</p>
+          <p class="mt-4 text-xs text-slate-500">© Ottakubrasil • 2026</p>
+        </div>
       </div>
     </div>
-  </div>
-</footer>
+  </footer>
 
 </body>
 </html>
