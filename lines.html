@@ -172,7 +172,7 @@
   <script type="module">
 
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildContext } from './logic.js';
-    import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, addDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
     initIcons();
@@ -624,6 +624,7 @@
           return;
         }
       } catch (_) {}
+
       try {
         if (!guildId) {
           const c = getGuildContext();
@@ -639,17 +640,9 @@
         }
         if (selectedMemberIds.length > 4) selectedMemberIds = selectedMemberIds.slice(0,4);
 
-        // Verifica se alguém já está em outra line (exceto a line atual)
-        const used = computeMembersUsedInLines(lines.filter(l => String(l.id) !== String(editingLineId)));
-        const conflicts = selectedMemberIds.filter(id => used.has(String(id)));
-        if (conflicts.length) {
-          showToast('error', 'Um ou mais membros já estão em outra line.');
-          return;
-        }
-
         const rawName = (document.getElementById('line-name').value || '').toString().trim();
-        let number = 0;
 
+        let number = 0;
         if (editingLineId) {
           const existing = lines.find(l => String(l.id) === String(editingLineId));
           number = Number(existing?.number || 0) || 0;
@@ -657,32 +650,96 @@
           number = calcNextNumber();
         }
 
+        // members payload (para UI e para o DB)
         const memberSnaps = selectedMemberIds.map(id => mapMemberSnap(getMemberById(id) || { id }));
 
-        const payload = {
+        const linesCol = collection(db, 'guildas', guildId, 'lines');
+        const lineRef = editingLineId ? doc(linesCol, editingLineId) : doc(linesCol); // id já definido (evita duplicar)
+        const lineId = lineRef.id;
+
+        // Índice: 1 doc por membro, garantindo que ele só pode estar em 1 line
+        const idxColPath = ['guildas', guildId, 'lineMembers'];
+
+        showToast('info', 'Salvando...');
+
+        // Transação: garante "sem duplicar membros" mesmo com cache desatualizado em outras contas
+        await runTransaction(db, async (tx) => {
+          let oldMemberIds = [];
+          if (editingLineId) {
+            const snap = await tx.get(lineRef);
+            if (snap.exists()) oldMemberIds = Array.isArray(snap.data()?.memberIds) ? snap.data().memberIds : [];
+          }
+
+          const newSet = new Set(selectedMemberIds.map(String));
+          const oldSet = new Set((oldMemberIds || []).map(String));
+
+          // 1) libera membros que saíram desta line
+          for (const mid of oldSet) {
+            if (!newSet.has(mid)) {
+              const idxRef = doc(db, ...idxColPath, mid);
+              const idxSnap = await tx.get(idxRef);
+              if (idxSnap.exists() && String(idxSnap.data()?.lineId) === String(lineId)) {
+                tx.delete(idxRef);
+              }
+            }
+          }
+
+          // 2) trava/valida membros novos (se já estiver em outra line, bloqueia)
+          for (const mid of newSet) {
+            const idxRef = doc(db, ...idxColPath, mid);
+            const idxSnap = await tx.get(idxRef);
+            if (idxSnap.exists()) {
+              const other = String(idxSnap.data()?.lineId || '');
+              if (other && other !== String(lineId)) {
+                throw new Error('CONFLICT_MEMBER_IN_OTHER_LINE');
+              }
+            }
+            tx.set(idxRef, { lineId, updatedAt: serverTimestamp() }, { merge: true });
+          }
+
+          const payload = {
+            name: rawName,
+            number,
+            memberIds: selectedMemberIds,
+            members: memberSnaps,
+            updatedAt: serverTimestamp(),
+          };
+          if (!editingLineId) payload.createdAt = serverTimestamp();
+
+          tx.set(lineRef, payload, { merge: true });
+        });
+
+        // Atualiza cache local (SEM reler Firestore)
+        const localPayload = {
+          id: lineId,
           name: rawName,
           number,
           memberIds: selectedMemberIds,
           members: memberSnaps,
-          updatedAt: serverTimestamp(),
         };
 
-        if (!editingLineId) payload.createdAt = serverTimestamp();
-
-        showToast('info', 'Salvando...');
         if (editingLineId) {
-          await updateDoc(doc(db, 'guildas', guildId, 'lines', editingLineId), payload);
+          lines = (lines || []).map(l => (String(l.id) === String(lineId) ? { ...l, ...localPayload } : l));
         } else {
-          const ref = await addDoc(collection(db, 'guildas', guildId, 'lines'), payload);
-          editingLineId = ref.id;
+          lines = Array.isArray(lines) ? lines : [];
+          lines.unshift(localPayload);
+          editingLineId = lineId;
         }
 
-        await loadLines(false);
+        // reordena por number (opcional) e salva
+        lines.sort((a,b)=> Number(a.number||0) - Number(b.number||0));
+        saveCached(lines);
+        renderLines(lines);
+
         closeLineModal();
         showToast('success', 'Line salva!');
       } catch (e) {
         console.warn(e);
-        showToast('error', 'Erro ao salvar a line.');
+        if (String(e?.message || '').includes('CONFLICT_MEMBER_IN_OTHER_LINE')) {
+          showToast('error', 'Tem membro que já está em outra line. Atualize (↻) para sincronizar.');
+        } else {
+          showToast('error', 'Erro ao salvar a line.');
+        }
       }
     };
 
@@ -694,13 +751,40 @@
           if (c?.guildId) guildId = c.guildId;
         }
         if (!guildId) throw new Error('Guilda não resolvida.');
-        await deleteDoc(doc(db, 'guildas', guildId, 'lines', editingLineId));
-        await loadLines(false);
+
+        const linesCol = collection(db, 'guildas', guildId, 'lines');
+        const lineRef = doc(linesCol, editingLineId);
+        const lineId = editingLineId;
+        const idxColPath = ['guildas', guildId, 'lineMembers'];
+
+        showToast('info', 'Excluindo...');
+
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(lineRef);
+          const memberIds = snap.exists() && Array.isArray(snap.data()?.memberIds) ? snap.data().memberIds : [];
+
+          for (const mid of memberIds) {
+            const idxRef = doc(db, ...idxColPath, String(mid));
+            const idxSnap = await tx.get(idxRef);
+            if (idxSnap.exists() && String(idxSnap.data()?.lineId) === String(lineId)) {
+              tx.delete(idxRef);
+            }
+          }
+          tx.delete(lineRef);
+        });
+
+        // Atualiza cache local (SEM reler Firestore)
+        lines = (lines || []).filter(l => String(l.id) !== String(lineId));
+        lines.sort((a,b)=> Number(a.number||0) - Number(b.number||0));
+        saveCached(lines);
+        renderLines(lines);
+
         closeLineModal();
+        editingLineId = null;
         showToast('success', 'Line excluída!');
-      } catch(e) {
+      } catch (e) {
         console.warn(e);
-        showToast('error', 'Erro ao excluir.');
+        showToast('error', 'Erro ao excluir a line.');
       }
     };
 
