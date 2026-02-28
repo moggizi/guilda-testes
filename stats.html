@@ -141,8 +141,8 @@
 <script>lucide.createIcons();</script>
 <script type="module">
 
-import { db, setupSidebar, initIcons, getGuildContext, getGuildSubcollectionCached } from './logic.js';
-import { collection, getDocs, getDoc, doc, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { db, setupSidebar, initIcons } from './logic.js';
+import { collection, getDocs, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 setupSidebar();
 initIcons();
@@ -178,31 +178,28 @@ async function findMemberPublic(term) {
   const q = norm(term);
   if (!q) return null;
 
-  // Otimização: buscar apenas na guilda atual (evita estourar cotas).
-  const ctx = getGuildContext();
-  const gid = ctx.guildId;
-  let gname = "Guilda";
-  try {
-    const gDoc = await getDoc(doc(db, "guildas", gid));
-    if (gDoc.exists()) {
-      const gd = gDoc.data() || {};
-      gname = (gd.name || gd.nome || gname).toString().trim() || gname;
-    }
-  } catch (_) {}
+  // Sem collectionGroup: varre guildas e procura em membros.
+  const gSnap = await getDocs(query(collection(db, "guildas"), limit(250)));
+  const guilds = gSnap.docs.map(d => ({ id: d.id, data: d.data() || {} }));
 
-  try {
-    const docs = await getGuildSubcollectionCached("membros", 2 * 60 * 1000);
-    for (const d of (docs || [])) {
-      const nick = norm(d.nick || d.nickname || d.nickName || d.nome || d.name || d.playerNick || d.playerName || d.tag || d.tagName);
-      const pid  = norm(d.visibleId || d.playerId || d.id || d.uid || d.gameId || d.idff || d.idFF || d.freeFireId || d.ffId || d.idFreeFire || d.idJogo || d.idDoJogo);
-      const alt  = norm(d.idPlayer || d.idJogador || d.player || d.usuario || d.userId);
-      const email = norm(d.email || d.mail);
+  for (const g of guilds) {
+    const gid = g.id;
+    const gname = (g.data.name || g.data.nome || "").toString().trim() || "Guilda";
+    try {
+      const mSnap = await getDocs(query(collection(db, "guildas", gid, "membros"), limit(2000)));
+      for (const m of mSnap.docs) {
+        const d = m.data() || {};
+        const nick = norm(d.nick || d.nickname || d.nickName || d.nome || d.name || d.playerNick || d.playerName || d.tag || d.tagName);
+        const pid  = norm(d.visibleId || d.playerId || d.id || d.uid || d.gameId || d.idff || d.idFF || d.freeFireId || d.ffId || d.idFreeFire || d.idJogo || d.idDoJogo);
+        const alt  = norm(d.idPlayer || d.idJogador || d.player || d.usuario || d.userId);
+        const email = norm(d.email || d.mail);
 
-      if (q === nick || q === pid || q === alt || q === norm(d.id) || (q && (nick.includes(q) || pid.includes(q) || alt.includes(q) || email.includes(q)))) {
-        return { guildId: gid, guildName: gname, id: d.id || "", data: d };
+        if (q === nick || q === pid || q === alt || q === norm(m.id) || (q && (nick.includes(q) || pid.includes(q) || alt.includes(q) || email.includes(q)))) {
+          return { guildId: gid, guildName: gname, id: m.id, data: d };
+        }
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
+  }
 
   return null;
 }

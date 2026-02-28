@@ -206,7 +206,7 @@
 
   
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db, getGuildSubcollectionCached } from './logic.js';
+    import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db, getCachedCamps, refreshCamps, setCachedCamps } from './logic.js';
     import {
       collection, doc, setDoc, deleteDoc, getDocs,
       query, orderBy, serverTimestamp
@@ -335,9 +335,14 @@
 
     // Cache local para render instantâneo
     function setCache(list){
-      localStorage.setItem('campsList', JSON.stringify(list || []));
+      try { localStorage.setItem('campsList', JSON.stringify(list || [])); } catch(_) {}
+      try { if (guildId) setCachedCamps(guildId, list || []); } catch(_) {}
     }
     function getCache(){
+      try { if (guildId) {
+        const c = getCachedCamps(guildId);
+        if (Array.isArray(c)) return c;
+      }} catch(_) {}
       try { return JSON.parse(localStorage.getItem('campsList') || '[]'); } catch(_) { return []; }
     }
 
@@ -766,21 +771,23 @@
       // Firestore realtime (sem travar)
       try{
         if(db && guildId){
-          const col = collection(db, 'guildas', guildId, 'campeonatos');
-          const qy = query(col, orderBy('updatedAtMs', 'desc'));
-          if(unsub) unsub();
-          unsub = onSnapshot(qy, (snap) => {
-            const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            window.camps = list;
-            setCache(list);
+           // Cache-first (sem listener em tempo real para reduzir leituras)
+          const cached = getCache();
+          if (Array.isArray(cached) && cached.length) {
+            window.camps = cached;
             renderCamps();
-          }, (err) => {
-            console.error(err);
-            // Não quebra a UI se der permissão/erro de rede: mantém cache
-            window.camps = getCache();
-            renderCamps();
-            showToast('error', 'Falha ao sincronizar campeonatos: ' + err.message);
-          });
+          } else {
+            try {
+              const list = await refreshCamps(guildId);
+              window.camps = list;
+              setCache(list);
+              renderCamps();
+            } catch (err) {
+              console.error(err);
+              window.camps = [];
+              renderCamps();
+            }
+          }
         }
       }catch(err){
         console.error(err);

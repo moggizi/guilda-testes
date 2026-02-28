@@ -43,100 +43,291 @@ export const db = getFirestore(app);
 export const functions = getFunctions(app);
 
 
-// --- Cache simples (localStorage) --------------------------------------------
-// Objetivo: evitar refetch do Firestore a cada troca de tela.
-// Usa TTL e serializa Timestamp para number (ms) para poder salvar.
+// --- Cache Local (reduz leituras do Firestore) -----------------------------
+// Observação: localStorage tem limite (~5MB). Então guardamos por chave e com dados enxutos.
+const __LS = {
+  user: 'hub_usercache_v1',
+  members: (gid) => `hub_members_v1_${gid}`,
+  lines: (gid) => `hub_lines_v1_${gid}`,
+  eventos: (gid) => `hub_eventos_v1_${gid}`,
+  camps: (gid) => `hub_camps_v1_${gid}`,
+  // CEO (core)
+  ceoGuildas: 'hub_ceo_guildas_v1',
+  ceoConfig: 'hub_ceo_config_v1',
+  ceoSolicita: 'hub_ceo_solicita_v1',
+  // CEO (membros/lines/camps por guilda: lazy)
+  ceoMembersByGuild: (gid) => `hub_ceo_members_v1_${gid}`,
+  ceoLinesByGuild: (gid) => `hub_ceo_lines_v1_${gid}`,
+  ceoCampsByGuild: (gid) => `hub_ceo_camps_v1_${gid}`,
+};
 
-function __cacheNow() { return Date.now(); }
-
-function __cacheGetRaw(key) {
-  try { return localStorage.getItem(key); } catch (_) { return null; }
-}
-
-function __cacheSetRaw(key, raw) {
-  try { localStorage.setItem(key, raw); } catch (_) {}
-}
-
-function __cacheGet(key, ttlMs) {
-  try {
-    const raw = __cacheGetRaw(key);
-    if (!raw) return null;
-    const obj = JSON.parse(raw);
-    if (!obj || typeof obj.ts !== 'number') return null;
-    if (ttlMs && (__cacheNow() - obj.ts) > ttlMs) return null;
-    return obj.value ?? null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function __cacheSet(key, value) {
-  try {
-    __cacheSetRaw(key, JSON.stringify({ ts: __cacheNow(), value }));
-  } catch (_) {}
-}
-
-function __toPlain(v) {
-  if (v == null) return v;
-  if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') return v;
-  // Timestamp (Firestore)
-  if (v && typeof v.toMillis === 'function') return v.toMillis();
-  if (v && typeof v.seconds === 'number' && typeof v.nanoseconds === 'number') return (v.seconds * 1000);
-  if (Array.isArray(v)) return v.map(__toPlain);
-  if (typeof v === 'object') {
-    const out = {};
-    for (const k of Object.keys(v)) out[k] = __toPlain(v[k]);
-    return out;
-  }
-  return v;
-}
-
-function __lsJsonGet(key) {
+function __lsGet(key) {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch (_) { return null; }
 }
-function __lsJsonSet(key, obj) {
-  try { localStorage.setItem(key, JSON.stringify(obj)); } catch (_) {}
+function __lsSet(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (_) { return false; }
+}
+function __lsDel(key) {
+  try { localStorage.removeItem(key); } catch (_) {}
 }
 
-export function invalidateCache(prefix) {
-  // Remove entradas do cache por prefixo (ex: "guildcache_v1:<gid>:")
+export function getCachedUser() {
+  const c = __lsGet(__LS.user);
+  return c && c.uid && c.email ? c : null;
+}
+
+export function clearAllCache() {
+  // limpa apenas o que é nosso (sem varrer tudo do usuário)
+  const u = __lsGet(__LS.user);
+  if (u?.guildId) {
+    __lsDel(__LS.members(u.guildId));
+    __lsDel(__LS.lines(u.guildId));
+    __lsDel(__LS.eventos(u.guildId));
+    __lsDel(__LS.camps(u.guildId));
+  }
+  __lsDel(__LS.user);
+  __lsDel(__LS.ceoGuildas);
+  __lsDel(__LS.ceoConfig);
+  __lsDel(__LS.ceoSolicita);
+}
+
+export function getCachedMembers(guildId) {
+  if (!guildId) return null;
+  const c = __lsGet(__LS.members(guildId));
+  if (Array.isArray(c?.items)) return c.items;
+  // compat antiga
+  const old = __lsGet('membersList');
+  return Array.isArray(old) ? old : null;
+}
+
+export function getCachedLines(guildId) {
+  if (!guildId) return null;
+  const c = __lsGet(__LS.lines(guildId));
+  return Array.isArray(c?.items) ? c.items : null;
+}
+
+export function getCachedEventos(guildId) {
+  if (!guildId) return null;
+  const c = __lsGet(__LS.eventos(guildId));
+  return Array.isArray(c?.items) ? c.items : null;
+}
+
+export function getCachedCamps(guildId) {
+  if (!guildId) return null;
+  const c = __lsGet(__LS.camps(guildId));
+  return Array.isArray(c?.items) ? c.items : null;
+}
+
+export function setCachedMembers(guildId, items) {
+  if (!guildId) return;
+  __lsSet(__LS.members(guildId), { ts: Date.now(), items: Array.isArray(items) ? items : [] });
+  // compat antiga
+  try { localStorage.setItem('membersList', JSON.stringify(Array.isArray(items) ? items : [])); } catch(_) {}
+}
+export function setCachedLines(guildId, items) {
+  if (!guildId) return;
+  __lsSet(__LS.lines(guildId), { ts: Date.now(), items: Array.isArray(items) ? items : [] });
+}
+export function setCachedEventos(guildId, items) {
+  if (!guildId) return;
+  __lsSet(__LS.eventos(guildId), { ts: Date.now(), items: Array.isArray(items) ? items : [] });
+}
+export function setCachedCamps(guildId, items) {
+  if (!guildId) return;
+  __lsSet(__LS.camps(guildId), { ts: Date.now(), items: Array.isArray(items) ? items : [] });
+}
+
+export async function refreshMembers(guildId) {
+  const snap = await getDocs(collection(db, "guildas", guildId, "membros"));
+  const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a,b)=> String(a.nick||'').localeCompare(String(b.nick||'')));
+  setCachedMembers(guildId, items);
+  return items;
+}
+export async function refreshLines(guildId) {
+  const snap = await getDocs(collection(db, "guildas", guildId, "lines"));
+  const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  setCachedLines(guildId, items);
+  return items;
+}
+export async function refreshEventos(guildId) {
+  const snap = await getDocs(collection(db, "guildas", guildId, "eventos"));
+  const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  setCachedEventos(guildId, items);
+  return items;
+}
+export async function refreshCamps(guildId) {
+  const snap = await getDocs(collection(db, "guildas", guildId, "campeonatos"));
+  const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  setCachedCamps(guildId, items);
+  return items;
+}
+
+export function getCachedCeoCore() {
+  return {
+    guildas: __lsGet(__LS.ceoGuildas)?.items || null,
+    configGuilda: __lsGet(__LS.ceoConfig)?.items || null,
+    solicita: __lsGet(__LS.ceoSolicita)?.items || null,
+  };
+}
+
+export async function refreshCeoCore() {
+  const [gSnap, cSnap, sSnap] = await Promise.all([
+    getDocs(collection(db, 'guildas')),
+    getDocs(collection(db, 'configGuilda')),
+    getDocs(collection(db, 'solicita'))
+  ]);
+  const guildas = gSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const configGuilda = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const solicita = sSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  __lsSet(__LS.ceoGuildas, { ts: Date.now(), items: guildas });
+  __lsSet(__LS.ceoConfig, { ts: Date.now(), items: configGuilda });
+  __lsSet(__LS.ceoSolicita, { ts: Date.now(), items: solicita });
+  return { guildas, configGuilda, solicita };
+}
+
+// Preload completo no login (uma vez) ----------------------------------------
+export async function preloadLoginCache(user) {
+  if (!user) throw new Error("Usuário inválido.");
+  const emailLower = cleanEmail(user.email);
+
+  // 1) CEO
+  const isCeoNow = await __refreshCeoStatus(emailLower);
+
+  // 2) Resolve guilda + role + vip (1 leitura por doc, só agora)
+  let guildId = null;
+  let roleHint = null;
+  let userProfile = null;
+
   try {
-    const keys = Object.keys(localStorage || {});
-    for (const k of keys) {
-      if (k.startsWith(prefix)) localStorage.removeItem(k);
+    const uSnap = await getDoc(doc(db, "users", user.uid));
+    if (uSnap.exists()) {
+      userProfile = uSnap.data() || {};
+      if (userProfile.guildId) guildId = String(userProfile.guildId);
+      if (userProfile.role) roleHint = String(userProfile.role);
     }
   } catch (_) {}
-}
 
-export async function getGuildSubcollectionCached(sub, ttlMs = 120000) {
-  const ctx = getGuildContext();
-  if (!ctx || !ctx.guildId) throw new Error("Sem guildId no contexto");
-  const key = `guildcache_v1:${ctx.guildId}:${sub}`;
-  const cached = __cacheGet(key, ttlMs);
-  if (cached) return cached;
-
-  const snap = await getDocs(collection(db, "guildas", ctx.guildId, sub));
-  const value = snap.docs.map(d => ({ id: d.id, ...__toPlain(d.data() || {}) }));
-  __cacheSet(key, value);
-  return value;
-}
-
-export async function warmupGuildCache() {
-  // Pre-carrega o básico para trocar de tela sem refazer leituras.
-  // (Se tiver muita coisa, reduza aqui para só o que você usa sempre.)
   try {
-    await Promise.allSettled([
-      getConfigGuildaCachedData(getGuildContext()?.guildId, 30 * 60 * 1000),
-      getGuildSubcollectionCached("membros", 5 * 60 * 1000),
-      getGuildSubcollectionCached("lines", 5 * 60 * 1000),
-      getGuildSubcollectionCached("campeonatos", 5 * 60 * 1000),
-    ]);
+    const found = await findGuildByEmail(emailLower);
+    if (found?.guildId) guildId = found.guildId;
   } catch (_) {}
+
+  if (!guildId) {
+    try {
+      const selfCfg = await getDoc(doc(db, "configGuilda", user.uid));
+      if (selfCfg.exists()) guildId = user.uid;
+    } catch (_) {}
+  }
+  if (!guildId) throw new Error("Conta não vinculada a nenhuma guilda.");
+
+  // Config da guilda (para role/vip/admin/lider)
+  let cfg = {};
+  try {
+    const cfgSnap = await getDoc(doc(db, "configGuilda", guildId));
+    cfg = cfgSnap.exists() ? (cfgSnap.data() || {}) : {};
+  } catch (_) {}
+
+  // role (sem ficar consultando depois)
+  let role = null;
+  const hint = (roleHint || "").toString().trim();
+  if (hint && ["Líder", "Admin", "Jogador"].includes(hint)) role = hint;
+
+  if (guildId === user.uid) role = "Líder"; // dono
+
+  if (!role) {
+    // resolve localmente pelos arrays do configGuilda
+    const leaders = (Array.isArray(cfg.leaders) ? cfg.leaders : []).map(cleanEmail);
+    const admins = (Array.isArray(cfg.admins) ? cfg.admins : []).map(cleanEmail);
+    const players = (Array.isArray(cfg.players) ? cfg.players : []).map(cleanEmail);
+
+    if (leaders.includes(emailLower)) role = "Líder";
+    else if (admins.includes(emailLower)) role = "Admin";
+    else if (players.includes(emailLower)) role = "Jogador";
+    else role = "Membro";
+  }
+
+  const isLeader = role === "Líder";
+  const isAdmin = role === "Admin";
+
+  const guildName = await getGuildName(guildId);
+
+  // vip
+  let vipTier = 'free';
+  let vipExpiresAtMs = null;
+
+  try {
+    const rawVip = cfg.vipTier ?? cfg.vip ?? cfg.planoVip ?? cfg.planoVIP ?? cfg.vipLevel ?? cfg.vipPlano ?? cfg.vipName ?? cfg.plano ?? cfg.plan ?? cfg.tier;
+    vipTier = vipTierFromValue(rawVip);
+    const rawExp = cfg.vipExpiresAt ?? cfg.vipExpiraEm ?? cfg.vipExpireAt ?? cfg.expiresAt ?? cfg.vipExpires;
+    if (rawExp && typeof rawExp.toMillis === 'function') vipExpiresAtMs = rawExp.toMillis();
+    else if (typeof rawExp === 'number') vipExpiresAtMs = rawExp;
+    else if (typeof rawExp === 'string') {
+      const t = Date.parse(rawExp);
+      vipExpiresAtMs = isFinite(t) ? t : null;
+    }
+  } catch (_) {}
+
+  if (!vipTier || vipTier === 'free') {
+    try {
+      const gSnap = await getDoc(doc(db, "guildas", guildId));
+      if (gSnap.exists()) {
+        const g = gSnap.data() || {};
+        const rawVip2 = g.vipTier ?? g.vip ?? g.planoVip ?? g.planoVIP ?? g.vipLevel ?? g.vipPlano ?? g.vipName ?? g.plano ?? g.plan ?? g.tier;
+        const v2 = vipTierFromValue(rawVip2);
+        if (v2) vipTier = v2;
+      }
+    } catch (_) {}
+  }
+
+  // Atualiza contexto em memória + LS (uma vez)
+  __guildCtx = {
+    guildId,
+    guildName,
+    role,
+    email: user.email || "",
+    uid: user.uid,
+    vipTier: vipTier || 'free',
+    vipExpiresAtMs: (vipExpiresAtMs != null ? vipExpiresAtMs : null)
+  };
+  __lsSet(__GUILDCTX_LS_KEY, { ...__guildCtx, ts: Date.now() });
+
+  __lsSet(__LS.user, {
+    ts: Date.now(),
+    uid: user.uid,
+    email: user.email || "",
+    emailLower,
+    guildId,
+    guildName,
+    role,
+    isCeo: !!isCeoNow,
+    isLeader,
+    isAdmin,
+    vipTier: __guildCtx.vipTier,
+    vipExpiresAtMs: __guildCtx.vipExpiresAtMs
+  });
+
+  // 3) Dados da guilda (não-CEO): membros/lines/eventos/camps
+  if (!isCeoNow) {
+    try { await Promise.all([
+      refreshMembers(guildId),
+      refreshLines(guildId),
+      refreshEventos(guildId),
+      refreshCamps(guildId),
+    ]); } catch (_) {}
+  } else {
+    // CEO: core (guildas/config/solicita) no login. Membros/lines/camps por guilda ficam lazy (cacheia quando abrir).
+    try { await refreshCeoCore(); } catch (_) {}
+  }
+
+  return getCachedUser();
 }
+
+
 // --- Contexto da Guilda -----------------------------------------------------
 let __guildCtx = null;
 
@@ -161,15 +352,13 @@ try {
 
 const __CEO_LS_KEY = 'ceo_cache_v1';
 let __isCeo = false;
-let __ceoCacheEmail = null;
-let __ceoCacheTs = 0;
-const __CEO_TTL_MS = 10 * 60 * 1000;
 try {
-  const cached = __lsJsonGet(__CEO_LS_KEY);
-  if (cached && cached.email && cached.ts && (Date.now() - cached.ts) < __CEO_TTL_MS) {
-    __isCeo = !!cached.isCeo;
-    __ceoCacheEmail = String(cached.email);
-    __ceoCacheTs = Number(cached.ts) || 0;
+  const raw = localStorage.getItem(__CEO_LS_KEY);
+  if (raw) {
+    const cached = JSON.parse(raw);
+    if (cached && cached.email && cached.ts && (Date.now() - cached.ts) < 10 * 60 * 1000) {
+      __isCeo = !!cached.isCeo;
+    }
   }
 } catch (_) {}
 
@@ -268,9 +457,7 @@ async function __refreshCeoStatus(emailLower) {
     const ok = list.map(cleanEmail).includes(email);
     __isCeo = ok;
     try {
-      __lsJsonSet(__CEO_LS_KEY, { email, isCeo: ok, ts: Date.now() });
-      __ceoCacheEmail = email;
-      __ceoCacheTs = Date.now();
+      localStorage.setItem(__CEO_LS_KEY, JSON.stringify({ email, isCeo: ok, ts: Date.now() }));
     } catch (_) {}
     return ok;
   } catch (_) {
@@ -279,15 +466,10 @@ async function __refreshCeoStatus(emailLower) {
   }
 }
 
-export async function ensureCeoStatus(force = false) {
+export async function ensureCeoStatus() {
   try {
     const user = auth.currentUser;
     const email = cleanEmail(user?.email);
-    if (!email) return false;
-
-    if (!force && __ceoCacheEmail === email && __ceoCacheTs && (Date.now() - __ceoCacheTs) < __CEO_TTL_MS) {
-      return !!__isCeo;
-    }
     return await __refreshCeoStatus(email);
   } catch (_) {
     return false;
@@ -383,29 +565,14 @@ async function findGuildByEmail(emailLower) {
   return null;
 }
 
-async function getConfigGuildaCachedData(guildId, ttlMs = 10 * 60 * 1000) {
-  if (!guildId) return null;
-  const key = `configGuilda_cache_v1:${guildId}`;
-  const cached = __cacheGet(key, ttlMs);
-  if (cached) return cached;
-
-  try {
-    const snap = await getDoc(doc(db, "configGuilda", guildId));
-    const data = snap.exists() ? (snap.data() || {}) : null;
-    if (data) __cacheSet(key, __toPlain(data));
-    return data ? __toPlain(data) : null;
-  } catch (_) {
-    return null;
-  }
-}
-
 async function resolveRoleInGuild(guildId, email) {
   const e = cleanEmail(email);
   if (!guildId || !e) return "Membro";
 
   try {
-    const data = await getConfigGuildaCachedData(guildId);
-    if (data) {
+    const snap = await getDoc(doc(db, "configGuilda", guildId));
+    if (snap.exists()) {
+      const data = snap.data() || {};
       const leaders = Array.isArray(data.leaders) ? data.leaders : [];
       const admins = Array.isArray(data.admins) ? data.admins : [];
 
@@ -548,8 +715,9 @@ export async function getMemberTagConfig() {
   } catch (_) {}
 
   try {
-    const data = await getConfigGuildaCachedData(guildId);
-    if (!data) return null;
+    const snap = await getDoc(doc(db, "configGuilda", guildId));
+    if (!snap.exists()) return null;
+    const data = snap.data() || {};
     const tag = (data.tagMembros || "").toString().trim();
     if (tag) {
       try { localStorage.setItem(`tagMembros_${guildId}`, JSON.stringify({ value: tag, ts: Date.now() })); } catch (_) {}
@@ -659,35 +827,54 @@ export function checkAuth(redirectToLogin = true) {
       const emailEl = document.getElementById("user-email");
       if (emailEl) emailEl.textContent = user.email || "";
 
+
+      // ✅ Cache-first: se já temos tudo no localStorage, não lê Firestore aqui.
+      const cachedUser = getCachedUser();
+      if (cachedUser && cachedUser.uid === user.uid && cleanEmail(cachedUser.email) === emailLower) {
+        __isCeo = !!cachedUser.isCeo;
+        __guildCtx = {
+          guildId: String(cachedUser.guildId),
+          guildName: cachedUser.guildName ? String(cachedUser.guildName) : null,
+          role: String(cachedUser.role || "Membro"),
+          email: String(cachedUser.email),
+          uid: String(cachedUser.uid),
+          vipTier: String(cachedUser.vipTier || 'free'),
+          vipExpiresAtMs: (cachedUser.vipExpiresAtMs != null ? Number(cachedUser.vipExpiresAtMs) : null)
+        };
+        try {
+          localStorage.setItem(__GUILDCTX_LS_KEY, JSON.stringify({ ...__guildCtx, ts: Date.now() }));
+          localStorage.setItem(__CEO_LS_KEY, JSON.stringify({ email: emailLower, isCeo: __isCeo, ts: Date.now() }));
+        } catch(_) {}
+
+        __maybeDowngradeVipSync();
+
+        resolve(user);
+        return;
+      }
+
+      // Se acabou de logar (index.html seta sessionStorage), faz preload UMA vez e já cacheia tudo.
+      try {
+        const doPreload = sessionStorage.getItem('hub_do_preload') === '1';
+        if (doPreload) {
+          sessionStorage.removeItem('hub_do_preload');
+          await preloadLoginCache(user);
+          resolve(user);
+          return;
+        }
+      } catch (_) {}
+
       let guildId = null;
       let username = "";
 
       // 0) Primeiro tenta resolver pela coleção /users (mais rápida e evita logout indevido)
       let roleHint = null;
       let userProfile = null;
-
-      // 0) Tenta usar o contexto já salvo (evita leitura ao trocar de tela)
       try {
-        if (__guildCtx && __guildCtx.uid === user.uid) {
-          if (__guildCtx.guildId) guildId = String(__guildCtx.guildId);
-          if (__guildCtx.role) roleHint = String(__guildCtx.role);
-        }
-      } catch (_) {}
-      try {
-        const upKey = `userProfile_cache_v1:${user.uid}`;
-        const cachedUp = __cacheGet(upKey, 10 * 60 * 1000);
-        if (cachedUp) {
-          userProfile = cachedUp;
+        const uSnap = await getDoc(doc(db, "users", user.uid));
+        if (uSnap.exists()) {
+          userProfile = uSnap.data() || {};
           if (userProfile.guildId) guildId = String(userProfile.guildId);
           if (userProfile.role) roleHint = String(userProfile.role);
-        } else {
-          const uSnap = await getDoc(doc(db, "users", user.uid));
-          if (uSnap.exists()) {
-            userProfile = uSnap.data() || {};
-            __cacheSet(upKey, __toPlain(userProfile));
-            if (userProfile.guildId) guildId = String(userProfile.guildId);
-            if (userProfile.role) roleHint = String(userProfile.role);
-          }
         }
       } catch (_) {}
 
@@ -813,19 +1000,7 @@ export function checkAuth(redirectToLogin = true) {
       } catch (_) {}
       try { applyVipUiAndGates(vipTier); } catch (_) {}
 
-      try {
-        if (!sessionStorage.getItem('ceoWarm_v1')) {
-          sessionStorage.setItem('ceoWarm_v1', '1');
-          await ensureCeoStatus(false);
-        }
-      } catch (_) {}
-      try {
-        if (!sessionStorage.getItem('guildWarm_v1')) {
-          sessionStorage.setItem('guildWarm_v1', '1');
-          warmupGuildCache();
-        }
-      } catch (_) {}
-
+      try { await __refreshCeoStatus(emailLower); } catch (_) {}
       try { applyCeoNavVisibility(); } catch (_) {}
 
 

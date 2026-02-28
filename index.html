@@ -360,6 +360,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } f
 
       try {
         await signInWithEmailAndPassword(auth, email, pass);
+        try { sessionStorage.setItem('hub_do_preload', '1'); } catch(_) {}
         window.location.href = "dashboard.html?login=1";
       } catch (err) {
         console.error(err);
@@ -413,6 +414,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } f
         await finalizeSignup(cred.user, username);
 
         showToast('success', 'Conta criada com sucesso!');
+        try { sessionStorage.setItem('hub_do_preload', '1'); } catch(_) {}
         window.location.href = "dashboard.html?login=1";
       } catch (err) {
         console.error(err);
