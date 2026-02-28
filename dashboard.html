@@ -57,6 +57,14 @@
       </nav>
 
       <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100">
+
+      <div class="mb-3">
+        <button id="btn-tutorial" type="button"
+          class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100 transition-colors">
+          <i data-lucide="play-circle" class="w-4 h-4"></i>
+          Tutorial
+        </button>
+      </div>
         <div class="flex items-center justify-between px-3 py-2">
           <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm">A</div>
@@ -407,7 +415,58 @@
 
       initIcons();
     }
-  </script>
+  
+
+    // Tutorial (bottom sheet)
+    (function setupTutorialModal(){
+      const btn = document.getElementById('btn-tutorial');
+      const overlay = document.getElementById('tutorial-overlay');
+      const modal = document.getElementById('tutorial-modal');
+      const closeBtn = document.getElementById('tutorial-close');
+
+      if(!btn || !overlay || !modal || !closeBtn) return;
+
+      let embedLoaded = false;
+
+      function loadTikTokEmbed(){
+        if(embedLoaded) return;
+        embedLoaded = true;
+
+        // carrega o script oficial de embed do TikTok apenas quando abrir o modal
+        const s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.tiktok.com/embed.js';
+        document.body.appendChild(s);
+      }
+
+      function open(){
+        loadTikTokEmbed();
+        overlay.classList.remove('hidden');
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        requestAnimationFrame(() => modal.classList.remove('translate-y-full'));
+        document.documentElement.classList.add('overflow-hidden');
+      }
+
+      function close(){
+        modal.classList.add('translate-y-full');
+        modal.setAttribute('aria-hidden', 'true');
+        document.documentElement.classList.remove('overflow-hidden');
+        setTimeout(() => {
+          modal.classList.add('hidden');
+          overlay.classList.add('hidden');
+        }, 260);
+      }
+
+      btn.addEventListener('click', open);
+      overlay.addEventListener('click', close);
+      closeBtn.addEventListener('click', close);
+
+      document.addEventListener('keydown', (e) => {
+        if(e.key === 'Escape' && !modal.classList.contains('hidden')) close();
+      });
+    })();
+</script>
 
   <!-- OTK Footer -->
 <footer id="otk-footer" class="mt-12 border-t border-emerald-500/10 text-slate-700">
@@ -438,6 +497,57 @@
     </div>
   </div>
 </footer>
+
+
+  <!-- Tutorial Modal (bottom sheet) -->
+  <div id="tutorial-overlay" class="fixed inset-0 bg-black/40 z-[60] hidden"></div>
+
+  <section id="tutorial-modal"
+    class="fixed inset-x-0 bottom-0 z-[70] hidden translate-y-full transition-transform duration-300"
+    aria-hidden="true">
+    <div class="mx-auto w-full max-w-2xl px-3 pb-4">
+      <div class="bg-white rounded-t-3xl shadow-2xl border border-gray-100 overflow-hidden">
+        <div class="px-5 pt-4 pb-3 border-b border-gray-100">
+          <div class="mx-auto h-1.5 w-14 rounded-full bg-gray-200"></div>
+
+          <div class="mt-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-base sm:text-lg font-bold text-gray-900 leading-tight">Como usar o site</h2>
+              <p class="text-xs sm:text-sm text-gray-500 mt-1">Assista o vídeo e depois volta aqui pra testar 🙂</p>
+            </div>
+            <button id="tutorial-close" type="button"
+              class="p-2 rounded-xl hover:bg-gray-100 text-gray-500"
+              aria-label="Fechar tutorial" title="Fechar">
+              <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="px-4 sm:px-5 py-4">
+          <div class="rounded-2xl border border-gray-100 bg-gray-50 overflow-hidden">
+            <div class="p-3 sm:p-4">
+              <!--
+                ✅ COMO COLOCAR O LINK DO TIKTOK AQUI:
+                1) Troque o valor de "data-video-id" pelo ID do vídeo (fica no link do TikTok).
+                   Exemplo: https://www.tiktok.com/@usuario/video/7421234567890123456  -> ID = 7421234567890123456
+                2) Troque também o "cite" pelo link do vídeo.
+              -->
+              <blockquote class="tiktok-embed"
+                cite="https://www.tiktok.com/@usuario/video/7421234567890123456"
+                data-video-id="7421234567890123456"
+                style="max-width: 100%; min-width: 260px;">
+                <section></section>
+              </blockquote>
+            </div>
+          </div>
+
+          <p class="text-xs text-gray-400 mt-3 text-center">
+            Dica: se o vídeo não carregar, verifica se o bloqueador de conteúdo do navegador está ativo.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
 
 </body>
 </html>
