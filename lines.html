@@ -172,7 +172,7 @@
   <script type="module">
 
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildContext } from './logic.js';
-    import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, addDoc, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
     initIcons();
