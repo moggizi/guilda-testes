@@ -19,7 +19,7 @@
     <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:static">
       <div class="flex items-center justify-between p-5 border-b border-gray-100">
         <div class="flex items-center gap-3">
-          <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
+          <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav" onerror="this.src='https://via.placeholder.com/40'">
           <div><h1 class="font-bold text-gray-900 text-lg">Guilda e eventos</h1><p class="text-xs text-gray-400">Painel</p></div>
         </div>
       </div>
@@ -50,9 +50,15 @@
 
     <main class="flex-1 min-w-0 relative">
       <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
-        <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
-          <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500"><i data-lucide="menu" class="w-5 h-5"></i></button>
-          <h1 class="text-lg font-semibold text-gray-900">Campeonatos <span class="ml-2 inline-flex items-center rounded-full bg-purple-50 text-purple-700 ring-1 ring-purple-200 px-2 py-0.5 text-[10px] font-extrabold">PRO</span><span class="ml-2 inline-flex items-center rounded-full bg-gray-100 text-gray-600 ring-1 ring-gray-200 px-2 py-0.5 text-[10px] font-extrabold">BETA</span></h1>
+        <div class="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div class="flex items-center gap-3">
+            <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500"><i data-lucide="menu" class="w-5 h-5"></i></button>
+            <h1 class="text-lg font-semibold text-gray-900">Campeonatos <span class="ml-2 inline-flex items-center rounded-full bg-purple-50 text-purple-700 ring-1 ring-purple-200 px-2 py-0.5 text-[10px] font-extrabold">PRO</span><span class="ml-2 inline-flex items-center rounded-full bg-gray-100 text-gray-600 ring-1 ring-gray-200 px-2 py-0.5 text-[10px] font-extrabold">BETA</span></h1>
+          </div>
+          <!-- Botão de Recarregar Adicionado -->
+          <button id="btn-reload" class="p-2 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+             <i data-lucide="rotate-cw" class="w-5 h-5"></i>
+          </button>
         </div>
       </header>
 
@@ -65,7 +71,7 @@
         </div>
 
         <div id="camps-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-           <!-- Placeholder Skeleton (só se não tiver cache) -->
+           <!-- Placeholder Skeleton -->
            <div class="col-span-1 md:col-span-2 bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center animate-pulse">
                <p class="text-gray-400 text-sm">Carregando...</p>
            </div>
@@ -206,15 +212,13 @@
 
   
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db, getCachedCamps, refreshCamps, setCachedCamps } from './logic.js';
+    // Corrigido: Remoção das funções de cache inexistentes no logic.js
+    import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db } from './logic.js';
     import {
-      collection, doc, setDoc, deleteDoc, getDocs,
-      query, orderBy, serverTimestamp
+      collection, doc, setDoc, deleteDoc, getDocs, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // CARREGA OS ÍCONES IMEDIATAMENTE INDEPENDENTE DE TER DADOS!
     setupSidebar();
-    initIcons();
 
     // Dropdown de quedas (fixo 1..20)
     const dropsSel = document.getElementById('camp-drops');
@@ -300,27 +304,22 @@
     document.getElementById('camp-format').addEventListener('change', updateModeUI);
     document.getElementById('camp-feeType').addEventListener('change', updateFeeUI);
 
-    // Modal controls (mantém API existente)
+    // Modal controls
     window.openCampModal = () => {
       document.getElementById('camp-form').reset();
       document.getElementById('camp-id').value = '';
       document.getElementById('camp-modal-title').innerText = 'Novo Campeonato';
       document.getElementById('camp-modal').classList.remove('hidden');
 
-      // Estado inicial do formulário
       updateModeUI();
       updateFeeUI();
-      // default limite
       if(document.getElementById('camp-max')) document.getElementById('camp-max').value = '100';
 
-
-      // Preenche guilda
       try {
         const ctx = getGuildContext() || JSON.parse(localStorage.getItem('guildCtx_cache_v1')||'{}');
         document.getElementById('camp-guildname').value = ctx?.guildName || ctx?.name || '—';
       } catch(_) {}
 
-      // Defaults
       document.getElementById('camp-format').value = 'br';
       updateModeUI();
       document.getElementById('camp-feeType').value = 'free';
@@ -332,21 +331,67 @@
     // Estado
     let guildId = null;
     let guildName = null;
-    let unsub = null;
     window.camps = [];
 
-    // Cache local para render instantâneo
+    // Novo sistema de cache isolado por guilda
     function setCache(list){
-      try { localStorage.setItem('campsList', JSON.stringify(list || [])); } catch(_) {}
-      try { if (guildId) setCachedCamps(guildId, list || []); } catch(_) {}
+      if (!guildId) return;
+      try { 
+        localStorage.setItem(`hub_camps_${guildId}_v1`, JSON.stringify({ ts: Date.now(), items: list || [] })); 
+      } catch(_) {}
     }
-    function getCache(){
-      try { if (guildId) {
-        const c = getCachedCamps(guildId);
-        if (Array.isArray(c)) return c;
-      }} catch(_) {}
-      try { return JSON.parse(localStorage.getItem('campsList') || '[]'); } catch(_) { return []; }
+
+    // Carregamento principal (Cache + Firebase se necessário)
+    async function loadCampsData(force = false) {
+      if (!guildId) return;
+
+      const cacheKey = `hub_camps_${guildId}_v1`;
+      const cachedRaw = localStorage.getItem(cacheKey);
+
+      // Se não for reload forçado, tenta pegar do cache (30 min de validade)
+      if (!force && cachedRaw) {
+        try {
+          const parsed = JSON.parse(cachedRaw);
+          if (Date.now() - parsed.ts < 30 * 60 * 1000) { 
+            window.camps = parsed.items;
+            renderCamps();
+            return; // PARA AQUI! Não busca do Firebase
+          }
+        } catch(e) {
+          console.error("Erro no cache de campeonatos:", e);
+        }
+      }
+
+      // Se chegou aqui, precisa buscar do Firebase
+      const listEl = document.getElementById('camps-list');
+      if (force) {
+         showToast('info', 'A atualizar campeonatos...');
+      } else {
+         listEl.innerHTML = `<div class="col-span-1 md:col-span-2 bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center animate-pulse"><p class="text-gray-400 text-sm">A carregar do servidor...</p></div>`;
+      }
+
+      try {
+        const snap = await getDocs(collection(db, 'guildas', guildId, 'campeonatos'));
+        const campsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        // Ordena: mais novos primeiro
+        campsList.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+
+        window.camps = campsList;
+        setCache(campsList); // Salva no novo cache
+        
+        renderCamps();
+        if(force) showToast('success', 'Atualizado com sucesso!');
+      } catch (err) {
+        console.error(err);
+        if(force) {
+          showToast('error', 'Falha ao buscar campeonatos.');
+        } else {
+          listEl.innerHTML = `<div class="col-span-full py-10 text-center text-red-500">Erro ao carregar campeonatos. Verifique sua conexão.</div>`;
+        }
+      }
     }
+
 
     function moneyBRL(v){
       const n = Number(v);
@@ -354,21 +399,16 @@
       return n.toFixed(2);
     }
 
-    // ==== Dinheiro (pt-BR) para premiação ====
     function parseMoneyBRLInput(v){
       if(v === null || v === undefined) return null;
       let s = (v+'').trim();
       if(!s) return null;
-      // remove R$, espaços e qualquer coisa que não seja número, vírgula, ponto ou sinal
       s = s.replace(/[^0-9,\.\-]/g, '');
       if(!s) return null;
 
       if(s.includes(',')){
-        // vírgula = decimal, ponto = milhar
         s = s.replace(/\./g,'').replace(',', '.');
       } else {
-        // sem vírgula: mantém ponto como decimal
-        // se tiver vários pontos, considera o último como decimal
         const parts = s.split('.');
         if(parts.length > 2){
           const dec = parts.pop();
@@ -387,7 +427,6 @@
       try{
         return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
       }catch(_){
-        // fallback simples
         return num.toFixed(2).replace('.', ',');
       }
     }
@@ -402,7 +441,6 @@
         .replace(/\'/g,'&#39;');
     }
 
-    // Foto -> base64 otimizada (aceita upload até 2MB, mas otimiza para caber no Firestore)
     async function fileToOptimizedDataUrl(file){
       if(!file) return null;
       if(file.size > 2 * 1024 * 1024){
@@ -419,15 +457,12 @@
         r.readAsDataURL(file);
       });
 
-      // Firestore tem limite de ~1MiB por documento.
-      // Para não quebrar, vamos otimizar e manter < ~900KB de base64.
       const MAX_B64 = 900_000;
 
       if(typeof dataUrl === 'string' && dataUrl.length <= MAX_B64){
         return dataUrl;
       }
 
-      // Re-encode via canvas (jpeg) e reduzir até caber
       const img = await new Promise((resolve, reject) => {
         const i = new Image();
         i.onload = () => resolve(i);
@@ -470,14 +505,10 @@
       if(v === null || v === undefined || v === '') return null;
       let n = v;
       if(typeof n === 'string'){
-        // aceita "1500,50" ou "1500.50"
-        // aceita "1500,50" (pt-BR) ou "1500.50" (ponto decimal)
         const s = n.trim();
         if (s.includes(',')) {
-          // quando tem vírgula, ponto vira separador de milhar
           n = s.replace(/\./g, '').replace(',', '.');
         } else {
-          // sem vírgula, mantém ponto como decimal
           n = s.replace(',', '.');
         }
       }
@@ -486,7 +517,6 @@
       try{
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
       }catch(e){
-        // fallback simples
         return 'R$ ' + n.toFixed(2).replace('.', ',');
       }
     }
@@ -563,7 +593,6 @@
       initIcons();
     }
 
-    // API edit/delete
     window.editCamp = (id) => {
       const c = (window.camps || []).find(x => x.id === id);
       if(!c) return;
@@ -578,7 +607,6 @@
 
       document.getElementById('camp-format').value = c.format || 'br';
       updateModeUI();
-      // depois de preencher as opções
       document.getElementById('camp-max').value = String(c.max || '');
       document.getElementById('camp-mode').value = c.mode || 'solo';
       document.getElementById('camp-drops').value = String(c.drops || 1);
@@ -591,9 +619,8 @@
       document.getElementById('camp-prizeTotal').value = c.prizeTotal ? formatMoneyPlainBR(c.prizeTotal) : '';
       document.getElementById('camp-link').value = c.link || '';
       document.getElementById('camp-icon').value = c.icon || 'trophy';
-      document.getElementById('camp-photo').value = ''; // por segurança, não reatribui filee
+      document.getElementById('camp-photo').value = '';
 
-      // Guilda
       document.getElementById('camp-guildname').value = c.guildName || guildName || '—';
 
       document.getElementById('camp-modal-title').innerText = 'Editar Campeonato';
@@ -603,7 +630,6 @@
 
     window.deleteCamp = async (id) => {
       if(!confirm('Excluir campeonato?')) return;
-      // Firestore
       try{
         if(db && guildId){
           await deleteDoc(doc(db, 'guildas', guildId, 'campeonatos', id));
@@ -612,13 +638,11 @@
         console.error(e);
         showToast('error', 'Erro ao excluir no Firestore: ' + e.message);
       }
-      // Cache
       window.camps = (window.camps || []).filter(x => x.id !== id);
       setCache(window.camps);
       renderCamps();
     };
 
-    // Submit
     document.getElementById('camp-form').addEventListener('submit', async (e) => {
       e.preventDefault();
 
@@ -630,7 +654,6 @@
       if(!name) return showToast('error', 'Informe o nome do campeonato.');
       if(!link) return showToast('error', 'O link para informações é obrigatório.');
 
-      // Foto
       let photoBase64 = null;
       const file = document.getElementById('camp-photo').files?.[0] || null;
       try{
@@ -642,13 +665,10 @@
         return;
       }
 
-      // Fee
       const feeType = safeText(document.getElementById('camp-feeType').value) || 'free';
       const feeValue = feeType === 'paid' ? moneyBRL(document.getElementById('camp-feeValue').value) : null;
       const prizeTotal = parseMoneyBRLInput(document.getElementById('camp-prizeTotal').value);
 
-
-      // BR / XvX fields
       let mode = null, drops = null, xvx = null;
       let location = safeText(document.getElementById('camp-local').value);
 
@@ -656,7 +676,7 @@
         xvx = safeText(document.getElementById('camp-xvx').value) || '1v1';
         mode = null;
         drops = null;
-        location = ''; // Local indisponível em XvX
+        location = '';
       } else {
         mode = safeText(document.getElementById('camp-mode').value) || 'solo';
         drops = Number(document.getElementById('camp-drops').value || 1);
@@ -673,10 +693,10 @@
         max: Number(document.getElementById('camp-max').value || 0),
         status: safeText(document.getElementById('camp-status').value) || 'upcoming',
 
-        format: fmt,         // 'br' | 'xvx'
-        mode,                // solo/duo/squad (BR)
-        drops,               // number (BR)
-        xvx,                 // 1v1..4v4 (XvX)
+        format: fmt,
+        mode,
+        drops,
+        xvx,
 
         guildId: guildId || null,
         guildName: guildName || safeText(document.getElementById('camp-guildname').value) || null,
@@ -693,12 +713,10 @@
         updatedAt: serverTimestamp(),
       };
 
-      // Save Firestore
       try{
         if(db && guildId){
           if(id){
             await setDoc(doc(db, 'guildas', guildId, 'campeonatos', id), payload, { merge: true });
-            // Atualiza cache local
             payload.id = id;
             window.camps = (window.camps || []).map(c => c.id === id ? ({...c, ...payload, id}) : c);
           } else {
@@ -715,7 +733,6 @@
           setCache(window.camps);
           showToast('success', 'Campeonato salvo no Firestore!');
         } else {
-          // fallback local
           const fallback = { ...payload, id: id || String(now), createdAtMs: payload.createdAtMs || now };
           if(id){
             window.camps = (window.camps || []).map(c => c.id === id ? fallback : c);
@@ -735,19 +752,19 @@
       renderCamps();
     });
 
-    async function boot(){
-      // Render imediato do cache
-      window.camps = getCache();
-      renderCamps();
+    // Evento de reload manual
+    document.getElementById('btn-reload').addEventListener('click', () => {
+       loadCampsData(true);
+    });
 
+    async function boot(){
       const user = await checkAuth();
       if(!user) return;
       document.getElementById('btn-logout').onclick = logout;
-      // Máscara leve da premiação: não quebra digitação, formata ao sair do campo
+      
       const prizeEl = document.getElementById('camp-prizeTotal');
       if(prizeEl){
         prizeEl.addEventListener('input', () => {
-          // só limpa caracteres proibidos enquanto digita
           prizeEl.value = prizeEl.value.replace(/[^0-9,\.\-]/g,'');
         });
         prizeEl.addEventListener('blur', () => {
@@ -756,47 +773,21 @@
         });
       }
 
-
-      // Contexto de guilda
       try{
         const ctx = getGuildContext() || JSON.parse(localStorage.getItem('guildCtx_cache_v1')||'{}');
         guildId = ctx?.guildId || ctx?.id || null;
         guildName = ctx?.guildName || ctx?.name || null;
       }catch(_){}
 
-      // Hidrata campo guilda no modal se já abrir
       if(guildName){
         const g = document.getElementById('camp-guildname');
         if(g) g.value = guildName;
       }
 
-      // Firestore realtime (sem travar)
-      try{
-        if(db && guildId){
-           // Cache-first (sem listener em tempo real para reduzir leituras)
-          const cached = getCache();
-          if (Array.isArray(cached) && cached.length) {
-            window.camps = cached;
-            renderCamps();
-          } else {
-            try {
-              const list = await refreshCamps(guildId);
-              window.camps = list;
-              setCache(list);
-              renderCamps();
-            } catch (err) {
-              console.error(err);
-              window.camps = [];
-              renderCamps();
-            }
-          }
-        }
-      }catch(err){
-        console.error(err);
-      }
+      // Inicia puxando os dados do cache ou servidor se não existir
+      loadCampsData(false);
     }
 
-    // Defaults UI
     updateModeUI();
     updateFeeUI();
     boot();
