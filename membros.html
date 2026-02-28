@@ -43,7 +43,7 @@
     <!-- Menu Mobile Overlay -->
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
 
-    <!-- Sidebar (Copiado para manter layout) -->
+    <!-- Sidebar -->
     <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:static">
       <div class="flex items-center justify-between p-5 border-b border-gray-100">
         <div class="flex items-center gap-3">
@@ -387,9 +387,28 @@
     let memberTag = null;
     let hasTagManualOverride = false;
 
+    // ----- LÓGICA DE CACHE INSTANTÂNEO -----
+    // Roda instantaneamente ao abrir a página usando a chave CERTA da guilda.
+    try {
+      const ctx = getGuildContext();
+      const lsKey = ctx?.guildId ? `membersList_${ctx.guildId}` : 'membersList';
+      const cachedMembersJSON = localStorage.getItem(lsKey);
+      
+      if(cachedMembersJSON) {
+         const cached = JSON.parse(cachedMembersJSON);
+         if(Array.isArray(cached) && cached.length > 0) {
+             membersCache = cached;
+             applyFiltersAndRender();
+             const countEl = document.getElementById('member-count');
+             if(countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+         }
+      }
+    } catch(e) { console.error("Erro cache:", e); }
+    // ---------------------------------------
+
     // ----- LÓGICA DE EDIÇÃO RÁPIDA -----
-    let pendingEdits = {}; // Armazena as mudanças pendentes ex: { id1: { hasTag: true, guildWar: false... } }
-    let currentZeroAction = ''; // 'gg' ou 'semanal'
+    let pendingEdits = {}; 
+    let currentZeroAction = ''; 
 
     window.openQuickEditModal = () => {
        pendingEdits = {};
@@ -403,11 +422,9 @@
     
     function renderQuickEditList() {
        const container = document.getElementById('qe-members-list');
-       // Ordena alfabeticamente para facilitar
        const sorted = [...membersCache].sort((a,b) => String(a.nick).localeCompare(String(b.nick)));
 
        container.innerHTML = sorted.map(m => {
-           // Pega o estado atual (se já mexeu, pega do pendente, senão pega do original)
            const state = pendingEdits[m.id] || { hasTag: !!m.hasTag, guildWar: !!m.guildWar, weeklyMeta: !!m.weeklyMeta };
 
            return `
@@ -441,15 +458,12 @@
        const m = membersCache.find(x => x.id === id);
        if(!m) return;
 
-       // Inicializa as pendências desse membro se for a primeira vez clicando nele
        if(!pendingEdits[id]) {
            pendingEdits[id] = { hasTag: !!m.hasTag, guildWar: !!m.guildWar, weeklyMeta: !!m.weeklyMeta };
        }
 
-       // Inverte o valor
        pendingEdits[id][field] = !pendingEdits[id][field];
 
-       // Atualiza a interface (a classe do botão)
        const btn = document.getElementById(`qe-${id}-${field}`);
        if(pendingEdits[id][field]) {
            btn.classList.add('pm-selected');
@@ -457,7 +471,6 @@
            btn.classList.remove('pm-selected');
        }
 
-       // Mostra o botão de salvar e esconde o texto
        document.getElementById('qe-save-btn').classList.remove('hidden');
        document.getElementById('qe-info-text').classList.add('hidden');
     };
@@ -488,7 +501,7 @@
            showToast('success', `${keys.length} membro(s) atualizado(s)!`);
            closeQuickEditModal();
 
-           // ✅ Atualiza cache local (sem reler Firestore)
+           // Atualiza cache local
            keys.forEach(id => {
              const idx = (membersCache || []).findIndex(m => m.id === id);
              if (idx >= 0) {
@@ -558,7 +571,6 @@
             showToast('success', 'Todos os membros zerados com sucesso!');
             closeQuickEditModal();
 
-            // ✅ Atualiza cache local (sem reler Firestore)
             if (currentZeroAction === 'gg') {
               membersCache = (membersCache || []).map(m => ({ ...m, guildWar: false, guildWarMeta: 0, updatedAt: Date.now() }));
             } else {
@@ -568,7 +580,8 @@
             __writeMembersToCache(membersCache);
             applyFiltersAndRender();
             const countEl = document.getElementById('member-count');
-            if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;} catch(e) {
+            if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+       } catch(e) {
            console.error(e);
            showToast('error', 'Erro ao processar zeramento.');
        }
@@ -585,7 +598,6 @@
       document.getElementById('filter-label').innerText = filterLabel;
       document.getElementById('filter-dropdown').classList.add('hidden');
 
-      // Atualiza visual dos botões check circle do filtro
       document.querySelectorAll('[data-filter-btn]').forEach(btn => {
         btn.classList.remove('pm-selected');
       });
@@ -598,7 +610,6 @@
       applyFiltersAndRender();
     };
 
-    // Fechar dropdown ao clicar fora
     document.addEventListener('click', (e) => {
       const btn = document.getElementById('btn-filter');
       const dropdown = document.getElementById('filter-dropdown');
@@ -607,29 +618,23 @@
       }
     });
 
-    // Função central que aplica a busca + filtro dropdown juntos
-    function applyFiltersAndRender() {
-      const termo = document.getElementById('search-input').value.toLowerCase();
+    window.applyFiltersAndRender = () => {
+      const termo = document.getElementById('search-input')?.value.toLowerCase() || '';
       
       const filtrados = membersCache.filter(m => {
-        // 1. Filtro de Busca (Texto)
         const matchBusca = (m.nick && m.nick.toLowerCase().includes(termo)) || 
                            (m.visibleId && String(m.visibleId).includes(termo));
         if (!matchBusca) return false;
 
-        // 2. Filtros de Status (Dropdown)
         if (currentFilter === 'with-tag') return m.hasTag;
         if (currentFilter === 'no-tag') return !m.hasTag;
-
         if (currentFilter === 'with-gg') return m.guildWar;
         if (currentFilter === 'no-gg') return !m.guildWar;
-
         if (currentFilter === 'with-weekly') return m.weeklyMeta;
         if (currentFilter === 'no-weekly') return !m.weeklyMeta;
-
         if (currentFilter === 'all-met') return (m.weeklyMeta && m.guildWar);
 
-        return true; // 'all'
+        return true; 
       });
 
       renderList(filtrados, termo !== '' || currentFilter !== 'all');
@@ -713,9 +718,7 @@
 
       const set = new Set(list);
       wrap.querySelectorAll('.pm-option').forEach(btn => {
-        // Ignora os botões do filtro na aplicação do modal
         if (btn.hasAttribute('data-filter-btn')) return;
-        // Ignora botões da edição rápida
         if (btn.id && btn.id.startsWith('qe-')) return;
         
         const v = (btn.dataset.value || '').trim();
@@ -768,19 +771,6 @@
       }
     });
 
-    // --- LÓGICA DE CACHE ---
-    const cachedMembersJSON = localStorage.getItem('membersList');
-    if(cachedMembersJSON) {
-         try {
-             const cached = JSON.parse(cachedMembersJSON);
-             if(Array.isArray(cached) && cached.length > 0) {
-                 membersCache = cached;
-                 applyFiltersAndRender();
-                 document.getElementById('member-count').textContent = `${membersCache.length} membros na guilda`;
-             }
-         } catch(e) { console.error("Erro cache:", e); }
-    }
-    // ----------------------------------
 
     checkAuth().then(async (user) => {
       if(!user) return;
@@ -806,88 +796,80 @@
       
       loadMembers(false);
       
-      document.getElementById('search-input').addEventListener('input', applyFiltersAndRender);
+      const searchInput = document.getElementById('search-input');
+      if (searchInput) {
+        searchInput.addEventListener('input', applyFiltersAndRender);
+      }
     });
 
     function __membersLsKey() {
-  const gid = getGuildContext()?.guildId;
-  return gid ? `membersList_${gid}` : 'membersList';
-}
-
-function __readMembersFromCache() {
-  try {
-    const raw = localStorage.getItem(__membersLsKey());
-    if (!raw) return null;
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function __writeMembersToCache(list) {
-  try {
-    localStorage.setItem(__membersLsKey(), JSON.stringify(list || []));
-  } catch (_) {}
-}
-
-function __setMembersCache(list) {
-  membersCache = Array.isArray(list) ? list : [];
-  // Ordena pra ficar estável (evita JSON diferente só por ordem)
-  membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
-  __writeMembersToCache(membersCache);
-  applyFiltersAndRender();
-  const countEl = document.getElementById('member-count');
-  if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
-}
-
-// ✅ Regra: sempre renderiza do LocalStorage.
-// Só faz read no Firestore quando:
-// 1) cache está vazio (primeiro acesso / limpeza do navegador)
-// 2) você apertar o ↻ (forceRefresh) pra comparar e atualizar se mudou
-window.loadMembers = async function(forceRefresh = false) {
-  const cached = __readMembersFromCache();
-
-  // 1) Sempre renderiza do cache primeiro (sem piscar)
-  if (cached && cached.length) {
-    __setMembersCache(cached);
-  }
-
-  // 2) Se não tem cache, precisa buscar 1x no Firestore
-  const needsFirstFetch = !cached || !cached.length;
-
-  // 3) Se não é refresh e já tinha cache, não lê Firebase
-  if (!forceRefresh && !needsFirstFetch) return;
-
-  if (forceRefresh) showToast('info', 'Sincronizando...');
-
-  try {
-    const snap = await getDocs(collection(db, "guildas", getGuildContext().guildId, "membros"));
-    const fresh = [];
-    snap.forEach(d => fresh.push({ id: d.id, ...d.data() }));
-    fresh.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
-
-    const cachedJSON = JSON.stringify(cached || []);
-    const freshJSON = JSON.stringify(fresh);
-
-    // Só atualiza UI/cache se realmente mudou
-    if (cachedJSON !== freshJSON) {
-      __setMembersCache(fresh);
-      if (forceRefresh) showToast('success', 'Lista atualizada.');
-    } else {
-      if (needsFirstFetch) __setMembersCache(fresh); // caso raro: cache inválido mas JSON bate
-      if (forceRefresh) showToast('success', 'Nada mudou.');
+      const gid = getGuildContext()?.guildId;
+      return gid ? `membersList_${gid}` : 'membersList';
     }
-  } catch (err) {
-    console.error(err);
-    if (needsFirstFetch) {
-      __setMembersCache([]);
-      showToast('error', 'Erro ao buscar dados.');
-    } else if (forceRefresh) {
-      showToast('error', 'Erro ao sincronizar.');
+
+    function __readMembersFromCache() {
+      try {
+        const raw = localStorage.getItem(__membersLsKey());
+        if (!raw) return null;
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : null;
+      } catch (_) {
+        return null;
+      }
     }
-  }
-};
+
+    function __writeMembersToCache(list) {
+      try {
+        localStorage.setItem(__membersLsKey(), JSON.stringify(list || []));
+      } catch (_) {}
+    }
+
+    function __setMembersCache(list) {
+      membersCache = Array.isArray(list) ? list : [];
+      membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
+      __writeMembersToCache(membersCache);
+      applyFiltersAndRender();
+      const countEl = document.getElementById('member-count');
+      if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+    }
+
+    // Carregamento otimizado: só bate no Firebase se o cache estiver vazio ou se o usuário pedir (forceRefresh)
+    window.loadMembers = async function(forceRefresh = false) {
+      const cached = __readMembersFromCache();
+      const needsFirstFetch = !cached || !cached.length;
+
+      // Se não é refresh e já tem cache, não faz nada (pois o cache já foi renderizado instantaneamente no início)
+      if (!forceRefresh && !needsFirstFetch) return;
+
+      if (forceRefresh) showToast('info', 'Sincronizando...');
+
+      try {
+        const snap = await getDocs(collection(db, "guildas", getGuildContext().guildId, "membros"));
+        const fresh = [];
+        snap.forEach(d => fresh.push({ id: d.id, ...d.data() }));
+        fresh.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
+
+        const cachedJSON = JSON.stringify(cached || []);
+        const freshJSON = JSON.stringify(fresh);
+
+        // Só atualiza UI/cache se realmente mudou
+        if (cachedJSON !== freshJSON) {
+          __setMembersCache(fresh);
+          if (forceRefresh) showToast('success', 'Lista atualizada.');
+        } else {
+          if (needsFirstFetch) __setMembersCache(fresh); // caso de cache vazio na primeira entrada
+          if (forceRefresh) showToast('success', 'Nada mudou.');
+        }
+      } catch (err) {
+        console.error(err);
+        if (needsFirstFetch) {
+          __setMembersCache([]);
+          showToast('error', 'Erro ao buscar dados.');
+        } else if (forceRefresh) {
+          showToast('error', 'Erro ao sincronizar.');
+        }
+      }
+    };
 
     function renderList(list, isSearch = false) {
       const el = document.getElementById('members-list');
@@ -955,7 +937,6 @@ window.loadMembers = async function(forceRefresh = false) {
       </div>`;
     }
 
-    // Ações Globais
     window.toggleDetails = (id) => {
       const el = document.getElementById(`details-${id}`);
       el.classList.toggle('hidden');
@@ -995,23 +976,22 @@ window.loadMembers = async function(forceRefresh = false) {
     };
 
     window.deleteMember = async (id) => {
-  if(!confirm('Tem certeza?')) return;
-  try {
-    await deleteDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id));
+      if(!confirm('Tem certeza?')) return;
+      try {
+        await deleteDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id));
 
-    // ✅ Atualiza cache local (sem reler Firestore)
-    membersCache = (membersCache || []).filter(m => m.id !== id);
-    __writeMembersToCache(membersCache);
-    applyFiltersAndRender();
-    const countEl = document.getElementById('member-count');
-    if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+        membersCache = (membersCache || []).filter(m => m.id !== id);
+        __writeMembersToCache(membersCache);
+        applyFiltersAndRender();
+        const countEl = document.getElementById('member-count');
+        if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
 
-    showToast('success', 'Membro excluído.');
-  } catch(e) {
-    console.error(e);
-    showToast('error', 'Erro ao excluir.');
-  }
-};
+        showToast('success', 'Membro excluído.');
+      } catch(e) {
+        console.error(e);
+        showToast('error', 'Erro ao excluir.');
+      }
+    };
 
     window.fetchNick = async () => {
       const uid = document.getElementById('visible-id').value.trim();
@@ -1034,8 +1014,8 @@ window.loadMembers = async function(forceRefresh = false) {
 
         if (res.ok && name) {
           document.getElementById('nick').value = name;
-      hasTagManualOverride = false;
-      syncHasTagToggleFromNick();
+          hasTagManualOverride = false;
+          syncHasTagToggleFromNick();
           feedback.innerHTML = `<span class="text-emerald-600 font-bold">✓ ${name} (Nível ${Number.isFinite(level) ? level : '?'})</span> <span class="text-gray-500">Dados fornecidos por api.mitsuri.fun!</span>`;
           syncHasTagToggleFromNick();
         } else {
@@ -1052,99 +1032,68 @@ window.loadMembers = async function(forceRefresh = false) {
     };
 
     document.getElementById('member-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+      e.preventDefault();
+      const id = document.getElementById('member-id').value;
+      const visibleId = document.getElementById('visible-id').value.trim();
+      
+      if(!id) {
+        const exist = membersCache.find(m => m.visibleId === visibleId);
+        if(exist) { showToast('error', 'Esse ID já existe.'); return; }
+      }
 
-  const guildId = getGuildContext().guildId;
+      const rawNick = document.getElementById('nick').value.trim();
+      const hasTag = document.getElementById('has-tag').checked;
+      const finalNick = rawNick;
 
-  const oldId = (document.getElementById('member-id').value || '').trim(); // pode ser ID antigo aleatório
-  const visibleId = (document.getElementById('visible-id').value || '').trim(); // ID do FF (único)
+      const payload = {
+        visibleId,
+        nick: finalNick,
+        whatsapp: document.getElementById('whatsapp').value.trim(),
+        guildWar: document.getElementById('guild-war').checked,
+        guildWarMeta: Number(document.getElementById('guild-war-meta').value),
+        weeklyMeta: document.getElementById('weekly-meta').checked,
+        weeklyMetaValue: Number(document.getElementById('weekly-meta-value').value),
+        hasTag: hasTag,
+        playMode: (() => {
+          const arr = getSelectedPlayModes();
+          return arr.length ? arr : null;
+        })(),
+        joinDate: document.getElementById('join-date').value || new Date().toISOString().split('T')[0],
+        updatedAt: serverTimestamp()
+      };
 
-  if (!visibleId) { showToast('error', 'Digite o ID do jogador.'); return; }
+      try {
+        let newRef = null;
+        if(id) {
+          await setDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id), payload, { merge: true });
+          showToast('success', 'Atualizado!');
+        } else {
+          newRef = doc(collection(db, "guildas", getGuildContext().guildId, "membros"));
+          await setDoc(newRef, payload);
+          showToast('success', 'Criado!');
+        }
+        closeModal();
 
-  // Se estiver criando, evita duplicar no SEU cache (sem ler Firestore)
-  if (!oldId) {
-    const exist = (membersCache || []).find(m => String(m.visibleId || '').trim() === visibleId);
-    if (exist) {
-      showToast('error', 'Esse ID já existe na sua lista. Aperte ↻ pra atualizar se alguém adicionou.');
-      return;
-    }
-  } else {
-    // Se estiver editando e mudou o ID do FF, evita colidir com outro membro no cache
-    const other = (membersCache || []).find(m => String(m.visibleId || '').trim() === visibleId && String(m.id) !== oldId);
-    if (other) {
-      showToast('error', 'Já existe alguém com esse ID na sua lista. Aperte ↻ pra atualizar.');
-      return;
-    }
-  }
+        const cachePayload = { ...payload, updatedAt: Date.now() };
 
-  const rawNick = document.getElementById('nick').value.trim();
-  const hasTag = document.getElementById('has-tag').checked;
+        if (id) {
+          const idx = (membersCache || []).findIndex(m => m.id === id);
+          if (idx >= 0) membersCache[idx] = { ...membersCache[idx], ...cachePayload };
+        } else {
+          if (typeof newRef !== 'undefined' && newRef?.id) {
+            membersCache.push({ id: newRef.id, ...cachePayload });
+          }
+        }
 
-  const payload = {
-    visibleId,
-    nick: rawNick,
-    whatsapp: document.getElementById('whatsapp').value.trim(),
-    guildWar: document.getElementById('guild-war').checked,
-    guildWarMeta: Number(document.getElementById('guild-war-meta').value),
-    weeklyMeta: document.getElementById('weekly-meta').checked,
-    weeklyMetaValue: Number(document.getElementById('weekly-meta-value').value),
-    hasTag: hasTag,
-    playMode: (() => {
-      const arr = getSelectedPlayModes();
-      return arr.length ? arr : null;
-    })(),
-    joinDate: document.getElementById('join-date').value || new Date().toISOString().split('T')[0],
-    updatedAt: serverTimestamp()
-  };
-
-  try {
-    // ✅ Agora o doc ID oficial é SEMPRE o visibleId (ID do FF).
-    // Migração suave:
-    // - Se o registro antigo tinha ID aleatório (oldId) e agora temos visibleId, criamos/atualizamos o doc {visibleId}
-    //   e apagamos o doc antigo {oldId}.
-    const newDocId = visibleId;
-
-    if (oldId && oldId !== newDocId) {
-      // MIGRAR: cria/atualiza no doc novo e remove o antigo (1 commit, sem reler)
-      const batch = writeBatch(db);
-      batch.set(doc(db, "guildas", guildId, "membros", newDocId), payload, { merge: true });
-      batch.delete(doc(db, "guildas", guildId, "membros", oldId));
-      await batch.commit();
-      showToast('success', 'Atualizado! (ID migrado)');
-    } else {
-      // UPSERT: cria se não existe, atualiza se já existe (sem duplicar)
-      await setDoc(doc(db, "guildas", guildId, "membros", newDocId), payload, { merge: true });
-      showToast('success', oldId ? 'Atualizado!' : 'Salvo!');
-    }
-
-    closeModal();
-
-    // ✅ Atualiza cache local (sem reler Firestore)
-    const cachePayload = { ...payload, updatedAt: Date.now() };
-
-    // remove versão antiga (se existia)
-    if (oldId && oldId !== newDocId) {
-      membersCache = (membersCache || []).filter(m => String(m.id) !== oldId);
-    }
-
-    // upsert por newDocId
-    const idx = (membersCache || []).findIndex(m => String(m.id) === newDocId);
-    if (idx >= 0) {
-      membersCache[idx] = { ...membersCache[idx], id: newDocId, ...cachePayload };
-    } else {
-      membersCache.push({ id: newDocId, ...cachePayload });
-    }
-
-    membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
-    __writeMembersToCache(membersCache);
-    applyFiltersAndRender();
-    const countEl = document.getElementById('member-count');
-    if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
-  } catch (err) {
-    console.error(err);
-    showToast('error', 'Erro ao salvar.');
-  }
-});
+        membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
+        __writeMembersToCache(membersCache);
+        applyFiltersAndRender();
+        const countEl = document.getElementById('member-count');
+        if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+      } catch(err) {
+        showToast('error', 'Erro ao salvar.');
+      }
+    });
   </script>
 
   <!-- OTK Footer -->
