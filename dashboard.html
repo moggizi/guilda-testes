@@ -83,7 +83,7 @@
           
           <span id="current-plan-pill" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-50 text-gray-600 text-sm border border-gray-200 whitespace-nowrap ml-auto">
             <i data-lucide="sparkles" class="w-4 h-4 text-emerald-500"></i>
-            <span>Plano atual: <b id="current-plan-name">—</b></span>
+            <span>Plano atual: <b id="current-plan-name">—</b></span> <span class="text-gray-400">•</span> <span id="vip-days" class="text-gray-500">—</span>
           </span>
         </div>
       </header>
@@ -184,7 +184,10 @@
   </div>
 
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, db, consumeLoginToasts, getGuildContext, applyVipUiAndGates, getVipTier, getCachedMembers, refreshMembers } from './logic.js';    // Função de normalização idêntica à do upgrade.html
+    import { checkAuth, setupSidebar, initIcons, logout, db, consumeLoginToasts, getGuildContext, applyVipUiAndGates, getVipTier, getVipRemainingDays, getVipExpiresAtMs } from './logic.js';
+    import { doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Função de normalização idêntica à do upgrade.html
     function normalizeTier(raw){
       const s = (raw || 'free').toString().toLowerCase().trim();
       if (s.includes('buss') || s.includes('business')) return 'business';
@@ -194,62 +197,140 @@
     }
 
     setupSidebar();
-    
-    let currentStats = null;
-    
-    // 1. CARREGAMENTO IMEDIATO DO CACHE
-    const cachedStats = localStorage.getItem('dashboard_stats');
-    const cachedMembers = localStorage.getItem('membersList');
 
-    if (cachedStats) {
-      currentStats = JSON.parse(cachedStats);
-      updateUI(currentStats);
-    } else if (cachedMembers) {
-      try {
-        const members = JSON.parse(cachedMembers);
-        if(Array.isArray(members) && members.length > 0) {
-            currentStats = calculateStats(members);
-            updateUI(currentStats);
-        }
-      } catch(e) {}
+    let currentStats = null;
+
+    function __membersLsKey() {
+      const gid = getGuildContext()?.guildId;
+      return gid ? `membersList_${gid}` : 'membersList';
     }
 
-    // 2. AUTH E UPDATE EM BACKGROUND
-    checkAuth().then(async (user) => {
-      if(!user) return;
-      document.getElementById('btn-logout').onclick = logout;
-      consumeLoginToasts();
-      
-      // Atualiza o Plano Atual no Header (resolvendo o problema relatado)
+    function __dashboardStatsKey() {
+      const gid = getGuildContext()?.guildId;
+      return gid ? `dashboard_stats_${gid}` : 'dashboard_stats';
+    }
+
+    function __readJSON(key) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (_) { return null; }
+    }
+
+    function __writeJSON(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+    }
+
+    function __renderFromMembersCache() {
+      const cachedMembers = __readJSON(__membersLsKey());
+      if (!Array.isArray(cachedMembers) || cachedMembers.length === 0) return false;
+
+      const stats = calculateStats(cachedMembers);
+      currentStats = stats;
+      __writeJSON(__dashboardStatsKey(), stats);
+      updateUI(stats);
+      return true;
+    }
+
+    function __renderFromStatsCache() {
+      const cachedStats = __readJSON(__dashboardStatsKey());
+      if (!cachedStats) return false;
+      currentStats = cachedStats;
+      updateUI(cachedStats);
+      return true;
+    }
+
+    function __updateVipPill() {
       try {
         const tier = normalizeTier(getVipTier());
         const pillName = document.getElementById('current-plan-name');
         if (pillName) pillName.textContent = tier.toUpperCase();
-        
-        // Atualiza UI baseada no VIP
+
+        const daysEl = document.getElementById('vip-days');
+        const days = getVipRemainingDays();
+        if (daysEl) {
+          if (days == null) daysEl.textContent = 'sem validade';
+          else daysEl.textContent = `${days} dia${days === 1 ? '' : 's'}`;
+        }
+
         const ctx = getGuildContext();
         applyVipUiAndGates(ctx?.vipTier || getVipTier());
-      } catch(e) {
-        console.warn("Erro ao atualizar plano no dashboard:", e);
-      }
+      } catch (_) {}
+    }
 
-      loadDashboard();
-    });
+    // 1) Render imediato: primeiro tenta stats cache, depois tenta members cache
+    if (!__renderFromStatsCache()) __renderFromMembersCache();
 
-    async function loadDashboard() {
+    // 2) Auth
+    checkAuth().then(async (user) => {
+      if(!user) return;
+      document.getElementById('btn-logout').onclick = logout;
+      consumeLoginToasts();
+
+      // VIP: cache imediato + "tempo real" (listener em 1 doc)
+      __updateVipPill();
+
       try {
         const ctx = getGuildContext();
-        if(!ctx?.guildId) return;        const newStats = calculateStats(members);
-        
-        if (JSON.stringify(newStats) !== JSON.stringify(currentStats)) {
-            localStorage.setItem('dashboard_stats', JSON.stringify(newStats));
-            updateUI(newStats);
-            currentStats = newStats;
+        if (ctx?.guildId) {
+          // Preferência: configGuilda/{guildId}. Se não existir, tenta guildas/{guildId}.
+          const ref1 = doc(db, 'configGuilda', ctx.guildId);
+          const snap1 = await getDoc(ref1);
+          if (snap1.exists()) {
+            onSnapshot(ref1, (s) => {
+              const d = s.exists() ? (s.data() || {}) : {};
+              if (d.vipTier != null) ctx.vipTier = d.vipTier;
+              if (d.vipExpiresAt != null) {
+                const v = d.vipExpiresAt;
+                // Timestamp ou ms
+                const ms = (typeof v?.toMillis === 'function') ? v.toMillis() : Number(v);
+                ctx.vipExpiresAtMs = isFinite(ms) ? ms : null;
+              } else if ('vipExpiresAt' in d) {
+                ctx.vipExpiresAtMs = null;
+              }
+              // salva no cache do contexto também
+              try {
+                const raw = localStorage.getItem('guildCtx_cache_v1');
+                const cached = raw ? (JSON.parse(raw) || {}) : {};
+                cached.vipTier = ctx.vipTier;
+                cached.vipExpiresAtMs = ctx.vipExpiresAtMs;
+                cached.ts = Date.now();
+                localStorage.setItem('guildCtx_cache_v1', JSON.stringify(cached));
+              } catch (_) {}
+              __updateVipPill();
+            });
+          } else {
+            const ref2 = doc(db, 'guildas', ctx.guildId);
+            onSnapshot(ref2, (s) => {
+              const d = s.exists() ? (s.data() || {}) : {};
+              if (d.vipTier != null) ctx.vipTier = d.vipTier;
+              // alguns lugares podem guardar só o tier aqui
+              try {
+                const raw = localStorage.getItem('guildCtx_cache_v1');
+                const cached = raw ? (JSON.parse(raw) || {}) : {};
+                cached.vipTier = ctx.vipTier;
+                cached.ts = Date.now();
+                localStorage.setItem('guildCtx_cache_v1', JSON.stringify(cached));
+              } catch (_) {}
+              __updateVipPill();
+            });
+          }
         }
-      } catch(e) {
-        console.error(e);
-      }
-    }
+      } catch (_) {}
+
+      // Recalcula stats do cache sempre que outro admin mexer (mesmo navegador/aba)
+      window.addEventListener('storage', (ev) => {
+        if (!ev) return;
+        if (ev.key === __membersLsKey() || ev.key === __dashboardStatsKey()) {
+          // members manda mais confiança que stats
+          if (!__renderFromMembersCache()) __renderFromStatsCache();
+        }
+      });
+
+      // Mantém os "dias restantes" atualizando (sem read extra)
+      setInterval(__updateVipPill, 60 * 1000);
+    });
 
     function calculateStats(members) {
       const total = members.length;
