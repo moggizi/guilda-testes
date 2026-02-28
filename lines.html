@@ -172,7 +172,7 @@
   <script type="module">
 
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildContext } from './logic.js';
-    import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, addDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { collection, getDocs, query, where, limit, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
     initIcons();
@@ -657,44 +657,33 @@
         const lineRef = editingLineId ? doc(linesCol, editingLineId) : doc(linesCol); // id já definido (evita duplicar)
         const lineId = lineRef.id;
 
-        // Índice: 1 doc por membro, garantindo que ele só pode estar em 1 line
-        const idxColPath = ['guildas', guildId, 'lineMembers'];
-
         showToast('info', 'Salvando...');
 
-        // Transação: garante "sem duplicar membros" mesmo com cache desatualizado em outras contas
-        await runTransaction(db, async (tx) => {
-          let oldMemberIds = [];
-          if (editingLineId) {
-            const snap = await tx.get(lineRef);
-            if (snap.exists()) oldMemberIds = Array.isArray(snap.data()?.memberIds) ? snap.data().memberIds : [];
-          }
-
-          const newSet = new Set(selectedMemberIds.map(String));
-          const oldSet = new Set((oldMemberIds || []).map(String));
-
-          // 1) libera membros que saíram desta line
-          for (const mid of oldSet) {
-            if (!newSet.has(mid)) {
-              const idxRef = doc(db, ...idxColPath, mid);
-              const idxSnap = await tx.get(idxRef);
-              if (idxSnap.exists() && String(idxSnap.data()?.lineId) === String(lineId)) {
-                tx.delete(idxRef);
-              }
+        // Anti-duplicação (sem coleção extra): só verifica no Firestore no momento de salvar
+        // Isso NÃO faz leitura automática ao abrir a tela.
+        for (const mid of selectedMemberIds.map(String)) {
+          const q = query(linesCol, where('memberIds', 'array-contains', mid), limit(1));
+          const qs = await getDocs(q);
+          if (!qs.empty) {
+            const other = qs.docs[0];
+            if (String(other.id) !== String(lineId)) {
+              throw new Error('CONFLICT_MEMBER_IN_OTHER_LINE');
             }
           }
+        }
 
-          // 2) trava/valida membros novos (se já estiver em outra line, bloqueia)
-          for (const mid of newSet) {
-            const idxRef = doc(db, ...idxColPath, mid);
-            const idxSnap = await tx.get(idxRef);
-            if (idxSnap.exists()) {
-              const other = String(idxSnap.data()?.lineId || '');
-              if (other && other !== String(lineId)) {
-                throw new Error('CONFLICT_MEMBER_IN_OTHER_LINE');
-              }
-            }
-            tx.set(idxRef, { lineId, updatedAt: serverTimestamp() }, { merge: true });
+        const payload = {
+          name: rawName,
+          number,
+          memberIds: selectedMemberIds,
+          members: memberSnaps,
+          updatedAt: serverTimestamp(),
+        };
+        if (!editingLineId) payload.createdAt = serverTimestamp();
+
+        // Salva sem reler lista depois. Cache local é atualizado logo abaixo.
+        await setDoc(lineRef, payload, { merge: true });
+
           }
 
           const payload = {
@@ -755,23 +744,9 @@
         const linesCol = collection(db, 'guildas', guildId, 'lines');
         const lineRef = doc(linesCol, editingLineId);
         const lineId = editingLineId;
-        const idxColPath = ['guildas', guildId, 'lineMembers'];
-
         showToast('info', 'Excluindo...');
 
-        await runTransaction(db, async (tx) => {
-          const snap = await tx.get(lineRef);
-          const memberIds = snap.exists() && Array.isArray(snap.data()?.memberIds) ? snap.data().memberIds : [];
-
-          for (const mid of memberIds) {
-            const idxRef = doc(db, ...idxColPath, String(mid));
-            const idxSnap = await tx.get(idxRef);
-            if (idxSnap.exists() && String(idxSnap.data()?.lineId) === String(lineId)) {
-              tx.delete(idxRef);
-            }
-          }
-          tx.delete(lineRef);
-        });
+        await deleteDoc(lineRef);
 
         // Atualiza cache local (SEM reler Firestore)
         lines = (lines || []).filter(l => String(l.id) !== String(lineId));
