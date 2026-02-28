@@ -377,7 +377,9 @@
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildContext } from './logic.js';
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+    // CARREGA OS ÍCONES IMEDIATAMENTE INDEPENDENTE DE TER DADOS!
     setupSidebar();
+    initIcons();
 
     // ==========================================
     // VARIÁVEIS DE ESTADO E CHAVES DE CACHE
@@ -468,6 +470,7 @@
         } else {
            el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">Nenhum membro encontrado.</div>`;
         }
+        initIcons(); // garante que o ícone do estado vazio renderize (se houver)
         return;
       }
 
