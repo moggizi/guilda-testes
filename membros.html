@@ -1052,69 +1052,99 @@ window.loadMembers = async function(forceRefresh = false) {
     };
 
     document.getElementById('member-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const id = document.getElementById('member-id').value;
-      const visibleId = document.getElementById('visible-id').value.trim();
-      
-      if(!id) {
-        const exist = membersCache.find(m => m.visibleId === visibleId);
-        if(exist) { showToast('error', 'Esse ID já existe.'); return; }
-      }
+  e.preventDefault();
 
-      const rawNick = document.getElementById('nick').value.trim();
-      const hasTag = document.getElementById('has-tag').checked;
-      const finalNick = rawNick;
+  const guildId = getGuildContext().guildId;
 
-      const payload = {
-        visibleId,
-        nick: finalNick,
-        whatsapp: document.getElementById('whatsapp').value.trim(),
-        guildWar: document.getElementById('guild-war').checked,
-        guildWarMeta: Number(document.getElementById('guild-war-meta').value),
-        weeklyMeta: document.getElementById('weekly-meta').checked,
-        weeklyMetaValue: Number(document.getElementById('weekly-meta-value').value),
-        hasTag: hasTag,
-        playMode: (() => {
-          const arr = getSelectedPlayModes();
-          return arr.length ? arr : null;
-        })(),
-        joinDate: document.getElementById('join-date').value || new Date().toISOString().split('T')[0],
-        updatedAt: serverTimestamp()
-      };
+  const oldId = (document.getElementById('member-id').value || '').trim(); // pode ser ID antigo aleatório
+  const visibleId = (document.getElementById('visible-id').value || '').trim(); // ID do FF (único)
 
-      try {
-        let newRef = null;
-        if(id) {
-          await setDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id), payload, { merge: true });
-          showToast('success', 'Atualizado!');
-        } else {
-          newRef = doc(collection(db, "guildas", getGuildContext().guildId, "membros"));
-          await setDoc(newRef, payload);
-          showToast('success', 'Criado!');
-        }
-        closeModal();
+  if (!visibleId) { showToast('error', 'Digite o ID do jogador.'); return; }
 
-// ✅ Atualiza cache local (sem reler Firestore)
-const cachePayload = { ...payload, updatedAt: Date.now() };
-
-if (id) {
-  const idx = (membersCache || []).findIndex(m => m.id === id);
-  if (idx >= 0) membersCache[idx] = { ...membersCache[idx], ...cachePayload };
-} else {
-  // newRef já existe no escopo quando criou
-  if (typeof newRef !== 'undefined' && newRef?.id) {
-    membersCache.push({ id: newRef.id, ...cachePayload });
+  // Se estiver criando, evita duplicar no SEU cache (sem ler Firestore)
+  if (!oldId) {
+    const exist = (membersCache || []).find(m => String(m.visibleId || '').trim() === visibleId);
+    if (exist) {
+      showToast('error', 'Esse ID já existe na sua lista. Aperte ↻ pra atualizar se alguém adicionou.');
+      return;
+    }
+  } else {
+    // Se estiver editando e mudou o ID do FF, evita colidir com outro membro no cache
+    const other = (membersCache || []).find(m => String(m.visibleId || '').trim() === visibleId && String(m.id) !== oldId);
+    if (other) {
+      showToast('error', 'Já existe alguém com esse ID na sua lista. Aperte ↻ pra atualizar.');
+      return;
+    }
   }
-}
 
-membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
-__writeMembersToCache(membersCache);
-applyFiltersAndRender();
-const countEl = document.getElementById('member-count');
-if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;} catch(err) {
-        showToast('error', 'Erro ao salvar.');
-      }
-    });
+  const rawNick = document.getElementById('nick').value.trim();
+  const hasTag = document.getElementById('has-tag').checked;
+
+  const payload = {
+    visibleId,
+    nick: rawNick,
+    whatsapp: document.getElementById('whatsapp').value.trim(),
+    guildWar: document.getElementById('guild-war').checked,
+    guildWarMeta: Number(document.getElementById('guild-war-meta').value),
+    weeklyMeta: document.getElementById('weekly-meta').checked,
+    weeklyMetaValue: Number(document.getElementById('weekly-meta-value').value),
+    hasTag: hasTag,
+    playMode: (() => {
+      const arr = getSelectedPlayModes();
+      return arr.length ? arr : null;
+    })(),
+    joinDate: document.getElementById('join-date').value || new Date().toISOString().split('T')[0],
+    updatedAt: serverTimestamp()
+  };
+
+  try {
+    // ✅ Agora o doc ID oficial é SEMPRE o visibleId (ID do FF).
+    // Migração suave:
+    // - Se o registro antigo tinha ID aleatório (oldId) e agora temos visibleId, criamos/atualizamos o doc {visibleId}
+    //   e apagamos o doc antigo {oldId}.
+    const newDocId = visibleId;
+
+    if (oldId && oldId !== newDocId) {
+      // MIGRAR: cria/atualiza no doc novo e remove o antigo (1 commit, sem reler)
+      const batch = writeBatch(db);
+      batch.set(doc(db, "guildas", guildId, "membros", newDocId), payload, { merge: true });
+      batch.delete(doc(db, "guildas", guildId, "membros", oldId));
+      await batch.commit();
+      showToast('success', 'Atualizado! (ID migrado)');
+    } else {
+      // UPSERT: cria se não existe, atualiza se já existe (sem duplicar)
+      await setDoc(doc(db, "guildas", guildId, "membros", newDocId), payload, { merge: true });
+      showToast('success', oldId ? 'Atualizado!' : 'Salvo!');
+    }
+
+    closeModal();
+
+    // ✅ Atualiza cache local (sem reler Firestore)
+    const cachePayload = { ...payload, updatedAt: Date.now() };
+
+    // remove versão antiga (se existia)
+    if (oldId && oldId !== newDocId) {
+      membersCache = (membersCache || []).filter(m => String(m.id) !== oldId);
+    }
+
+    // upsert por newDocId
+    const idx = (membersCache || []).findIndex(m => String(m.id) === newDocId);
+    if (idx >= 0) {
+      membersCache[idx] = { ...membersCache[idx], id: newDocId, ...cachePayload };
+    } else {
+      membersCache.push({ id: newDocId, ...cachePayload });
+    }
+
+    membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
+    __writeMembersToCache(membersCache);
+    applyFiltersAndRender();
+    const countEl = document.getElementById('member-count');
+    if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+  } catch (err) {
+    console.error(err);
+    showToast('error', 'Erro ao salvar.');
+  }
+});
   </script>
 
   <!-- OTK Footer -->
