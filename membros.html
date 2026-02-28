@@ -650,31 +650,55 @@
 
        const batch = writeBatch(db);
        const guildId = getGuildContext().guildId;
+       let didMigrate = false;
 
        keys.forEach(id => {
-           const ref = doc(db, "guildas", guildId, "membros", id);
-           batch.update(ref, {
+           const m = membersCache.find(x => x.id === id);
+           const updates = {
                hasTag: pendingEdits[id].hasTag,
                guildWar: pendingEdits[id].guildWar,
                weeklyMeta: pendingEdits[id].weeklyMeta,
                updatedAt: serverTimestamp()
-           });
+           };
+
+           // MIGRATION ON THE FLY (Edição rápida)
+           if (m.id !== m.visibleId) {
+               didMigrate = true;
+               const newRef = doc(db, "guildas", guildId, "membros", m.visibleId);
+               const oldRef = doc(db, "guildas", guildId, "membros", m.id);
+               
+               const fullObj = { ...m, ...updates };
+               delete fullObj.id; // remove o campo id para não sujar o documento
+               batch.set(newRef, fullObj);
+               batch.delete(oldRef);
+           } else {
+               const ref = doc(db, "guildas", guildId, "membros", id);
+               batch.update(ref, updates);
+           }
        });
 
        try {
            await batch.commit();
-           showToast('success', `${keys.length} membro(s) atualizado(s)!`);
+           
+           if (didMigrate) {
+               showToast('info', 'Usuário(s) migrado(s) para o novo sistema!');
+           } else {
+               showToast('success', `${keys.length} membro(s) atualizado(s)!`);
+           }
            closeQuickEditModal();
 
            // Atualiza cache local
            keys.forEach(id => {
-             const idx = (membersCache || []).findIndex(m => m.id === id);
+             const idx = membersCache.findIndex(m => m.id === id);
              if (idx >= 0) {
+               const m = membersCache[idx];
+               const newId = m.id !== m.visibleId ? m.visibleId : m.id;
                membersCache[idx] = {
-                 ...membersCache[idx],
+                 ...m,
                  hasTag: pendingEdits[id].hasTag,
                  guildWar: pendingEdits[id].guildWar,
                  weeklyMeta: pendingEdits[id].weeklyMeta,
+                 id: newId,
                  updatedAt: Date.now()
                };
              }
@@ -709,9 +733,9 @@
 
        const batch = writeBatch(db);
        const guildId = getGuildContext().guildId;
+       let didMigrate = false;
 
        membersCache.forEach(m => {
-           const ref = doc(db, "guildas", guildId, "membros", m.id);
            const updateData = { updatedAt: serverTimestamp() };
            
            if(currentZeroAction === 'gg') {
@@ -721,22 +745,49 @@
                updateData.weeklyMeta = false;
                updateData.weeklyMetaValue = 0;
            }
-           batch.update(ref, updateData);
+           
+           // MIGRATION ON THE FLY (Ao Zerar)
+           if (m.id !== m.visibleId) {
+               didMigrate = true;
+               const newRef = doc(db, "guildas", guildId, "membros", m.visibleId);
+               const oldRef = doc(db, "guildas", guildId, "membros", m.id);
+               const fullObj = { ...m, ...updateData };
+               delete fullObj.id;
+               batch.set(newRef, fullObj);
+               batch.delete(oldRef);
+           } else {
+               const ref = doc(db, "guildas", guildId, "membros", m.id);
+               batch.update(ref, updateData);
+           }
        });
 
        try {
            closeConfirmModal();
            showToast('info', 'Zerando todos os membros... aguarde.');
            await batch.commit();
-            showToast('success', 'Todos os membros zerados com sucesso!');
-            closeQuickEditModal();
+           
+           if (didMigrate) {
+               showToast('info', 'Zerados e migrados para o novo sistema!');
+           } else {
+               showToast('success', 'Todos os membros zerados com sucesso!');
+           }
+           closeQuickEditModal();
 
-            if (currentZeroAction === 'gg') {
-              membersCache = (membersCache || []).map(m => ({ ...m, guildWar: false, guildWarMeta: 0, updatedAt: Date.now() }));
-            } else {
-              membersCache = (membersCache || []).map(m => ({ ...m, weeklyMeta: false, weeklyMetaValue: 0, updatedAt: Date.now() }));
-            }
-            __setMembersCache(membersCache);
+           // Atualiza cache local
+           membersCache = membersCache.map(m => {
+               const base = { ...m, updatedAt: Date.now() };
+               if (currentZeroAction === 'gg') {
+                   base.guildWar = false;
+                   base.guildWarMeta = 0;
+               } else {
+                   base.weeklyMeta = false;
+                   base.weeklyMetaValue = 0;
+               }
+               // atualiza ID localmente se foi migrado
+               if (base.id !== base.visibleId) base.id = base.visibleId;
+               return base;
+           });
+           __setMembersCache(membersCache);
        } catch(e) {
            console.error(e);
            showToast('error', 'Erro ao processar zeramento.');
@@ -872,7 +923,7 @@
 
 
     // ==========================================
-    // EVENTOS DO MODAL DE MEMBROS
+    // EVENTOS DO MODAL DE MEMBROS E SUBMIT
     // ==========================================
     window.toggleDetails = (id) => {
       const el = document.getElementById(`details-${id}`);
@@ -913,14 +964,20 @@
     };
 
     window.deleteMember = async (id) => {
-      if(!confirm('Tem certeza?')) return;
+      if(!confirm('Tem certeza que deseja excluir?')) return;
       try {
+        const m = membersCache.find(x => x.id === id);
         await deleteDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id));
 
         membersCache = (membersCache || []).filter(m => m.id !== id);
         __setMembersCache(membersCache);
 
-        showToast('success', 'Membro excluído.');
+        // Aviso se era um usuário antigo que foi limpo
+        if (m && m.id !== m.visibleId) {
+             showToast('info', 'Usuário (sistema antigo) foi migrado/removido.');
+        } else {
+             showToast('success', 'Membro excluído.');
+        }
       } catch(e) {
         console.error(e);
         showToast('error', 'Erro ao excluir.');
@@ -970,14 +1027,10 @@
       const id = document.getElementById('member-id').value;
       const visibleId = document.getElementById('visible-id').value.trim();
       
-      if(!id) {
-        const exist = membersCache.find(m => m.visibleId === visibleId);
-        if(exist) { showToast('error', 'Esse ID já existe.'); return; }
-      }
-
       const rawNick = document.getElementById('nick').value.trim();
       const hasTag = document.getElementById('has-tag').checked;
       const finalNick = rawNick;
+      const guildId = getGuildContext().guildId;
 
       const payload = {
         visibleId,
@@ -997,28 +1050,40 @@
       };
 
       try {
-        let newRef = null;
         if(id) {
-          await setDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id), payload, { merge: true });
-          showToast('success', 'Atualizado!');
+          if (id !== visibleId) {
+             // MIGRATION ON THE FLY (Edição de perfil)
+             await setDoc(doc(db, "guildas", guildId, "membros", visibleId), payload);
+             await deleteDoc(doc(db, "guildas", guildId, "membros", id));
+             showToast('info', 'Usuário foi migrado para o novo sistema!');
+             
+             // Update cache
+             const idx = membersCache.findIndex(m => m.id === id);
+             if (idx >= 0) membersCache[idx] = { ...membersCache[idx], ...payload, id: visibleId, updatedAt: Date.now() };
+          } else {
+             // NORMAL UPDATE
+             await setDoc(doc(db, "guildas", guildId, "membros", id), payload, { merge: true });
+             showToast('success', 'Membro Atualizado!');
+             
+             // Update cache
+             const idx = membersCache.findIndex(m => m.id === id);
+             if (idx >= 0) membersCache[idx] = { ...membersCache[idx], ...payload, updatedAt: Date.now() };
+          }
         } else {
-          newRef = doc(collection(db, "guildas", getGuildContext().guildId, "membros"));
-          await setDoc(newRef, payload);
-          showToast('success', 'Criado!');
-        }
-        closeModal();
-
-        const cachePayload = { ...payload, updatedAt: Date.now() };
-
-        if (id) {
-          const idx = (membersCache || []).findIndex(m => m.id === id);
-          if (idx >= 0) membersCache[idx] = { ...membersCache[idx], ...cachePayload };
-        } else {
-          if (typeof newRef !== 'undefined' && newRef?.id) {
-            membersCache.push({ id: newRef.id, ...cachePayload });
+          // CREATE NEW OR OVERWRITE (Usando sempre o ID do jogo)
+          await setDoc(doc(db, "guildas", guildId, "membros", visibleId), payload);
+          showToast('success', 'Adicionado (ou sobrescrito)!');
+          
+          // Tratamento no cache caso tenha sobrescrito
+          const idx = membersCache.findIndex(m => m.id === visibleId);
+          if (idx >= 0) {
+             membersCache[idx] = { ...membersCache[idx], ...payload, updatedAt: Date.now() };
+          } else {
+             membersCache.push({ id: visibleId, ...payload, updatedAt: Date.now() });
           }
         }
         
+        closeModal();
         __setMembersCache(membersCache);
 
       } catch(err) {
