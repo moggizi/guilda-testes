@@ -167,9 +167,8 @@
   </div>
 
   <script type="module">
-    // Corrigido: Remoção de imports que não existiam no logic.js (refreshCeoCore, etc)
     import { checkAuth, setupSidebar, initIcons, logout, db, ensureCeoStatus, applyCeoNavVisibility, showToast, getVipTier } from './logic.js';
-    import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, writeBatch, query, where, serverTimestamp, Timestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, writeBatch, query, where, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
 
@@ -182,7 +181,6 @@
       return 'free';
     }
 
-    // VIP expiração por tier
     function vipDurationDays(tier) {
       const t = normalizeVip(tier);
       if (t === 'plus' || t === 'pro') return 30;
@@ -225,7 +223,7 @@
     }
 
     let allGuilds = [];
-    window.allSolicita = []; // Agora guardado no window para acesso global
+    window.allSolicita = [];
 
     // Boot
     checkAuth().then(async (user) => {
@@ -241,7 +239,7 @@
       
       applyCeoNavVisibility();
       syncGlobalVip();
-      loadData(false); // Chama o carregamento com cache = true (force = false)
+      loadData(false); // Só usa Firebase se o cache estiver vazio ou velho
     });
 
     function syncGlobalVip() {
@@ -250,7 +248,6 @@
       if (label) label.textContent = tier;
     }
 
-    // Busca dados do Firebase diretamente no arquivo
     async function fetchCeoDataFromFirebase() {
       const guildasSnap = await getDocs(collection(db, 'guildas'));
       const configSnap = await getDocs(collection(db, 'configGuilda'));
@@ -261,25 +258,29 @@
       return { guildas: guildasArr, configGuilda: configArr };
     }
 
-    // Carregamento principal (Usa cache LocalStorage + Background Sync)
     async function loadData(force = false) {
       const cachedGuildas = localStorage.getItem('hub_ceo_guildas_v1');
       const cachedConfig = localStorage.getItem('hub_ceo_config_v1');
 
-      // Se tiver em cache e não for reload forçado, hidrata instantâneo
-      if (cachedGuildas && cachedConfig && !force) {
+      // Se não for forçado e existir cache (com menos de 30 min), carrega apenas do cache!
+      if (!force && cachedGuildas && cachedConfig) {
         try {
-          const pGuildas = JSON.parse(cachedGuildas).items;
-          const pConfig = JSON.parse(cachedConfig).items;
-          hydrateFromSnapshots(pGuildas, pConfig);
+          const pGuildas = JSON.parse(cachedGuildas);
+          const pConfig = JSON.parse(cachedConfig);
+          
+          if (Date.now() - pGuildas.ts < 30 * 60 * 1000) { // 30 minutos
+            hydrateFromSnapshots(pGuildas.items, pConfig.items);
+            updateSolicitacoesBadge(); // Solicitações atualizam no fundo pra manter em tempo real
+            return; // PARA AQUI! Não busca do Firebase a lista de guildas.
+          }
         } catch (e) {
           console.error("Erro no cache:", e);
         }
       }
 
       if (force) showToast('info', 'A sincronizar com Firebase...');
+      else document.getElementById('guilds-grid').innerHTML = `<div class="col-span-full py-10 text-center text-gray-400">A carregar dados do servidor pela primeira vez...</div>`;
       
-      // Sempre busca em background para garantir dados atualizados
       try {
         const { guildas, configGuilda } = await fetchCeoDataFromFirebase();
         
@@ -288,6 +289,7 @@
         localStorage.setItem('hub_ceo_config_v1', JSON.stringify({ ts: Date.now(), items: configGuilda }));
 
         hydrateFromSnapshots(guildas, configGuilda);
+        updateSolicitacoesBadge();
 
         if (force) showToast('success', 'Atualizado com sucesso!');
       } catch (e) {
@@ -310,7 +312,15 @@
         leaders: configMap[d.id]?.leaders || (d.ownerEmail ? [d.ownerEmail] : []),
         admins: configMap[d.id]?.admins || [],
         ownerUid: d.ownerUid || configMap[d.id]?.ownerUid || configMap[d.id]?.uid || null,
+        memberCount: d.memberCount !== undefined ? d.memberCount : '...' // Preserva do cache se tiver
       }));
+
+      // Ordena por data de criação (Mais novas primeiro)
+      window.allGuildas.sort((a, b) => {
+        const tA = a.createdAt?.seconds || a.createdAt || 0;
+        const tB = b.createdAt?.seconds || b.createdAt || 0;
+        return tB - tA;
+      });
 
       allGuilds = window.allGuildas;
       
@@ -318,10 +328,9 @@
       if (statGuilds) statGuilds.textContent = allGuilds.length;
       
       renderGuilds();
-      updateSolicitacoesBadge(); // Atualiza apenas o contador de badges
     }
     
-    // Atualiza contagem das pendentes em tempo real
+    // Atualiza apenas o contador de badges em tempo real (fora da lista de guildas)
     async function updateSolicitacoesBadge() {
         try {
             const snap = await getDocs(collection(db, 'solicita'));
@@ -375,6 +384,10 @@
               <i data-lucide="shield-check" class="w-3.5 h-3.5 text-blue-500"></i>
               <span><b>Admins:</b> ${g.admins ? g.admins.length : 0}</span>
             </div>
+            <div class="flex items-center gap-2 text-[11px] text-gray-500">
+              <i data-lucide="users" class="w-3.5 h-3.5 text-emerald-500"></i>
+              <span><b>Membros:</b> <span id="card-members-${g.id}" class="font-bold">${g.memberCount !== undefined ? g.memberCount : '...'}</span></span>
+            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-2">
@@ -388,9 +401,26 @@
         </div>
       `).join('');
       initIcons();
+
+      // Busca a quantidade de membros para os cards que ainda não estão no cache
+      filtered.forEach(g => {
+        if (g.memberCount === undefined || g.memberCount === '...') {
+          getDocs(collection(db, 'guildas', g.id, 'membros')).then(snap => {
+             const count = snap.size;
+             g.memberCount = count; // Salva na memória
+             const el = document.getElementById(`card-members-${g.id}`);
+             if (el) el.textContent = count;
+             
+             // Atualiza o cache de forma invisível
+             localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas }));
+          }).catch(() => {
+             const el = document.getElementById(`card-members-${g.id}`);
+             if (el) el.textContent = 'Erro';
+          });
+        }
+      });
     }
 
-    // Detalhes da Guilda
     window.openDetails = (gid) => {
       const g = allGuilds.find(x => x.id === gid);
       if(!g) return;
@@ -415,7 +445,7 @@
             <div class="grid grid-cols-2 gap-2">
               <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
                 <p class="text-[10px] text-gray-500 font-black uppercase">Membros</p>
-                <p class="text-xl font-black text-gray-900 mt-1"><span id="members-count">—</span></p>
+                <p class="text-xl font-black text-gray-900 mt-1"><span id="members-count">${g.memberCount !== '...' ? g.memberCount : '—'}</span></p>
               </div>
               <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
                 <p class="text-[10px] text-gray-500 font-black uppercase">Plano</p>
@@ -455,17 +485,15 @@
       document.getElementById('drawer').classList.remove('hidden');
       setTimeout(() => body.classList.remove('translate-x-full'), 10);
 
-      // Contar membros (subcoleção /guildas/{gid}/membros)
-      (async () => {
-        try {
-          const memSnap = await getDocs(collection(db, 'guildas', gid, 'membros'));
-          const el = document.getElementById('members-count');
-          if (el) el.textContent = String(memSnap.size);
-        } catch (e) {
-          const el = document.getElementById('members-count');
-          if (el) el.textContent = '—';
-        }
-      })();
+      // Se não tinha o count salvo, busca para os detalhes também
+      if (g.memberCount === '...') {
+          getDocs(collection(db, 'guildas', gid, 'membros')).then(snap => {
+            const count = snap.size;
+            g.memberCount = count;
+            const el = document.getElementById('members-count');
+            if (el) el.textContent = String(count);
+          }).catch(()=>{});
+      }
 
       document.getElementById('btn-save-vip').onclick = async () => {
         const nv = document.getElementById('edit-vip-sel').value;
@@ -479,7 +507,6 @@
           try { const gx = window.allGuildas.find(x=>x.id===gid); if (gx) {gx.vipTier = nv; gx.vip = nv; gx.vipExpiresAt = expiresAtMs;} } catch(_) {}
           renderGuilds();
           
-          // Re-salva no localStorage
           localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas }));
         } catch(e) { console.error('VIP save error:', e); showToast('error', 'Erro ao salvar VIP.'); }
       };
@@ -573,7 +600,7 @@
       }
     };
 
-    // Solicitações (Busca em tempo real sempre que for aberto)
+    // Solicitações (Busca em tempo real)
     async function loadSolicita() {
       const grid = document.getElementById('solicita-grid');
       grid.innerHTML = `<div class="col-span-full py-10 text-center text-gray-400">A carregar solicitações do servidor...</div>`;
@@ -624,7 +651,7 @@
 
     window.approveSolicita = async (sid, plano) => {
       try {
-        const uid = sid; // agora o docId da solicitação é o UID
+        const uid = sid;
         const uSnap = await getDoc(doc(db, 'users', uid));
         if (!uSnap.exists()) throw new Error("Usuário não encontrado.");
 
@@ -668,7 +695,7 @@
         } catch(_) {}
         
         renderGuilds();
-        loadSolicita(); // recarrega modal
+        loadSolicita(); 
       } catch (e) {
         console.error(e);
         showToast('error', 'Erro ao aprovar: ' + (e?.message || e));
@@ -696,7 +723,7 @@
     // Eventos
     document.getElementById('drawer-close').onclick = closeDrawer;
     document.getElementById('drawer-backdrop').onclick = closeDrawer;
-    document.getElementById('btn-reload').onclick = () => loadData(true);
+    document.getElementById('btn-reload').onclick = () => loadData(true); // O "true" Força a carregar do Firebase
     document.getElementById('guild-search').oninput = renderGuilds;
     document.getElementById('vip-filter').onchange = renderGuilds;
     document.getElementById('btn-open-solicita').onclick = () => { 
