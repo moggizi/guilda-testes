@@ -141,26 +141,6 @@
     const hint = document.getElementById('tag-hint');
     const readOnlyNote = document.getElementById('readonly-note');
 
-    // --- CACHE INSTANTÂNEO (evita delay ao abrir Ajustes) ---
-    // Tenta renderizar a tag já salva localmente antes do auth terminar.
-    try {
-      const ctx = getGuildContext();
-      const gid = ctx?.guildId;
-      if (gid) {
-        const raw = localStorage.getItem(`tagMembros_${gid}`);
-        if (raw) {
-          const cached = JSON.parse(raw);
-          if (cached?.value) {
-            tagInput.value = String(cached.value);
-            hint.textContent = `Tag configurada: “${cached.value}”`;
-          }
-        }
-      }
-    } catch (_) {}
-    // --------------------------------------------------------
-
-    // isReadonly: desabilita inputs
-    // showAdminNote: mostra aviso APENAS quando for Admin (evita piscar enquanto auth carrega)
     function setReadonly(isReadonly, showAdminNote = false) {
       tagInput.disabled = isReadonly;
       btnSave.disabled = isReadonly;
@@ -176,17 +156,42 @@
       }
     }
 
-    // Começa travado, porém SEM mostrar aviso (evita piscar)
-    setReadonly(true, false);
+    // --- CACHE INSTANTÂNEO ---
+    // Trava instantaneamente baseado no localStorage antes do Firebase carregar
+    try {
+      const ctx = getGuildContext();
+      if (ctx) {
+        const isLeader = ctx.role === 'Líder';
+        const isAdmin = ctx.role === 'Admin';
+        setReadonly(!isLeader, isAdmin);
+
+        const gid = ctx.guildId;
+        if (gid) {
+          const raw = localStorage.getItem(`tagMembros_${gid}`);
+          if (raw) {
+            const cached = JSON.parse(raw);
+            if (cached?.value) {
+              tagInput.value = String(cached.value);
+              hint.textContent = `Tag configurada: “${cached.value}”`;
+            }
+          }
+        }
+      } else {
+        setReadonly(true, false);
+      }
+    } catch (_) {
+      setReadonly(true, false);
+    }
+    // --------------------------------------------------------
 
     checkAuth().then(async (user) => {
       if (!user) return;
       document.getElementById('btn-logout').onclick = logout;
 
-      const role = (document.getElementById('user-role')?.textContent || '').trim();
-      const isLeader = role === 'Líder';
-      const isAdmin = role === 'Admin';
-      // Só Admin vê o aviso. Líder não deve ver nada aqui.
+      // Confirma o papel vindo do checkAuth (mais seguro)
+      const ctx = getGuildContext();
+      const isLeader = ctx?.role === 'Líder';
+      const isAdmin = ctx?.role === 'Admin';
       setReadonly(!isLeader, isAdmin);
 
       const current = await getMemberTagConfig();
@@ -213,45 +218,38 @@
     });
   </script>
   
-<!-- OTK Footer -->
+  <!-- OTK Footer -->
   <footer id="otk-footer" class="mt-12 border-t border-emerald-500/10 text-slate-700">
     <div class="mx-auto w-full max-w-5xl px-4 py-10">
       <div class="flex flex-col items-center gap-4">
-  
         <div class="flex items-center justify-center gap-3">
           <a href="https://instagram.com/ottakubrasil" target="_blank" rel="noopener noreferrer"
              class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
              aria-label="Instagram principal: @ottakubrasil" title="@ottakubrasil">
             <i data-lucide="instagram" class="h-5 w-5"></i>
           </a>
-  
           <a href="https://instagram.com/gameotk" target="_blank" rel="noopener noreferrer"
              class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
              aria-label="Instagram gaming: @gameotk" title="@gameotk">
             <i data-lucide="instagram" class="h-5 w-5"></i>
           </a>
-  
           <a href="https://ottakubrasil.online" target="_blank" rel="noopener noreferrer"
              class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
              aria-label="Site: ottakubrasil.online" title="ottakubrasil.online">
             <i data-lucide="globe" class="h-5 w-5"></i>
           </a>
         </div>
-  
         <div class="text-center">
           <p class="text-sm font-semibold tracking-wide text-slate-800">
             Ottakubrasil • Guilda Hub
           </p>
-  
           <p class="mt-2 max-w-xl text-xs leading-relaxed text-slate-600">
             Central de guilda e eventos: organização, velocidade e controle para facilitar sua vida no dia a dia.
           </p>
-  
           <p class="mt-4 text-xs text-slate-500">
             © Ottakubrasil • 2026
           </p>
         </div>
-  
       </div>
     </div>
   </footer>
