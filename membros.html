@@ -21,20 +21,20 @@
     .switch input:focus + .slider{box-shadow:0 0 0 4px rgba(16,185,129,.18)}
     .switch input:checked + .slider:before{transform:translateX(20px)}
   
-/* playMode picker (check-circle, multi select) */
-.pm-wrap{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
-.pm-option{display:flex;align-items:center;gap:.55rem;padding:.75rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;transition:.15s;font-size:.875rem;color:#374151}
-.pm-option:hover{background:#f9fafb}
-.pm-circle{width:18px;height:18px;border-radius:999px;border:2px solid #d1d5db;display:inline-block;position:relative;flex:0 0 auto;transition:.2s;}
-.pm-option.pm-selected{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12); background-color: #ecfdf5;}
-.pm-option.pm-selected .pm-circle{border-color:#10b981;background:#10b981}
-.pm-option.pm-selected .pm-circle:after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(45deg)}
+    /* playMode picker (check-circle, multi select) */
+    .pm-wrap{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+    .pm-option{display:flex;align-items:center;gap:.55rem;padding:.75rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;transition:.15s;font-size:.875rem;color:#374151}
+    .pm-option:hover{background:#f9fafb}
+    .pm-circle{width:18px;height:18px;border-radius:999px;border:2px solid #d1d5db;display:inline-block;position:relative;flex:0 0 auto;transition:.2s;}
+    .pm-option.pm-selected{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12); background-color: #ecfdf5;}
+    .pm-option.pm-selected .pm-circle{border-color:#10b981;background:#10b981}
+    .pm-option.pm-selected .pm-circle:after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(45deg)}
 
-/* Quick Edit specific fixes */
-.animate-in { animation: fadeIn 0.2s ease-out forwards; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.zoom-in-95 { animation: zoomIn 0.2s ease-out forwards; }
-@keyframes zoomIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    /* Quick Edit specific fixes */
+    .animate-in { animation: fadeIn 0.2s ease-out forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .zoom-in-95 { animation: zoomIn 0.2s ease-out forwards; }
+    @keyframes zoomIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
   </style>
 </head>
 <body class="bg-gray-50/80">
@@ -242,29 +242,29 @@
           <input id="whatsapp" type="text" placeholder="11999999999" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm">
         </div>
 
-<div class="mt-6">
-      <p class="text-sm font-semibold text-gray-900">Modo de jogo</p>
-            <input type="hidden" id="play-mode" value="" />
+        <div class="mt-6">
+          <p class="text-sm font-semibold text-gray-900">Modo de jogo</p>
+          <input type="hidden" id="play-mode" value="" />
 
-      <div id="playmode-wrap" class="pm-wrap mt-3">
-        <button type="button" class="pm-option" data-value="Rush">
-          <span class="pm-circle" aria-hidden="true"></span>
-          <span>Rush</span>
-        </button>
-        <button type="button" class="pm-option" data-value="Full Gás">
-          <span class="pm-circle" aria-hidden="true"></span>
-          <span>Full Gás</span>
-        </button>
-        <button type="button" class="pm-option" data-value="Curandeiro">
-          <span class="pm-circle" aria-hidden="true"></span>
-          <span>Curandeiro</span>
-        </button>
-        <button type="button" class="pm-option" data-value="Fuzileiro">
-          <span class="pm-circle" aria-hidden="true"></span>
-          <span>Fuzileiro</span>
-        </button>
-      </div>
-    </div>
+          <div id="playmode-wrap" class="pm-wrap mt-3">
+            <button type="button" class="pm-option" data-value="Rush">
+              <span class="pm-circle" aria-hidden="true"></span>
+              <span>Rush</span>
+            </button>
+            <button type="button" class="pm-option" data-value="Full Gás">
+              <span class="pm-circle" aria-hidden="true"></span>
+              <span>Full Gás</span>
+            </button>
+            <button type="button" class="pm-option" data-value="Curandeiro">
+              <span class="pm-circle" aria-hidden="true"></span>
+              <span>Curandeiro</span>
+            </button>
+            <button type="button" class="pm-option" data-value="Fuzileiro">
+              <span class="pm-circle" aria-hidden="true"></span>
+              <span>Fuzileiro</span>
+            </button>
+          </div>
+        </div>
 
         <hr class="border-gray-100">
 
@@ -378,38 +378,203 @@
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
-    initIcons();
-    initPlayModePicker();
-    
+
+    // ==========================================
+    // VARIÁVEIS DE ESTADO E CHAVES DE CACHE
+    // ==========================================
     let membersCache = [];
     let currentFilter = 'all';
-
     let memberTag = null;
     let hasTagManualOverride = false;
-
-    // ----- LÓGICA DE CACHE INSTANTÂNEO -----
-    // Roda instantaneamente ao abrir a página usando a chave CERTA da guilda.
-    try {
-      const ctx = getGuildContext();
-      const lsKey = ctx?.guildId ? `membersList_${ctx.guildId}` : 'membersList';
-      const cachedMembersJSON = localStorage.getItem(lsKey);
-      
-      if(cachedMembersJSON) {
-         const cached = JSON.parse(cachedMembersJSON);
-         if(Array.isArray(cached) && cached.length > 0) {
-             membersCache = cached;
-             applyFiltersAndRender();
-             const countEl = document.getElementById('member-count');
-             if(countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
-         }
-      }
-    } catch(e) { console.error("Erro cache:", e); }
-    // ---------------------------------------
-
-    // ----- LÓGICA DE EDIÇÃO RÁPIDA -----
     let pendingEdits = {}; 
     let currentZeroAction = ''; 
 
+    function __membersLsKey() {
+      const gid = getGuildContext()?.guildId;
+      return gid ? `membersList_${gid}` : 'membersList';
+    }
+
+    function __readMembersFromCache() {
+      try {
+        const raw = localStorage.getItem(__membersLsKey());
+        if (!raw) return null;
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function __writeMembersToCache(list) {
+      try {
+        localStorage.setItem(__membersLsKey(), JSON.stringify(list || []));
+      } catch (_) {}
+    }
+
+    function __setMembersCache(list) {
+      membersCache = Array.isArray(list) ? list : [];
+      membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
+      __writeMembersToCache(membersCache);
+      applyFiltersAndRender();
+      const countEl = document.getElementById('member-count');
+      if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+    }
+
+    // ==========================================
+    // FUNÇÕES DE RENDERIZAÇÃO
+    // ==========================================
+    window.applyFiltersAndRender = function() {
+      const termo = document.getElementById('search-input')?.value.toLowerCase() || '';
+      
+      const filtrados = membersCache.filter(m => {
+        const matchBusca = (m.nick && m.nick.toLowerCase().includes(termo)) || 
+                           (m.visibleId && String(m.visibleId).includes(termo));
+        if (!matchBusca) return false;
+
+        if (currentFilter === 'with-tag') return m.hasTag;
+        if (currentFilter === 'no-tag') return !m.hasTag;
+        if (currentFilter === 'with-gg') return m.guildWar;
+        if (currentFilter === 'no-gg') return !m.guildWar;
+        if (currentFilter === 'with-weekly') return m.weeklyMeta;
+        if (currentFilter === 'no-weekly') return !m.weeklyMeta;
+        if (currentFilter === 'all-met') return (m.weeklyMeta && m.guildWar);
+
+        return true; 
+      });
+
+      renderList(filtrados, termo !== '' || currentFilter !== 'all');
+    };
+
+    function badge(active, icon) {
+      return `<div class="w-7 h-7 rounded-lg flex items-center justify-center ${active ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'}"><i data-lucide="${icon}" class="w-3 h-3"></i></div>`;
+    }
+
+    function detailBox(label, active, meta) {
+      return `<div class="bg-white rounded-xl p-3 border border-gray-100">
+        <p class="text-xs text-gray-400 mb-1">${label}</p>
+        <div class="flex items-center gap-1.5">
+          <i data-lucide="${active ? 'check' : 'x'}" class="w-4 h-4 ${active ? 'text-emerald-500' : 'text-red-400'}"></i>
+          <span class="text-xs text-gray-500">Meta: ${meta}</span>
+        </div>
+      </div>`;
+    }
+
+    function renderList(list, isSearch = false) {
+      const el = document.getElementById('members-list');
+      
+      if(list.length === 0) {
+        if(isSearch) {
+           el.innerHTML = `<div class="text-center py-8 text-gray-400">Nenhum membro encontrado neste filtro/busca.</div>`;
+        } else {
+           el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">Nenhum membro encontrado.</div>`;
+        }
+        return;
+      }
+
+      el.innerHTML = list.map(m => `
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
+          <div class="w-full flex items-center gap-3 p-5 cursor-pointer" onclick="toggleDetails('${m.id}')">
+            <div class="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
+              ${m.nick ? m.nick.charAt(0).toUpperCase() : '?'}
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-gray-900 text-sm truncate">${m.nick || 'Sem Nick'}</p>
+              <p class="text-xs text-gray-400">ID: ${m.visibleId || '?'}</p>
+            </div>
+            <div class="flex gap-1.5">
+              ${badge(m.guildWar, 'swords')}
+              ${badge(m.weeklyMeta, 'target')}
+              ${badge(m.hasTag, 'tag')}
+            </div>
+            <div class="text-gray-300"><i data-lucide="chevron-down" class="w-5 h-5"></i></div>
+          </div>
+          <div id="details-${m.id}" class="hidden border-t border-gray-100 p-4 bg-gray-50/50 space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              ${detailBox('Guerra', m.guildWar, m.guildWarMeta)}
+              ${detailBox('Meta Semanal', m.weeklyMeta, m.weeklyMetaValue)}
+              <div class="bg-white rounded-xl p-3 border border-gray-100">
+                <p class="text-xs text-gray-400 mb-1">Tag</p>
+                ${m.hasTag ? '<span class="text-emerald-500 font-bold text-xs">Sim</span>' : '<span class="text-red-400 text-xs">Não</span>'}
+              </div>
+              <div class="bg-white rounded-xl p-3 border border-gray-100">
+                <p class="text-xs text-gray-400 mb-1">WhatsApp</p>
+                ${m.whatsapp ? `<a href="https://wa.me/55${m.whatsapp}" target="_blank" class="text-emerald-600 text-xs hover:underline">${m.whatsapp}</a>` : '<span class="text-xs text-gray-400">-</span>'}
+              </div>
+            </div>
+            <div class="flex gap-2 pt-2">
+              <button onclick="editMember('${m.id}')" class="flex-1 py-2.5 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50">Editar</button>
+              <button onclick="deleteMember('${m.id}')" class="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50">Excluir</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      initIcons();
+    }
+
+
+    // ==========================================
+    // INICIALIZAÇÃO INSTANTÂNEA DO CACHE (Sem piscar)
+    // ==========================================
+    try {
+      const initCache = __readMembersFromCache();
+      if (initCache && initCache.length > 0) {
+        __setMembersCache(initCache);
+      }
+    } catch(e) { 
+      console.error("Erro no carregamento instantâneo do cache:", e); 
+    }
+
+
+    // ==========================================
+    // LÓGICA DE SINCRONIZAÇÃO (Firebase)
+    // ==========================================
+    window.loadMembers = async function(forceRefresh = false) {
+      const cached = __readMembersFromCache();
+      const needsFirstFetch = !cached || !cached.length;
+
+      // Se NÃO pediu pra forçar, E a gente JÁ achou os membros no cache, encerra aqui na hora!
+      if (!forceRefresh && !needsFirstFetch) {
+        // Garantia extra: se a tela por algum motivo esvaziou a variável, reabastece ela.
+        if (membersCache.length === 0 && cached) {
+           __setMembersCache(cached);
+        }
+        return; 
+      }
+
+      if (forceRefresh) showToast('info', 'Sincronizando com a base de dados...');
+
+      try {
+        const snap = await getDocs(collection(db, "guildas", getGuildContext().guildId, "membros"));
+        const fresh = [];
+        snap.forEach(d => fresh.push({ id: d.id, ...d.data() }));
+        fresh.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
+
+        const cachedJSON = JSON.stringify(cached || []);
+        const freshJSON = JSON.stringify(fresh);
+
+        // Atualiza a tela só se tiver novidade ou for o primeiro acesso
+        if (cachedJSON !== freshJSON) {
+          __setMembersCache(fresh);
+          if (forceRefresh) showToast('success', 'Lista atualizada com sucesso.');
+        } else {
+          if (needsFirstFetch) __setMembersCache(fresh);
+          if (forceRefresh) showToast('success', 'Tudo já estava atualizado.');
+        }
+      } catch (err) {
+        console.error(err);
+        if (needsFirstFetch) {
+          __setMembersCache([]);
+          showToast('error', 'Erro ao buscar dados.');
+        } else if (forceRefresh) {
+          showToast('error', 'Erro ao sincronizar.');
+        }
+      }
+    };
+
+
+    // ==========================================
+    // FUNCIONALIDADES DOS MODAIS (EDIÇÃO RÁPIDA, ETC)
+    // ==========================================
     window.openQuickEditModal = () => {
        pendingEdits = {};
        document.getElementById('qe-save-btn').classList.add('hidden');
@@ -514,12 +679,7 @@
                };
              }
            });
-
-           membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
-           __writeMembersToCache(membersCache);
-           applyFiltersAndRender();
-           const countEl = document.getElementById('member-count');
-           if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+           __setMembersCache(membersCache);
        } catch(e) {
            console.error(e);
            showToast('error', 'Erro ao salvar alterações em lote.');
@@ -529,7 +689,7 @@
        }
     };
 
-    // ----- LÓGICA PARA ZERAR TODOS -----
+    // ----- ZERAR TODOS -----
     window.promptZero = (type) => {
        currentZeroAction = type;
        const label = type === 'gg' ? 'a Guerra (GG)' : 'o Semanal';
@@ -576,11 +736,7 @@
             } else {
               membersCache = (membersCache || []).map(m => ({ ...m, weeklyMeta: false, weeklyMetaValue: 0, updatedAt: Date.now() }));
             }
-            membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
-            __writeMembersToCache(membersCache);
-            applyFiltersAndRender();
-            const countEl = document.getElementById('member-count');
-            if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+            __setMembersCache(membersCache);
        } catch(e) {
            console.error(e);
            showToast('error', 'Erro ao processar zeramento.');
@@ -588,7 +744,7 @@
     };
 
 
-    // ----- LOGICA DO NOVO FILTRO DROPDOWN -----
+    // ----- FILTRO DROPDOWN -----
     window.toggleFilterDropdown = () => {
       document.getElementById('filter-dropdown').classList.toggle('hidden');
     };
@@ -618,57 +774,12 @@
       }
     });
 
-    window.applyFiltersAndRender = () => {
-      const termo = document.getElementById('search-input')?.value.toLowerCase() || '';
-      
-      const filtrados = membersCache.filter(m => {
-        const matchBusca = (m.nick && m.nick.toLowerCase().includes(termo)) || 
-                           (m.visibleId && String(m.visibleId).includes(termo));
-        if (!matchBusca) return false;
 
-        if (currentFilter === 'with-tag') return m.hasTag;
-        if (currentFilter === 'no-tag') return !m.hasTag;
-        if (currentFilter === 'with-gg') return m.guildWar;
-        if (currentFilter === 'no-gg') return !m.guildWar;
-        if (currentFilter === 'with-weekly') return m.weeklyMeta;
-        if (currentFilter === 'no-weekly') return !m.weeklyMeta;
-        if (currentFilter === 'all-met') return (m.weeklyMeta && m.guildWar);
-
-        return true; 
-      });
-
-      renderList(filtrados, termo !== '' || currentFilter !== 'all');
-    }
-    // ------------------------------------------
-
+    // ==========================================
+    // HELPERS DE TAGS E PLAYMODE
+    // ==========================================
     function escapeRegExp(str) {
       return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    }
-
-    function stripKnownTags(nick) {
-      const raw = String(nick || "").trim();
-      const candidates = [memberTag, "ᵒᵗᵏ", "otk"];
-      for (const t of candidates) {
-        if (!t) continue;
-        const re = new RegExp("^" + escapeRegExp(String(t).trim()) + "\\s+", "i");
-        if (re.test(raw)) return raw.replace(re, "").trim();
-      }
-      return raw;
-    }
-
-    function normalizeNickWithTag(rawNick, tag, wantsTag) {
-      const nick = (rawNick || '').trim();
-      if (!wantsTag || !tag) return nick;
-
-      const t = String(tag).trim();
-      if (!t) return nick;
-
-      const esc = escapeRegExp(t);
-      let cleaned = nick.replace(new RegExp('^(?:' + esc + '\\s*)+', 'g'), '').trim();
-      if (cleaned === nick) {
-        cleaned = nick.replace(new RegExp('^(?:' + esc + '\\s*)+', 'gi'), '').trim();
-      }
-      return cleaned ? (t + ' ' + cleaned) : t;
     }
 
     function nickHasMemberTag(nick) {
@@ -759,184 +870,10 @@
       });
     }
 
-    document.addEventListener('change', (ev) => {
-      if (ev && ev.target && ev.target.id === 'has-tag') {
-        hasTagManualOverride = true;
-      }
-    });
 
-    document.addEventListener('input', (ev) => {
-      if (ev && ev.target && ev.target.id === 'nick') {
-        syncHasTagToggleFromNick();
-      }
-    });
-
-
-    checkAuth().then(async (user) => {
-      if(!user) return;
-      document.getElementById('btn-logout').onclick = logout;
-
-      memberTag = await getMemberTagConfig();
-
-      const hasTagEl = document.getElementById('has-tag');
-      if (hasTagEl) {
-        hasTagEl.addEventListener('change', () => {
-          if (hasTagEl.checked && !memberTag) {
-            showToast('error', 'Nenhuma tag configurada. Configure em Ajustes.');
-            hasTagEl.checked = false;
-          }
-        });
-      }
-
-      const nickEl = document.getElementById('nick');
-      if (nickEl) {
-        nickEl.addEventListener('input', syncHasTagToggleFromNick);
-        nickEl.addEventListener('blur', syncHasTagToggleFromNick);
-      }
-      
-      loadMembers(false);
-      
-      const searchInput = document.getElementById('search-input');
-      if (searchInput) {
-        searchInput.addEventListener('input', applyFiltersAndRender);
-      }
-    });
-
-    function __membersLsKey() {
-      const gid = getGuildContext()?.guildId;
-      return gid ? `membersList_${gid}` : 'membersList';
-    }
-
-    function __readMembersFromCache() {
-      try {
-        const raw = localStorage.getItem(__membersLsKey());
-        if (!raw) return null;
-        const arr = JSON.parse(raw);
-        return Array.isArray(arr) ? arr : null;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    function __writeMembersToCache(list) {
-      try {
-        localStorage.setItem(__membersLsKey(), JSON.stringify(list || []));
-      } catch (_) {}
-    }
-
-    function __setMembersCache(list) {
-      membersCache = Array.isArray(list) ? list : [];
-      membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
-      __writeMembersToCache(membersCache);
-      applyFiltersAndRender();
-      const countEl = document.getElementById('member-count');
-      if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
-    }
-
-    // Carregamento otimizado: só bate no Firebase se o cache estiver vazio ou se o usuário pedir (forceRefresh)
-    window.loadMembers = async function(forceRefresh = false) {
-      const cached = __readMembersFromCache();
-      const needsFirstFetch = !cached || !cached.length;
-
-      // Se não é refresh e já tem cache, não faz nada (pois o cache já foi renderizado instantaneamente no início)
-      if (!forceRefresh && !needsFirstFetch) return;
-
-      if (forceRefresh) showToast('info', 'Sincronizando...');
-
-      try {
-        const snap = await getDocs(collection(db, "guildas", getGuildContext().guildId, "membros"));
-        const fresh = [];
-        snap.forEach(d => fresh.push({ id: d.id, ...d.data() }));
-        fresh.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
-
-        const cachedJSON = JSON.stringify(cached || []);
-        const freshJSON = JSON.stringify(fresh);
-
-        // Só atualiza UI/cache se realmente mudou
-        if (cachedJSON !== freshJSON) {
-          __setMembersCache(fresh);
-          if (forceRefresh) showToast('success', 'Lista atualizada.');
-        } else {
-          if (needsFirstFetch) __setMembersCache(fresh); // caso de cache vazio na primeira entrada
-          if (forceRefresh) showToast('success', 'Nada mudou.');
-        }
-      } catch (err) {
-        console.error(err);
-        if (needsFirstFetch) {
-          __setMembersCache([]);
-          showToast('error', 'Erro ao buscar dados.');
-        } else if (forceRefresh) {
-          showToast('error', 'Erro ao sincronizar.');
-        }
-      }
-    };
-
-    function renderList(list, isSearch = false) {
-      const el = document.getElementById('members-list');
-      
-      if(list.length === 0) {
-        if(isSearch) {
-           el.innerHTML = `<div class="text-center py-8 text-gray-400">Nenhum membro encontrado neste filtro/busca.</div>`;
-        } else {
-           el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">Nenhum membro encontrado.</div>`;
-        }
-        return;
-      }
-
-      el.innerHTML = list.map(m => `
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
-          <div class="w-full flex items-center gap-3 p-5 cursor-pointer" onclick="toggleDetails('${m.id}')">
-            <div class="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
-              ${m.nick ? m.nick.charAt(0).toUpperCase() : '?'}
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="font-semibold text-gray-900 text-sm truncate">${m.nick || 'Sem Nick'}</p>
-              <p class="text-xs text-gray-400">ID: ${m.visibleId || '?'}</p>
-            </div>
-            <div class="flex gap-1.5">
-              ${badge(m.guildWar, 'swords')}
-              ${badge(m.weeklyMeta, 'target')}
-              ${badge(m.hasTag, 'tag')}
-            </div>
-            <div class="text-gray-300"><i data-lucide="chevron-down" class="w-5 h-5"></i></div>
-          </div>
-          <div id="details-${m.id}" class="hidden border-t border-gray-100 p-4 bg-gray-50/50 space-y-3">
-            <div class="grid grid-cols-2 gap-3">
-              ${detailBox('Guerra', m.guildWar, m.guildWarMeta)}
-              ${detailBox('Meta Semanal', m.weeklyMeta, m.weeklyMetaValue)}
-              <div class="bg-white rounded-xl p-3 border border-gray-100">
-                <p class="text-xs text-gray-400 mb-1">Tag</p>
-                ${m.hasTag ? '<span class="text-emerald-500 font-bold text-xs">Sim</span>' : '<span class="text-red-400 text-xs">Não</span>'}
-              </div>
-              <div class="bg-white rounded-xl p-3 border border-gray-100">
-                <p class="text-xs text-gray-400 mb-1">WhatsApp</p>
-                ${m.whatsapp ? `<a href="https://wa.me/55${m.whatsapp}" target="_blank" class="text-emerald-600 text-xs hover:underline">${m.whatsapp}</a>` : '<span class="text-xs text-gray-400">-</span>'}
-              </div>
-            </div>
-            <div class="flex gap-2 pt-2">
-              <button onclick="editMember('${m.id}')" class="flex-1 py-2.5 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50">Editar</button>
-              <button onclick="deleteMember('${m.id}')" class="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50">Excluir</button>
-            </div>
-          </div>
-        </div>
-      `).join('');
-      initIcons();
-    }
-
-    function badge(active, icon) {
-      return `<div class="w-7 h-7 rounded-lg flex items-center justify-center ${active ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'}"><i data-lucide="${icon}" class="w-3 h-3"></i></div>`;
-    }
-
-    function detailBox(label, active, meta) {
-      return `<div class="bg-white rounded-xl p-3 border border-gray-100">
-        <p class="text-xs text-gray-400 mb-1">${label}</p>
-        <div class="flex items-center gap-1.5">
-          <i data-lucide="${active ? 'check' : 'x'}" class="w-4 h-4 ${active ? 'text-emerald-500' : 'text-red-400'}"></i>
-          <span class="text-xs text-gray-500">Meta: ${meta}</span>
-        </div>
-      </div>`;
-    }
-
+    // ==========================================
+    // EVENTOS DO MODAL DE MEMBROS
+    // ==========================================
     window.toggleDetails = (id) => {
       const el = document.getElementById(`details-${id}`);
       el.classList.toggle('hidden');
@@ -981,10 +918,7 @@
         await deleteDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id));
 
         membersCache = (membersCache || []).filter(m => m.id !== id);
-        __writeMembersToCache(membersCache);
-        applyFiltersAndRender();
-        const countEl = document.getElementById('member-count');
-        if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+        __setMembersCache(membersCache);
 
         showToast('success', 'Membro excluído.');
       } catch(e) {
@@ -1084,60 +1018,106 @@
             membersCache.push({ id: newRef.id, ...cachePayload });
           }
         }
+        
+        __setMembersCache(membersCache);
 
-        membersCache.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
-        __writeMembersToCache(membersCache);
-        applyFiltersAndRender();
-        const countEl = document.getElementById('member-count');
-        if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
       } catch(err) {
         showToast('error', 'Erro ao salvar.');
       }
     });
+
+    document.addEventListener('change', (ev) => {
+      if (ev && ev.target && ev.target.id === 'has-tag') {
+        hasTagManualOverride = true;
+      }
+    });
+
+    document.addEventListener('input', (ev) => {
+      if (ev && ev.target && ev.target.id === 'nick') {
+        syncHasTagToggleFromNick();
+      }
+    });
+
+    // ==========================================
+    // FINALIZAÇÃO DE BOOT E AUTENTICAÇÃO
+    // ==========================================
+    initPlayModePicker();
+
+    checkAuth().then(async (user) => {
+      if(!user) return;
+      document.getElementById('btn-logout').onclick = logout;
+
+      memberTag = await getMemberTagConfig();
+
+      const hasTagEl = document.getElementById('has-tag');
+      if (hasTagEl) {
+        hasTagEl.addEventListener('change', () => {
+          if (hasTagEl.checked && !memberTag) {
+            showToast('error', 'Nenhuma tag configurada. Configure em Ajustes.');
+            hasTagEl.checked = false;
+          }
+        });
+      }
+
+      const nickEl = document.getElementById('nick');
+      if (nickEl) {
+        nickEl.addEventListener('input', syncHasTagToggleFromNick);
+        nickEl.addEventListener('blur', syncHasTagToggleFromNick);
+      }
+      
+      // Chama loadMembers para verificar se precisamos baixar algo (se não precisarmos, ele finaliza mudo)
+      loadMembers(false);
+      
+      const searchInput = document.getElementById('search-input');
+      if (searchInput) {
+        searchInput.addEventListener('input', window.applyFiltersAndRender);
+      }
+    });
+
   </script>
 
   <!-- OTK Footer -->
-<footer id="otk-footer" class="mt-12 border-t border-emerald-500/10 text-slate-700">
-  <div class="mx-auto w-full max-w-5xl px-4 py-10">
-    <div class="flex flex-col items-center gap-4">
+  <footer id="otk-footer" class="mt-12 border-t border-emerald-500/10 text-slate-700">
+    <div class="mx-auto w-full max-w-5xl px-4 py-10">
+      <div class="flex flex-col items-center gap-4">
 
-      <div class="flex items-center justify-center gap-3">
-        <a href="https://instagram.com/ottakubrasil" target="_blank" rel="noopener noreferrer"
-           class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
-           aria-label="Instagram principal: @ottakubrasil" title="@ottakubrasil">
-          <i data-lucide="instagram" class="h-5 w-5"></i>
-        </a>
+        <div class="flex items-center justify-center gap-3">
+          <a href="https://instagram.com/ottakubrasil" target="_blank" rel="noopener noreferrer"
+             class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
+             aria-label="Instagram principal: @ottakubrasil" title="@ottakubrasil">
+            <i data-lucide="instagram" class="h-5 w-5"></i>
+          </a>
 
-        <a href="https://instagram.com/gameotk" target="_blank" rel="noopener noreferrer"
-           class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
-           aria-label="Instagram gaming: @gameotk" title="@gameotk">
-          <i data-lucide="instagram" class="h-5 w-5"></i>
-        </a>
+          <a href="https://instagram.com/gameotk" target="_blank" rel="noopener noreferrer"
+             class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
+             aria-label="Instagram gaming: @gameotk" title="@gameotk">
+            <i data-lucide="instagram" class="h-5 w-5"></i>
+          </a>
 
-        <a href="https://ottakubrasil.online" target="_blank" rel="noopener noreferrer"
-           class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
-           aria-label="Site: ottakubrasil.online" title="ottakubrasil.online">
-          <i data-lucide="globe" class="h-5 w-5"></i>
-        </a>
+          <a href="https://ottakubrasil.online" target="_blank" rel="noopener noreferrer"
+             class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
+             aria-label="Site: ottakubrasil.online" title="ottakubrasil.online">
+            <i data-lucide="globe" class="h-5 w-5"></i>
+          </a>
+        </div>
+
+        <div class="text-center">
+          <p class="text-sm font-semibold tracking-wide text-slate-800">
+            Ottakubrasil • Guilda Hub
+          </p>
+
+          <p class="mt-2 max-w-xl text-xs leading-relaxed text-slate-600">
+            Central de guilda e eventos: organização, velocidade e controle para facilitar sua vida no dia a dia.
+          </p>
+
+          <p class="mt-4 text-xs text-slate-500">
+            © Ottakubrasil • 2026
+          </p>
+        </div>
+
       </div>
-
-      <div class="text-center">
-        <p class="text-sm font-semibold tracking-wide text-slate-800">
-          Ottakubrasil • Guilda Hub
-        </p>
-
-        <p class="mt-2 max-w-xl text-xs leading-relaxed text-slate-600">
-          Central de guilda e eventos: organização, velocidade e controle para facilitar sua vida no dia a dia.
-        </p>
-
-        <p class="mt-4 text-xs text-slate-500">
-          © Ottakubrasil • 2026
-        </p>
-      </div>
-
     </div>
-  </div>
-</footer>
+  </footer>
 
 </body>
 </html>
