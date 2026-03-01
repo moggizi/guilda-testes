@@ -103,12 +103,14 @@
 <section class="space-y-4">
   <div class="rounded-3xl bg-white ring-1 ring-slate-200 p-4">
     <div class="text-sm font-bold">Buscar meu perfil</div>
-    <p class="mt-1 text-xs text-slate-500">Digite seu nick ou ID para ver suas estatísticas basica.</p>
-    <div class="mt-4 flex flex-col gap-3 sm:flex-row">
-      <input id="query" type="text" placeholder="Seu nick ou ID"
-        class="flex-1 rounded-2xl bg-white ring-1 ring-slate-200 px-4 py-3 text-sm outline-none focus:ring-emerald-400/40" />
-      <button id="btn" class="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black hover:bg-emerald-700 transition text-white">Buscar</button>
-    </div>
+    <p class="mt-1 text-xs text-slate-500">Digite o UID da guilda e o ID do membro para ver as estatísticas.</p>
+    <div class="mt-4 grid gap-3 sm:grid-cols-3">
+  <input id="guildId" type="text" placeholder="UID da guilda"
+    class="sm:col-span-1 rounded-2xl bg-white ring-1 ring-slate-200 px-4 py-3 text-sm outline-none focus:ring-emerald-400/40" />
+  <input id="memberId" type="text" placeholder="ID do membro"
+    class="sm:col-span-1 rounded-2xl bg-white ring-1 ring-slate-200 px-4 py-3 text-sm outline-none focus:ring-emerald-400/40" />
+  <button id="btn" class="sm:col-span-1 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black hover:bg-emerald-700 transition text-white">Buscar</button>
+</div>
     <div id="hint" class="mt-3 text-xs text-slate-500"></div>
   </div>
   <div id="result"></div>
@@ -142,7 +144,7 @@
 <script type="module">
 
 import { db, setupSidebar, initIcons } from './logic.js';
-import { collection, getDocs, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 setupSidebar();
 initIcons();
@@ -153,7 +155,8 @@ __sbClose?.addEventListener('click', () => {
 });
 
 
-const elInput = document.getElementById('query');
+const elGuildId = document.getElementById('guildId');
+const elMemberId = document.getElementById('memberId');
 const elBtn = document.getElementById('btn');
 const elOut = document.getElementById('result');
 const elHint = document.getElementById('hint');
@@ -174,34 +177,21 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
-async function findMemberPublic(term) {
-  const q = norm(term);
-  if (!q) return null;
+async function findMemberDirect(guildId, memberId) {
+  const gid = (guildId || '').trim();
+  const mid = (memberId || '').trim();
+  if (!gid || !mid) return null;
 
-  // Sem collectionGroup: varre guildas e procura em membros.
-  const gSnap = await getDocs(query(collection(db, "guildas"), limit(250)));
-  const guilds = gSnap.docs.map(d => ({ id: d.id, data: d.data() || {} }));
-
-  for (const g of guilds) {
-    const gid = g.id;
-    const gname = (g.data.name || g.data.nome || "").toString().trim() || "Guilda";
-    try {
-      const mSnap = await getDocs(query(collection(db, "guildas", gid, "membros"), limit(2000)));
-      for (const m of mSnap.docs) {
-        const d = m.data() || {};
-        const nick = norm(d.nick || d.nickname || d.nickName || d.nome || d.name || d.playerNick || d.playerName || d.tag || d.tagName);
-        const pid  = norm(d.visibleId || d.playerId || d.id || d.uid || d.gameId || d.idff || d.idFF || d.freeFireId || d.ffId || d.idFreeFire || d.idJogo || d.idDoJogo);
-        const alt  = norm(d.idPlayer || d.idJogador || d.player || d.usuario || d.userId);
-        const email = norm(d.email || d.mail);
-
-        if (q === nick || q === pid || q === alt || q === norm(m.id) || (q && (nick.includes(q) || pid.includes(q) || alt.includes(q) || email.includes(q)))) {
-          return { guildId: gid, guildName: gname, id: m.id, data: d };
-        }
-      }
-    } catch (_) {}
+  try {
+    const snap = await getDoc(doc(db, "guildas", gid, "membros", mid));
+    if (!snap.exists()) return null;
+    const d = snap.data() || {};
+    // evita 2ª leitura: tenta usar nome salvo no próprio membro
+    const gname = (d.guildName || d.guildaNome || d.guilda || "").toString().trim() || "Guilda";
+    return { guildId: gid, guildName: gname, id: snap.id, data: d };
+  } catch (_) {
+    return null;
   }
-
-  return null;
 }
 
 function renderMember(res) {
@@ -282,15 +272,18 @@ function renderMember(res) {
 
 
 async function run() {
-  const term = (elInput?.value || "").trim();
-  if (!term) {
-    elHint.textContent = "Digite um ID ou nick.";
+  const gid = (elGuildId?.value || "").trim();
+  const mid = (elMemberId?.value || "").trim();
+
+  if (!gid || !mid) {
+    elHint.textContent = "Preencha UID da guilda e ID do membro.";
     return;
   }
+
   elHint.textContent = "Buscando…";
   elOut.innerHTML = `<div class="rounded-3xl border border-slate-200 bg-white p-5 text-slate-600">Carregando…</div>`;
   try {
-    const res = await findMemberPublic(term);
+    const res = await findMemberDirect(gid, mid);
     if (!res) {
       elHint.textContent = "Não encontrei esse jogador ainda.";
       elOut.innerHTML = `<div class="rounded-3xl border border-slate-200 bg-white p-5 text-slate-600">Nada encontrado.</div>`;
@@ -306,7 +299,8 @@ async function run() {
 }
 
 elBtn?.addEventListener('click', run);
-elInput?.addEventListener('keydown', (e)=>{ if(e.key==='Enter') run(); });
+elGuildId?.addEventListener('keydown', (e)=>{ if(e.key==='Enter') run(); });
+elMemberId?.addEventListener('keydown', (e)=>{ if(e.key==='Enter') run(); });
 
 </script>
 </body>
