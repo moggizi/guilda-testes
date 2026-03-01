@@ -201,7 +201,7 @@
 
   <script type="module">
     import { checkAuth, setupSidebar, initIcons, showToast, logout, auth, db, getGuildContext, ensureUserAccount, createPlayer_DISABLED_BETAAccess, revokePlayerAccess, deletePlayerAccount } from "./logic.js";
-    import { doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
     initIcons();
@@ -220,7 +220,7 @@
       const needPlus = tierRank(tier) >= 1;
       ['btn-add-admin','btn-add-leader'].forEach(id => {
         const b = document.getElementById(id);
-        if (b && !needPlus) {
+        if (b && (!needPlus || permissoesAtivas === false)) {
           b.disabled = true;
           b.classList.add('opacity-50','cursor-not-allowed');
           b.title = 'Recurso PLUS';
@@ -236,6 +236,7 @@
     
     let securityData = { admins: [], leaders: [] };
     let permissoesAtivas = true;
+    let unsubCfg = null;
     let hasLoadedFromCache = false;
 
     const guildCacheKey = () => {
@@ -270,12 +271,12 @@
         const ctx0 = getGuildContext();
         applyVipUI(ctx0?.vipTier || 'free');
         currentEmail = String(user?.email || '').toLowerCase().trim();
-        try {
-          if (permissoesAtivas === false) showToast('error','VIP expirado: admins/líderes secundários ficam sem acesso.');
-        } catch (_) {}
       } catch (_) {}
       
-      // Só carrega do Firebase se não achou cache
+      // Sempre acompanha em tempo real (igual o plano)
+      startRealtime();
+
+      // Só carrega do Firebase se não achou cache (fallback)
       if (!hasLoadedFromCache) {
         await load();
       }
@@ -288,8 +289,6 @@
         newData.admins = Array.isArray(newData.admins) ? newData.admins : [];
         newData.leaders = Array.isArray(newData.leaders) ? newData.leaders : [];
         newData.playerEmail = (newData.playerEmail || "").toString().toLowerCase().trim() || null;
-        newData.permissoesAtivas = (newData.permissoesAtivas !== false);
-        permissoesAtivas = newData.permissoesAtivas;
         
         renderPlayerAccess(newData.playerEmail);
         securityData = newData;
@@ -300,6 +299,40 @@
         showToast('error', 'Erro ao carregar configurações.');
       }
     }
+
+
+function startRealtime() {
+  try {
+    if (unsubCfg) return; // já rodando
+    const gid = getGuildContext()?.guildId;
+    if (!gid) return;
+
+    unsubCfg = onSnapshot(doc(db, "configGuilda", gid), (snap) => {
+      if (!snap.exists()) return;
+
+      const data = snap.data() || {};
+      const newData = {
+        ...data,
+        admins: Array.isArray(data.admins) ? data.admins : [],
+        leaders: Array.isArray(data.leaders) ? data.leaders : [],
+        playerEmail: (data.playerEmail || "").toString().toLowerCase().trim() || null,
+        permissoesAtivas: (data.permissoesAtivas !== false)
+      };
+
+      permissoesAtivas = newData.permissoesAtivas;
+      securityData = newData;
+
+      renderPlayerAccess(newData.playerEmail);
+      renderList('admins', newData.admins || []);
+      renderList('leaders', newData.leaders || []);
+
+      try { localStorage.setItem(guildCacheKey(), JSON.stringify(newData)); } catch (_) {}
+    }, (err) => {
+      // não quebra a tela
+    });
+  } catch (_) {}
+}
+
 
     function renderList(type, list) {
       const ul = document.getElementById(`list-${type}`);

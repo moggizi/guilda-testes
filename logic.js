@@ -196,59 +196,6 @@ function __maybeDowngradeVipSync() {
   } catch (_) {}
 }
 
-
-// --- VIP: campo único para bloquear Admin/Líder secundário quando expirar ----
-// Regras:
-// - Em configGuilda/{guildId}: permissoesAtivas (bool) + lastVipCheck (ms)
-// - Atualiza no máximo 1x por dia e só escreve se mudou
-async function __maybeSyncPermissoesAtivas(guildId, cfgData, vipTier, vipExpiresAtMs) {
-  try {
-    if (!guildId) return;
-
-    const ref = doc(db, "configGuilda", guildId);
-
-    // Se não veio cfgData, tenta ler (sem quebrar fluxo)
-    let data = cfgData;
-    if (!data) {
-      try {
-        const snap = await getDoc(ref);
-        data = snap.exists() ? (snap.data() || {}) : null;
-      } catch (_) {
-        data = null;
-      }
-    }
-    if (!data) return;
-
-    const now = Date.now();
-    const lastCheck = Number(data.lastVipCheck || 0);
-
-    // roda no máximo 1x por dia
-    if (now - lastCheck < 86400000) return;
-
-    const tier = (vipTier || data.vipTier || "free").toString().toLowerCase().trim();
-    const paid = (tier === "plus" || tier === "pro" || tier === "business" || tier.includes("pro") || tier.includes("business") || tier.includes("buss"));
-
-    // Se não existe expiração (vipExpiresAt null), considera ativo quando for pago
-    const exp = (vipExpiresAtMs != null && isFinite(Number(vipExpiresAtMs))) ? Number(vipExpiresAtMs) : null;
-    const vipAtivo = paid && (exp == null || now < exp);
-
-    const statusAtual = (data.permissoesAtivas !== false);
-    const novoStatus = !!vipAtivo;
-
-    // só escreve se mudou; sempre atualiza lastVipCheck
-    if (statusAtual !== novoStatus) {
-      await setDoc(ref, {
-        permissoesAtivas: novoStatus,
-        lastVipCheck: now,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-    } else {
-      await setDoc(ref, { lastVipCheck: now }, { merge: true });
-    }
-  } catch (_) {}
-}
-
-
 export function getVipRemainingDays() {
   __maybeDowngradeVipSync();
   const ms = getVipExpiresAtMs();
@@ -265,6 +212,38 @@ function vipTierFromValue(v) {
   if (s === 'business' || s === 'bussines' || s.includes('buss') || s.includes('business')) return 'business';
   if (s === 'pro' || s.includes('pro')) return 'pro';
   return 'plus';
+}
+
+
+
+// --- VIP: permissões de Admin/Líder secundário (campo único) ---------------
+// Em /configGuilda/{guildId}:
+// - permissoesAtivas: true quando VIP ativo (plus/pro/business e não expirado)
+// - permissoesAtivas: false quando free/expirado
+// Importante: só escreve se for necessário (quando muda)
+async function __syncPermissoesAtivasIfNeeded(guildId, cfgData, vipTier, vipExpiresAtMs) {
+  try {
+    if (!guildId) return null;
+
+    const tier = (vipTier || cfgData?.vipTier || "free").toString().toLowerCase().trim();
+    const paid = (tier === "plus" || tier === "pro" || tier === "business" || tier.includes("pro") || tier.includes("business") || tier.includes("buss"));
+
+    const exp = (vipExpiresAtMs != null && isFinite(Number(vipExpiresAtMs))) ? Number(vipExpiresAtMs) : null;
+    const vipAtivo = paid && (exp == null || Date.now() < exp);
+
+    const atual = (cfgData && cfgData.permissoesAtivas !== undefined) ? (cfgData.permissoesAtivas !== false) : null;
+    const novo = !!vipAtivo;
+
+    if (atual === null || atual !== novo) {
+      await setDoc(doc(db, "configGuilda", guildId), {
+        permissoesAtivas: novo,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+    return novo;
+  } catch (_) {
+    return null;
+  }
 }
 
 
@@ -792,26 +771,21 @@ export function checkAuth(redirectToLogin = true) {
       }
 
 
-      __guildCtx = {
-        guildId,
-        guildName,
-        role,
-        vipTier,
-        vipExpiresAtMs,
-        email: emailLower,
-        uid: user.uid
-      };
 
-// (VIP) Atualiza o campo único "permissoesAtivas" no máximo 1x por dia
-try { await __maybeSyncPermissoesAtivas(guildId, __cfgData, vipTier, vipExpiresAtMs); } catch (_) {}
+// (VIP) Sincroniza o campo único que libera/bloqueia Admin e Líder secundário
+let __permissoesAtivas = null;
+try {
+  __permissoesAtivas = await __syncPermissoesAtivasIfNeeded(guildId, __cfgData, vipTier, vipExpiresAtMs);
+  if (__permissoesAtivas == null && __cfgData && __cfgData.permissoesAtivas !== undefined) {
+    __permissoesAtivas = (__cfgData.permissoesAtivas !== false);
+  }
+} catch (_) {}
 
-// (VIP) Se expirou: derruba Admin e Líder secundário (o dono continua)
+// (VIP) Se estiver bloqueado: derruba Admin e Líder secundário (o dono continua)
 try {
   const ownerEmail = __cfgData?.ownerEmail ? cleanEmail(__cfgData.ownerEmail) : "";
   const isOwner = (guildId === user.uid) || (!!ownerEmail && ownerEmail === emailLower);
-  const permissoesAtivas = (__cfgData && __cfgData.permissoesAtivas !== undefined)
-    ? (__cfgData.permissoesAtivas !== false)
-    : true;
+  const permissoesAtivas = (__permissoesAtivas == null) ? true : !!__permissoesAtivas;
 
   if (!permissoesAtivas) {
     const isSecondaryLeader = (role === "Líder" && !isOwner);
@@ -826,6 +800,16 @@ try {
     }
   }
 } catch (_) {}
+
+      __guildCtx = {
+        guildId,
+        guildName,
+        role,
+        vipTier,
+        vipExpiresAtMs,
+        email: emailLower,
+        uid: user.uid
+      };
 
       try {
         localStorage.setItem(__GUILDCTX_LS_KEY, JSON.stringify({ guildId, guildName, role, vipTier, vipExpiresAtMs, email: emailLower, uid: user.uid, ts: Date.now() }));
