@@ -10,6 +10,19 @@
     tailwind.config = { theme: { extend: { colors: { emerald: { 50:'#ecfdf5', 100:'#d1fae5', 200:'#a7f3d0', 400:'#34d399', 500:'#10b981', 600:'#059669', 700:'#047857'} } } } }
   </script>
   <link rel="stylesheet" href="./style.css" />
+
+<style>
+  /* Tutorial modal: evita corte em telas pequenas / iPhone */
+  #tutorial-modal .tiktok-embed {
+    margin: 0 auto !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  #tutorial-modal iframe {
+    max-width: 100% !important;
+  }
+</style>
 </head>
 <body class="bg-gray-50/80">
 
@@ -503,10 +516,10 @@
   <div id="tutorial-overlay" class="fixed inset-0 bg-black/40 z-[60] hidden"></div>
 
   <section id="tutorial-modal"
-    class="fixed inset-x-0 bottom-0 z-[70] hidden translate-y-full transition-transform duration-300"
+    class="fixed inset-x-0 bottom-0 z-[70] hidden translate-y-full transition-transform duration-300 max-h-[90vh]"
     aria-hidden="true">
     <div class="mx-auto w-full max-w-2xl px-3 pb-4">
-      <div class="bg-white rounded-t-3xl shadow-2xl border border-gray-100 overflow-hidden">
+      <div class="bg-white rounded-t-3xl shadow-2xl border border-gray-100 overflow-hidden max-h-[85vh] flex flex-col">
         <div class="px-5 pt-4 pb-3 border-b border-gray-100">
           <div class="mx-auto h-1.5 w-14 rounded-full bg-gray-200"></div>
 
@@ -523,8 +536,8 @@
           </div>
         </div>
 
-        <div class="px-4 sm:px-5 py-4">
-          <div class="rounded-2xl border border-gray-100 bg-gray-50 overflow-hidden">
+        <div class="px-4 sm:px-5 py-4 flex-1 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
+          <div class="rounded-2xl border border-gray-100 bg-gray-50 overflow-hidden max-h-[60vh] sm:max-h-[62vh]">
             <div class="p-3 sm:p-4">
               <!--
                 ✅ COMO COLOCAR O LINK DO TIKTOK AQUI:
