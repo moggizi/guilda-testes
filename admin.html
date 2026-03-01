@@ -235,6 +235,7 @@
     });
     
     let securityData = { admins: [], leaders: [] };
+    let permissoesAtivas = true;
     let hasLoadedFromCache = false;
 
     const guildCacheKey = () => {
@@ -253,6 +254,7 @@
       const cachedSec = localStorage.getItem(guildCacheKey());
       if (cachedSec) {
         securityData = JSON.parse(cachedSec) || securityData;
+        permissoesAtivas = (securityData.permissoesAtivas !== false);
         renderPlayerAccess(securityData.playerEmail);
         renderList('admins', securityData.admins || []);
         renderList('leaders', securityData.leaders || []);
@@ -268,6 +270,9 @@
         const ctx0 = getGuildContext();
         applyVipUI(ctx0?.vipTier || 'free');
         currentEmail = String(user?.email || '').toLowerCase().trim();
+        try {
+          if (permissoesAtivas === false) showToast('error','VIP expirado: admins/líderes secundários ficam sem acesso.');
+        } catch (_) {}
       } catch (_) {}
       
       // Só carrega do Firebase se não achou cache
@@ -283,6 +288,8 @@
         newData.admins = Array.isArray(newData.admins) ? newData.admins : [];
         newData.leaders = Array.isArray(newData.leaders) ? newData.leaders : [];
         newData.playerEmail = (newData.playerEmail || "").toString().toLowerCase().trim() || null;
+        newData.permissoesAtivas = (newData.permissoesAtivas !== false);
+        permissoesAtivas = newData.permissoesAtivas;
         
         renderPlayerAccess(newData.playerEmail);
         securityData = newData;
@@ -313,6 +320,7 @@
             <span class="truncate">${email}</span>
             ${isMaster ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">Líder Master</span>` : ''}
             ${(!isMaster && isSelf) ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold">Você</span>` : ''}
+            ${(!permissoesAtivas && !isMaster) ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 ring-1 ring-rose-200 font-extrabold">Sem acesso</span>` : ''}
           </span>
           <button class="btn-remove text-red-400 hover:text-red-600 ${isMaster ? 'opacity-40 cursor-not-allowed' : ''}" data-type="${type}" data-email="${email}" ${isMaster ? 'disabled' : ''}>
             <i data-lucide="trash-2" class="w-4 h-4"></i>
