@@ -89,6 +89,65 @@ export function getVipExpiresAtMs() {
   return (__guildCtx && __guildCtx.vipExpiresAtMs != null) ? Number(__guildCtx.vipExpiresAtMs) : null;
 }
 
+
+
+// --- Guilda: info básica com cache (1 leitura no máximo) --------------------
+// Cache em localStorage: guildInfo_<guildId>
+// Retorna: { guildId, name, createdAtMs }
+export async function getGuildInfoCached(guildId) {
+  const gid = (guildId || getGuildContext()?.guildId || "").toString().trim();
+  if (!gid) return { guildId: null, name: null, createdAtMs: null };
+
+  const key = `guildInfo_${gid}`;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const cached = JSON.parse(raw);
+      if (cached && cached.guildId === gid) {
+        return {
+          guildId: gid,
+          name: cached.name || null,
+          createdAtMs: (cached.createdAtMs != null ? Number(cached.createdAtMs) : null)
+        };
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const snap = await getDoc(doc(db, "guildas", gid));
+    const data = snap.exists() ? (snap.data() || {}) : {};
+    const name = (data.name || "").toString().trim() || null;
+
+    let createdAtMs = null;
+    const rawCreated = data.createdAt;
+    if (rawCreated && typeof rawCreated.toMillis === "function") createdAtMs = rawCreated.toMillis();
+    else if (typeof rawCreated === "number") createdAtMs = rawCreated;
+    else if (typeof rawCreated === "string") {
+      const t = Date.parse(rawCreated);
+      createdAtMs = isFinite(t) ? t : null;
+    }
+
+    try {
+      localStorage.setItem(key, JSON.stringify({ guildId: gid, name, createdAtMs, ts: Date.now() }));
+    } catch (_) {}
+
+    return { guildId: gid, name, createdAtMs };
+  } catch (_) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        return {
+          guildId: gid,
+          name: cached?.name || null,
+          createdAtMs: (cached?.createdAtMs != null ? Number(cached.createdAtMs) : null)
+        };
+      }
+    } catch (_) {}
+    return { guildId: gid, name: null, createdAtMs: null };
+  }
+}
+
 // --- UI: aplica cache no menu lateral (sem esperar Firebase) -----------------
 function __applyCachedSidebarNow() {
   try {
