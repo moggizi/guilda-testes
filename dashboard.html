@@ -297,31 +297,30 @@
         applyVipUiAndGates(ctx?.vipTier || getVipTier());
       } catch {}
 
-      // Garante que o cache de membros exista no login (1 leitura só se estiver vazio)
-      await ensureMembersCacheLoaded(ctx.guildId);
-
-      // Render pós-garantia (pega cache atualizado)
-      renderFromMembersCache();
+      // Busca silenciosa de tempo real: não trava a tela, apenas atualiza o UI e o cache
+      fetchMembersAndUpdateCache(ctx.guildId);
 
       // VIP em tempo real (1 doc)
       startVipRealtime(ctx.guildId);
     });
 
-    async function ensureMembersCacheLoaded(guildId){
+    // NOVA FUNÇÃO: Puxa atualizações do Firebase escondido e atualiza o cache para as outras telas!
+    async function fetchMembersAndUpdateCache(guildId){
       const key = getMembersCacheKey(guildId);
-      const raw = localStorage.getItem(key);
-      const cached = safeParseJSON(raw || '[]', []);
-      if (Array.isArray(cached) && cached.length > 0) return;
-
-      // cache vazio -> 1 leitura para popular (e depois tudo é local)
       try {
         const snap = await getDocs(collection(db, "guildas", guildId, "membros"));
         const members = [];
         snap.forEach(d => members.push({ id: d.id, ...d.data() }));
         const normalized = normalizeMembers(members);
+        
+        // Joga as informações frescas direto pro cache para as outras páginas
         localStorage.setItem(key, JSON.stringify(normalized));
+        
+        // Atualiza a dashboard instantaneamente com os números reais
+        const stats = calcStats(normalized);
+        updateUI(stats);
       } catch (e) {
-        console.warn("Falha ao popular cache de membros:", e);
+        console.warn("Falha ao atualizar membros em tempo real:", e);
       }
     }
 
