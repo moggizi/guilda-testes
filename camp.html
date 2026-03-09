@@ -215,13 +215,16 @@
 
   
   <script type="module">
-    // Corrigido: Remoção das funções de cache inexistentes no logic.js
     import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db } from './logic.js';
     import {
       collection, doc, setDoc, deleteDoc, getDocs, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+    // ==========================================
+    // FIX WEBVIEW: Renderiza o menu e ícones instantaneamente!
+    // ==========================================
     setupSidebar();
+    initIcons(); 
 
     // Dropdown de quedas (fixo 1..20)
     const dropsSel = document.getElementById('camp-drops');
@@ -319,9 +322,14 @@
       if(document.getElementById('camp-max')) document.getElementById('camp-max').value = '100';
 
       try {
-        const ctx = getGuildContext() || JSON.parse(localStorage.getItem('guildCtx_cache_v1')||'{}');
+        let ctx = getGuildContext();
+        if(!ctx) {
+          try { ctx = JSON.parse(localStorage.getItem('guildCtx_cache_v1')||'{}'); } catch(e){}
+        }
         document.getElementById('camp-guildname').value = ctx?.guildName || ctx?.name || '—';
-      } catch(_) {}
+      } catch(_) {
+        document.getElementById('camp-guildname').value = '—';
+      }
 
       document.getElementById('camp-format').value = 'br';
       updateModeUI();
@@ -336,12 +344,14 @@
     let guildName = null;
     window.camps = [];
 
-    // Novo sistema de cache isolado por guilda
+    // Novo sistema de cache isolado por guilda com proteção WebView
     function setCache(list){
       if (!guildId) return;
       try { 
         localStorage.setItem(`hub_camps_${guildId}_v1`, JSON.stringify({ ts: Date.now(), items: list || [] })); 
-      } catch(_) {}
+      } catch(e) {
+        console.warn("WebView bloqueou escrita no cache:", e);
+      }
     }
 
     // Carregamento principal (Cache + Firebase se necessário)
@@ -349,7 +359,14 @@
       if (!guildId) return;
 
       const cacheKey = `hub_camps_${guildId}_v1`;
-      const cachedRaw = localStorage.getItem(cacheKey);
+      let cachedRaw = null;
+      
+      // Proteção WebView para leitura
+      try {
+        cachedRaw = localStorage.getItem(cacheKey);
+      } catch(e) {
+        console.warn("WebView bloqueou leitura no cache:", e);
+      }
 
       // Se não for reload forçado, tenta pegar do cache (30 min de validade)
       if (!force && cachedRaw) {
@@ -777,7 +794,10 @@
       }
 
       try{
-        const ctx = getGuildContext() || JSON.parse(localStorage.getItem('guildCtx_cache_v1')||'{}');
+        let ctx = getGuildContext();
+        if(!ctx) {
+          try { ctx = JSON.parse(localStorage.getItem('guildCtx_cache_v1')||'{}'); } catch(e){}
+        }
         guildId = ctx?.guildId || ctx?.id || null;
         guildName = ctx?.guildName || ctx?.name || null;
       }catch(_){}

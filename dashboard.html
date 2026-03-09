@@ -178,7 +178,7 @@
           </div>
         </div>
 
-        <!-- Alertas e Gráficos - Adicionado mt-8 para espaçamento -->
+        <!-- Alertas e Gráficos -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
           <!-- Atenção -->
           <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
@@ -232,7 +232,6 @@
 
     function normalizeMembers(list){
       const arr = Array.isArray(list) ? list.slice() : [];
-      // garante consistência (evita comparar diferente só por ordem)
       arr.sort((a,b)=> String(a.nick||'').localeCompare(String(b.nick||'')));
       return arr;
     }
@@ -247,7 +246,12 @@
 
     function renderFromMembersCache(){
       const ctx = getGuildContext();
-      if(!ctx?.guildId) return;
+      if(!ctx?.guildId) {
+        // Se ainda não tiver ID em cache (WebView lento no boot), garante que a tela
+        // tenha os números zerados com os ícones, para não parecer travada
+        updateUI({ total: 0, guildWar: 0, weeklyMeta: 0, hasTag: 0 });
+        return;
+      }
 
       const key = getMembersCacheKey(ctx.guildId);
       const raw = localStorage.getItem(key);
@@ -256,18 +260,20 @@
       updateUI(stats);
     }
 
-    // Sidebar + render imediato (cache)
+    // ==========================================
+    // FIX WEBVIEW: Renderiza tudo no topo AGORA MESMO
+    // ==========================================
     setupSidebar();
+    initIcons(); // Carrega ícones instantaneamente e impede botões de ficarem invisíveis
     renderFromMembersCache();
 
-    // Mantém o dashboard sempre refletindo o cache mais recente (quando outra aba atualiza)
+    // Mantém o dashboard sempre refletindo o cache mais recente
     window.addEventListener('storage', (e) => {
       const ctx = getGuildContext();
       if(!ctx?.guildId) return;
       if (e.key === getMembersCacheKey(ctx.guildId)) {
         renderFromMembersCache();
       }
-      // se o VIP atualizar via listener, sidebar pode mudar
       if (e.key === GUILDCTX_LS_KEY) {
         try {
           const cached = safeParseJSON(e.newValue || '{}', {});
@@ -289,7 +295,6 @@
       const ctx = getGuildContext();
       if(!ctx?.guildId) return;
 
-      // Plano: mostrar só o nome aqui (dias ficam no menu lateral)
       try {
         const tier = normalizeTier(getVipTier());
         const pillName = document.getElementById('current-plan-name');
@@ -297,14 +302,11 @@
         applyVipUiAndGates(ctx?.vipTier || getVipTier());
       } catch {}
 
-      // Busca silenciosa de tempo real: não trava a tela, apenas atualiza o UI e o cache
       fetchMembersAndUpdateCache(ctx.guildId);
-
-      // VIP em tempo real (1 doc)
       startVipRealtime(ctx.guildId);
     });
 
-    // NOVA FUNÇÃO: Puxa atualizações do Firebase escondido e atualiza o cache para as outras telas!
+    // Busca de tempo real com proteções contra WebView
     async function fetchMembersAndUpdateCache(guildId){
       const key = getMembersCacheKey(guildId);
       try {
@@ -313,8 +315,12 @@
         snap.forEach(d => members.push({ id: d.id, ...d.data() }));
         const normalized = normalizeMembers(members);
         
-        // Joga as informações frescas direto pro cache para as outras páginas
-        localStorage.setItem(key, JSON.stringify(normalized));
+        // FIX WEBVIEW: Tenta jogar no cache, mas se o Android bloquear, ele não trava a tela!
+        try {
+          localStorage.setItem(key, JSON.stringify(normalized));
+        } catch (storageErr) {
+          console.warn("Aviso: WebView bloqueou o cachê, seguindo com o render...", storageErr);
+        }
         
         // Atualiza a dashboard instantaneamente com os números reais
         const stats = calcStats(normalized);
@@ -345,12 +351,14 @@
     function updateGuildCtxCache(patch){
       const prev = safeParseJSON(localStorage.getItem(GUILDCTX_LS_KEY) || '{}', {});
       const next = { ...prev, ...patch, ts: Date.now() };
-      localStorage.setItem(GUILDCTX_LS_KEY, JSON.stringify(next));
+      // FIX WEBVIEW: Impede que erro de Storage quebre a leitura do plano VIP
+      try {
+        localStorage.setItem(GUILDCTX_LS_KEY, JSON.stringify(next));
+      } catch (e) {}
       return next;
     }
 
     function startVipRealtime(guildId){
-      // fonte principal: configGuilda/{guildId} (tem vipTier e vipExpiresAt em vários projetos)
       const ref1 = doc(db, 'configGuilda', guildId);
       const unsub1 = onSnapshot(ref1, (snap) => {
         if (!snap.exists()) return;
@@ -363,7 +371,6 @@
         applyVipUiAndGates(cached.vipTier);
       }, () => {});
 
-      // fallback: guildas/{guildId} (caso VIP esteja direto na guilda)
       const ref2 = doc(db, 'guildas', guildId);
       const unsub2 = onSnapshot(ref2, (snap) => {
         if (!snap.exists()) return;
@@ -376,7 +383,6 @@
         applyVipUiAndGates(cached.vipTier);
       }, () => {});
 
-      // evita warning lint
       window.__vipUnsub = () => { try{unsub1();}catch{} try{unsub2();}catch{} };
     }
 
@@ -449,7 +455,6 @@
         if(embedLoaded) return;
         embedLoaded = true;
 
-        // carrega o script oficial de embed do TikTok apenas quando abrir o modal
         const s = document.createElement('script');
         s.async = true;
         s.src = 'https://www.tiktok.com/embed.js';

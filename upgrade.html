@@ -167,9 +167,10 @@
 <script type="module">
   import { checkAuth, setupSidebar, initIcons, logout, getVipTier, showToast, getGuildContext, applyVipUiAndGates, auth } from './logic.js';
 
+  // Ícones do sidebar são inicializados na hora!
   setupSidebar();
+  initIcons();
 
-  // Versão 2 do cache para forçar a atualização das informações corrigidas
   const PLANS_LS_KEY = 'plans_upgrade_cache_v2';
 
   function normalizeTier(raw){
@@ -194,11 +195,12 @@
   }
 
   function getPlans(){
-    // Mudamos a chave para v2, então se existir v1, ele ignorará e carregará o novo
     try {
       const raw = localStorage.getItem(PLANS_LS_KEY);
       if (raw) return JSON.parse(raw);
-    } catch (_) {}
+    } catch (e) {
+      console.warn("WebView bloqueou acesso ao storage, gerando planos em memória...", e);
+    }
 
     const basePlans = [
       {
@@ -231,7 +233,7 @@
         price: 61.99,
         priceLabel: 'R$61,99 / ano',
         access: ['Dashboard', 'Membros', 'Configuração de tag', 'Administradores + Líderes', 'Lines', 'Eventos/Camp (BETA)', 'Acesso do jogador (BETA)'],
-        noAccess: [], // BUSINESS tem acesso a TUDO
+        noAccess: [], 
         note: 'Equivalente a ~R$5,17/mês'
       },
     ];
@@ -241,50 +243,6 @@
     return computed;
   }
 
-  function currentTierFromCache(){
-    try {
-      const raw = localStorage.getItem('guildCtx_cache_v1');
-      const ctx = raw ? JSON.parse(raw) : null;
-      return normalizeTier(ctx?.vipTier);
-    } catch (_) {
-      return 'free';
-    }
-  }
-
-  const PIX_BY_PLAN = {
-    plus: '00020126580014br.gov.bcb.pix0136da7134dc-eb07-4189-a126-3e0d3e91fa5752040000530398654045.995802BR5912Kelvin Ortiz6009Sao Paulo62230519daqr812717438068787630483C7',
-    pro: '00020126580014br.gov.bcb.pix0136da7134dc-eb07-4189-a126-3e0d3e91fa5752040000530398654048.995802BR5912Kelvin Ortiz6009Sao Paulo62230519daqr812717438571777630418D2',
-    business: '00020126580014br.gov.bcb.pix0136da7134dc-eb07-4189-a126-3e0d3e91fa57520400005303986540561.995802BR5912Kelvin Ortiz6009Sao Paulo62230519daqr81271743863109463048B21'
-  };
-
-  function ensureModalRoot() {
-    let root = document.getElementById('upgrade-modal-root');
-    if (root) return root;
-    root = document.createElement('div');
-    root.id = 'upgrade-modal-root';
-    document.body.appendChild(root);
-    return root;
-  }
-
-  function closeModals() {
-    const root = document.getElementById('upgrade-modal-root');
-    if (root) root.innerHTML = '';
-  }
-
-  function modalShell(innerHtml) {
-    return `
-      <div class="fixed inset-0 z-[9999]">
-        <div class="absolute inset-0 bg-black/40" data-close="1"></div>
-        <div class="absolute inset-0 flex items-end sm:items-center justify-center p-4">
-          <div class="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-            ${innerHtml}
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  
   // --- Pagamento Mercado Pago (PIX automático) ------------------------------
   window.requestUpgrade = (planId) => {
     openPaymentModal(planId);
@@ -344,6 +302,33 @@
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.error || 'Falha ao consultar status.');
     return data;
+  }
+
+  function ensureModalRoot() {
+    let root = document.getElementById('upgrade-modal-root');
+    if (root) return root;
+    root = document.createElement('div');
+    root.id = 'upgrade-modal-root';
+    document.body.appendChild(root);
+    return root;
+  }
+
+  function closeModals() {
+    const root = document.getElementById('upgrade-modal-root');
+    if (root) root.innerHTML = '';
+  }
+
+  function modalShell(innerHtml) {
+    return `
+      <div class="fixed inset-0 z-[9999]">
+        <div class="absolute inset-0 bg-black/40" data-close="1"></div>
+        <div class="absolute inset-0 flex items-end sm:items-center justify-center p-4">
+          <div class="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+            ${innerHtml}
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   function openPaymentModal(planId){
@@ -432,15 +417,12 @@
         if (statusLabelFromMp(data.status) === 'aprovado') {
           stopPoll();
           showToast('success', 'Pagamento aprovado! Liberando plano…');
-          // Recarrega para atualizar VIP e liberar recursos
           setTimeout(() => window.location.href = 'dashboard.html', 1200);
         }
       } catch (_) {
-        // silencioso: o botão "Atualizar status" resolve caso a rede falhe
       }
     }
 
-    // UI handlers
     const btnCopy = root.querySelector('#btn-copy-pix');
     const btnRefresh = root.querySelector('#btn-refresh-status');
     btnRefresh.onclick = () => tick();
@@ -450,11 +432,9 @@
         const data = await createPixPayment(plan);
         currentPaymentId = data.paymentId;
 
-        // PIX code
         const ta = root.querySelector('#pix-code');
         if (ta) ta.value = data.qrCode || data.copiaECola || '';
 
-        // QR
         const qrLoading = root.querySelector('#qr-loading');
         const qrWrap = root.querySelector('#qr-wrap');
         const qrImg = root.querySelector('#qr-img');
@@ -467,10 +447,8 @@
           if (qrLoading) qrLoading.textContent = 'QR Code indisponível. Use o código Copia e Cola.';
         }
 
-        // status
         setStatus(data.status || 'pending');
 
-        // enable buttons
         if (btnCopy) btnCopy.disabled = false;
         if (btnRefresh) btnRefresh.disabled = false;
 
@@ -483,7 +461,6 @@
           };
         }
 
-        // Poll
         pollTimer = setInterval(tick, 3500);
         await tick();
 
@@ -491,17 +468,19 @@
         showToast('error', e?.message || 'Erro ao gerar pagamento.');
         closeModals();
       } finally {
-        try { lucide.createIcons(); } catch (_) {}
+        initIcons();
       }
     })();
 
-    try { lucide.createIcons(); } catch (_) {}
+    initIcons();
   }
 
+  // NOVA VERSÃO DA FUNÇÃO: AGORA LÊ DA MEMÓRIA DO APP (Seguro contra WebView)
   function render(){
-
     const plans = getPlans();
-    const currentTier = currentTierFromCache();
+    
+    // FIX WEBVIEW: Pega direto da memória do logic.js em vez do localStorage!
+    const currentTier = normalizeTier(getVipTier());
 
     const pillName = document.getElementById('current-plan-name');
     if (pillName) pillName.textContent = (currentTier || 'free').toUpperCase();
@@ -537,28 +516,28 @@
         </div>
       `;
     }).join('');
-    try { lucide.createIcons(); } catch (_) {}
+    
+    initIcons();
   }
 
+  // Tenta renderizar com o que tem (provavelmente 'free' antes do Firebase carregar na WebView)
   render();
 
   checkAuth().then((user) => {
     if (!user) return;
     document.getElementById('btn-logout').onclick = logout;
     
-    // Sincroniza labels de plano em tempo real
+    // Assim que o Firebase termina de validar, ele joga o plano real na tela!
     try {
       const tier = normalizeTier(getVipTier());
       
-      // Atualiza o header
       const pillName = document.getElementById('current-plan-name');
       if (pillName) pillName.textContent = tier.toUpperCase();
       
-      // Atualiza o label do menu lateral (Guilda: BUSINESS)
       const vipLabel = document.querySelector('#vip-label span');
       if (vipLabel) vipLabel.textContent = tier.toUpperCase();
 
-      render(); // Re-renderiza os cards com o tier correto
+      render(); // Atualiza a caixinha "Atual" corretamente!
     } catch (_) {}
   });
 
