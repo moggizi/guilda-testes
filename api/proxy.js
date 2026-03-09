@@ -29,7 +29,7 @@ module.exports = async (req, res) => {
     // MITSURI_API_ORIGIN = https://api.mitsuri.fun
     // MITSURI_API_KEY    = dn_vffredz543
     // (Assim você troca a chave sem precisar editar código.)
-    const origin = (process.env.MITSURI_API_ORIGIN || 'https://api.mitsuri.fun').replace(/\/$/, '');
+    const origin = (process.env.MITSURI_API_ORIGIN || 'https://apis-mitsuri-ofc.vercel.app/').replace(/\/$/, '');
     const apiKey = process.env.MITSURI_API_KEY || 'dn_vffredz543';
 
     // A API nova que você mandou usa exatamente esse formato.
