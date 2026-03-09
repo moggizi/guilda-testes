@@ -1102,6 +1102,52 @@ export async function logout() {
   }
 }
 
+export function showWelcomeLoginModal() {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    if (params.get("login") !== "1") return false;
+
+    const overlay = document.getElementById("welcome-overlay");
+    const modal = document.getElementById("welcome-modal");
+    const closeBtn = document.getElementById("welcome-close");
+
+    if (!overlay || !modal || !closeBtn) return false;
+    if (modal.dataset.bound === "1") return true;
+
+    const close = () => {
+      modal.classList.remove("show");
+      overlay.classList.remove("show");
+      modal.setAttribute("aria-hidden", "true");
+      document.documentElement.classList.remove("overflow-hidden");
+      setTimeout(() => {
+        modal.classList.add("hidden");
+        overlay.classList.add("hidden");
+      }, 240);
+    };
+
+    modal.dataset.bound = "1";
+    closeBtn.addEventListener("click", close);
+    overlay.addEventListener("click", close);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !modal.classList.contains("hidden")) close();
+    });
+
+    overlay.classList.remove("hidden");
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+    document.documentElement.classList.add("overflow-hidden");
+    requestAnimationFrame(() => {
+      overlay.classList.add("show");
+      modal.classList.add("show");
+    });
+
+    try { initIcons(); } catch (_) {}
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 export function consumeLoginToasts() {
   try {
     const params = new URLSearchParams(window.location.search || "");

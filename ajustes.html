@@ -30,6 +30,9 @@
         <a href="dashboard.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
           <i data-lucide="house" class="w-5 h-5"></i> Dashboard
         </a>
+        <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
+        </a>
         <a href="membros.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
           <i data-lucide="users" class="w-5 h-5"></i> Membros
         </a>
@@ -159,7 +162,7 @@
               <ul class="mt-2 text-xs text-gray-600 space-y-1 list-disc pl-4">
                 <li>Ao marcar “Tem Tag” em <b>Membros</b>, o site prefixa o nick com a tag definida aqui.</li>
                 <li>Se não existir tag salva, o site mostra um aviso e não deixa marcar “Tem Tag”.</li>
-                <li>O UID serve para o membre da sua <code class="px-1 py-0.5 rounded bg-gray-100">Guilda</code> poder ver as suas estatisticas basicas cadastradas na plataforma!.</li>
+                <li>O UID serve para o membro da sua <code class="px-1 py-0.5 rounded bg-gray-100">Guilda</code> poder ver as suas estatisticas basicas cadastradas na plataforma!.</li>
               </ul>
             </div>
           </div>
@@ -299,40 +302,56 @@ function fmtDate(ms) {
   </script>
   
   <!-- OTK Footer -->
-  <footer id="otk-footer" class="mt-12 border-t border-emerald-500/10 text-slate-700">
-    <div class="mx-auto w-full max-w-5xl px-4 py-10">
-      <div class="flex flex-col items-center gap-4">
-        <div class="flex items-center justify-center gap-3">
-          <a href="https://instagram.com/ottakubrasil" target="_blank" rel="noopener noreferrer"
-             class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
-             aria-label="Instagram principal: @ottakubrasil" title="@ottakubrasil">
-            <i data-lucide="instagram" class="h-5 w-5"></i>
-          </a>
-          <a href="https://instagram.com/gameotk" target="_blank" rel="noopener noreferrer"
-             class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
-             aria-label="Instagram gaming: @gameotk" title="@gameotk">
-            <i data-lucide="instagram" class="h-5 w-5"></i>
-          </a>
-          <a href="https://ottakubrasil.online" target="_blank" rel="noopener noreferrer"
-             class="flex h-11 w-11 items-center justify-center rounded-full bg-black/5 ring-1 ring-black/10 transition hover:bg-black/10"
-             aria-label="Site: ottakubrasil.online" title="ottakubrasil.online">
-            <i data-lucide="globe" class="h-5 w-5"></i>
-          </a>
+  <footer class="bg-white py-10 border-t border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="flex justify-center items-center gap-2 mb-10">
+            <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--footer w-10 h-10">
+            <span class="text-xl font-bold tracking-wider text-slate-900">GUILDA<span class="text-green-500">HUB</span></span>
         </div>
-        <div class="text-center">
-          <p class="text-sm font-semibold tracking-wide text-slate-800">
-            Ottakubrasil • Guilda Hub
-          </p>
-          <p class="mt-2 max-w-xl text-xs leading-relaxed text-slate-600">
-            Central de guilda e eventos: organização, velocidade e controle para facilitar sua vida no dia a dia.
-          </p>
-          <p class="mt-4 text-xs text-slate-500">
-            © Ottakubrasil • 2026
-          </p>
+
+        <div class="flex flex-row justify-center items-start gap-4 sm:gap-12 md:gap-32 text-xs sm:text-sm mb-12">
+            
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-pink-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4s1.791-4 4-4 4 1.79 4 4-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                    <span>Instagram</span>
+                </span>
+                <a href="https://instagram.com/guildahub" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
+                <a href="https://instagram.com/ottakubrasil" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
+            </div>
+
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.23-1.15 4.41-2.91 5.74-1.71 1.32-3.95 1.77-6.09 1.47-2.07-.28-3.98-1.39-5.18-3.08-1.2-1.7-1.57-3.93-1.04-5.94.49-1.89 1.74-3.53 3.44-4.48 1.78-.99 3.94-1.12 5.84-.6v4.06c-1.27-.6-2.81-.5-3.96.26-1.13.73-1.76 2.05-1.63 3.4.14 1.28.98 2.45 2.16 2.96 1.14.51 2.5.42 3.56-.23 1.05-.63 1.71-1.76 1.75-2.98.05-3.53.02-7.07.02-10.61 0-2.31 0-4.63.02-6.94z"/></svg>
+                    <span>TikTok</span>
+                </span>
+                <a href="https://tiktok.com/@guildahub" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
+                <a href="https://tiktok.com/@ottakubrasil" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
+                <a href="https://tiktok.com/@kushinaff" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@kushinaff <span class="text-slate-400 block sm:inline text-[10px] sm:text-xs leading-none mt-1 sm:mt-0">(Parceiro)</span></a>
+            </div>
+
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                    <span>WhatsApp</span>
+                </span>
+                <a href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">Grupo do WhatsApp</a>
+            </div>
         </div>
-      </div>
+
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-slate-200 text-sm text-slate-500">
+            <p class="text-center md:text-left">
+                © 2026 Guilda HUB. Todos os direitos reservados.
+            </p>
+            <div class="flex gap-4">
+                <a href="#" class="hover:text-green-500 transition-colors">Termos</a>
+                <a href="#" class="hover:text-green-500 transition-colors">Privacidade</a>
+            </div>
+        </div>
+        
     </div>
-  </footer>
+</footer>
 
 </body>
 </html>
