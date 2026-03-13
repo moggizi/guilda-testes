@@ -622,11 +622,54 @@ export async function setMemberTagConfig(tag) {
   return true;
 }
 
+
 const GUILD_ACCESS_KEY_PREFIX = 'guildAccessKey_';
+const HUB_PERFIS_CACHE_PREFIX = 'guildProfileExists_';
+const hubPerfisFirebaseConfig = {
+  apiKey: "AIzaSyASInYDbSFxfgbF7yjXDM4THipLYdZwjXs",
+  authDomain: "hub-perfis.firebaseapp.com",
+  projectId: "hub-perfis",
+  storageBucket: "hub-perfis.firebasestorage.app",
+  messagingSenderId: "231971973267",
+  appId: "1:231971973267:web:8b67cca5cfbe7b3f934566",
+  measurementId: "G-0N7WY0984C"
+};
 
 function makeGuildAccessKey() {
   const random = Math.floor(100000000 + Math.random() * 900000000);
   return `ghub-${random}`;
+}
+
+function getGuildProfileCacheKey(guildId) {
+  return `${HUB_PERFIS_CACHE_PREFIX}${(guildId || '').toString().trim()}`;
+}
+
+function readGuildInfoFromLocalCache(guildId) {
+  const gid = (guildId || '').toString().trim();
+  if (!gid) return { guildId: null, name: null, createdAtMs: null, tag: '' };
+
+  let name = null;
+  let createdAtMs = null;
+  let tag = '';
+
+  try {
+    const rawInfo = localStorage.getItem(`guildInfo_${gid}`);
+    if (rawInfo) {
+      const cached = JSON.parse(rawInfo) || {};
+      name = cached.name ? String(cached.name) : null;
+      createdAtMs = (cached.createdAtMs != null ? Number(cached.createdAtMs) : null);
+    }
+  } catch (_) {}
+
+  try {
+    const rawTag = localStorage.getItem(`tagMembros_${gid}`);
+    if (rawTag) {
+      const cached = JSON.parse(rawTag) || {};
+      tag = cached.value ? String(cached.value) : '';
+    }
+  } catch (_) {}
+
+  return { guildId: gid, name, createdAtMs, tag };
 }
 
 export async function getGuildAccessKeyConfig() {
@@ -678,6 +721,89 @@ export async function generateGuildAccessKey() {
   );
   try { localStorage.setItem(cacheKey, JSON.stringify({ value, ts: Date.now() })); } catch (_) {}
   return value;
+}
+
+export function getCachedGuildProfileState(guildId) {
+  const gid = (guildId || getGuildContext()?.guildId || '').toString().trim();
+  if (!gid) return null;
+  try {
+    const raw = localStorage.getItem(getGuildProfileCacheKey(gid));
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (!cached || cached.exists == null) return null;
+    return !!cached.exists;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeCachedGuildProfileState(guildId, exists) {
+  const gid = (guildId || '').toString().trim();
+  if (!gid) return;
+  try {
+    localStorage.setItem(getGuildProfileCacheKey(gid), JSON.stringify({ exists: !!exists, ts: Date.now() }));
+  } catch (_) {}
+}
+
+export async function getGuildProfileExists() {
+  const guildId = requireGuildId();
+  const accessKey = await getGuildAccessKeyConfig();
+  if (!accessKey) {
+    writeCachedGuildProfileState(guildId, false);
+    return false;
+  }
+
+  const secondaryName = `hub_perfis_exists_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const secondaryApp = initializeApp(hubPerfisFirebaseConfig, secondaryName);
+  const secondaryDb = getFirestore(secondaryApp);
+
+  try {
+    const snap = await getDoc(doc(secondaryDb, 'perfil', guildId));
+    const exists = !!snap.exists();
+    writeCachedGuildProfileState(guildId, exists);
+    return exists;
+  } catch (_) {
+    const cached = getCachedGuildProfileState(guildId);
+    return cached === true;
+  } finally {
+    try { await deleteApp(secondaryApp); } catch (_) {}
+  }
+}
+
+export async function createGuildProfile() {
+  const guildId = requireGuildId();
+  const accessKey = await getGuildAccessKeyConfig();
+  if (!accessKey) throw new Error('Gere a chave da guilda antes de criar o perfil.');
+
+  const info = readGuildInfoFromLocalCache(guildId);
+  const guildName = (info.name || getGuildContext()?.guildName || '').toString().trim();
+  if (!guildName) throw new Error('Nome da guilda não encontrado no cache.');
+
+  const payload = {
+    nomeGuilda: guildName,
+    dataCriacao: (info.createdAtMs != null && isFinite(Number(info.createdAtMs))) ? Number(info.createdAtMs) : null,
+    tag: (info.tag || '').toString().trim()
+  };
+
+  const secondaryName = `hub_perfis_create_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const secondaryApp = initializeApp(hubPerfisFirebaseConfig, secondaryName);
+  const secondaryDb = getFirestore(secondaryApp);
+
+  try {
+    const profileRef = doc(secondaryDb, 'perfil', guildId);
+    const existingProfile = await getDoc(profileRef);
+    if (existingProfile.exists()) {
+      writeCachedGuildProfileState(guildId, true);
+      return { alreadyExists: true };
+    }
+
+    await setDoc(doc(secondaryDb, 'chave', accessKey), { uid: guildId }, { merge: true });
+    await setDoc(profileRef, payload, { merge: true });
+    writeCachedGuildProfileState(guildId, true);
+    return { alreadyExists: false };
+  } finally {
+    try { await deleteApp(secondaryApp); } catch (_) {}
+  }
 }
 
 export function showToast(type = "info", message = "") {
@@ -1151,7 +1277,7 @@ export async function logout() {
       localStorage.removeItem("campsList");
       for (let i = localStorage.length - 1; i >= 0; i--) {
         const k = localStorage.key(i) || "";
-        if (k.startsWith("securityConfig_") || k.startsWith("tagMembros_") || k.startsWith("guildAccessKey_")) {
+        if (k.startsWith("securityConfig_") || k.startsWith("tagMembros_")) {
           localStorage.removeItem(k);
         }
       }

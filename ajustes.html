@@ -154,6 +154,9 @@
           <button id="btn-copy-guild-key" class="hidden text-xs bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg font-bold hover:bg-gray-50">
             Copiar
           </button>
+          <button id="btn-create-guild-profile" class="hidden text-xs bg-indigo-600 text-white px-3 py-2 rounded-lg font-bold hover:bg-indigo-700 active:scale-95">
+            Criar perfil
+          </button>
         </div>
       </div>
       <p id="guild-access-key-hint" class="mt-2 text-[11px] text-gray-500">Use essa chave para criar e acessar o perfil da guilda. Nunca compartilhe com ninguém.</p>
@@ -195,7 +198,7 @@
   </div>
 
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConfig, setMemberTagConfig, getGuildContext, getGuildInfoCached, getGuildAccessKeyConfig, generateGuildAccessKey } from './logic.js';
+    import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConfig, setMemberTagConfig, getGuildContext, getGuildInfoCached, getGuildAccessKeyConfig, generateGuildAccessKey, getCachedGuildProfileState, getGuildProfileExists, createGuildProfile } from './logic.js';
 
     setupSidebar();
     initIcons();
@@ -204,81 +207,87 @@
     const btnSave = document.getElementById('btn-save-tag');
     const hint = document.getElementById('tag-hint');
     const readOnlyNote = document.getElementById('readonly-note');
+    const guildUidEl = document.getElementById('guild-uid');
+    const btnCopyGuildUid = document.getElementById('btn-copy-guild-uid');
+    const guildNameEl = document.getElementById('guild-name');
+    const guildCreatedEl = document.getElementById('guild-created');
+    const guildAccessKeyEl = document.getElementById('guild-access-key');
+    const guildAccessKeyHintEl = document.getElementById('guild-access-key-hint');
+    const guildAccessKeyAdminPill = document.getElementById('guild-access-key-admin-pill');
+    const btnGenerateGuildKey = document.getElementById('btn-generate-guild-key');
+    const btnCopyGuildKey = document.getElementById('btn-copy-guild-key');
+    const btnCreateGuildProfile = document.getElementById('btn-create-guild-profile');
 
+    function fmtDate(ms) {
+      try {
+        if (!ms) return '-';
+        const d = new Date(Number(ms));
+        return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      } catch (_) {
+        return '-';
+      }
+    }
 
-const guildUidEl = document.getElementById('guild-uid');
-const btnCopyGuildUid = document.getElementById('btn-copy-guild-uid');
-const guildNameEl = document.getElementById('guild-name');
-const guildCreatedEl = document.getElementById('guild-created');
-const guildAccessKeyEl = document.getElementById('guild-access-key');
-const guildAccessKeyHintEl = document.getElementById('guild-access-key-hint');
-const guildAccessKeyAdminPill = document.getElementById('guild-access-key-admin-pill');
-const btnGenerateGuildKey = document.getElementById('btn-generate-guild-key');
-const btnCopyGuildKey = document.getElementById('btn-copy-guild-key');
+    function maskGuildAccessKey(value) {
+      const v = (value || '').toString().trim();
+      if (!v) return 'Nenhuma chave gerada';
+      if (v.length <= 6) return '••••••';
+      return `${v.slice(0, 4)}•••••••••`;
+    }
 
-function fmtDate(ms) {
-  try {
-    if (!ms) return '-';
-    const d = new Date(Number(ms));
-    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  } catch (_) {
-    return '-';
-  }
-}
+    function applyGuildKeyVisibility(value, isAdmin = false) {
+      const hasValue = !!(value && String(value).trim());
+      if (!guildAccessKeyEl) return;
 
-function maskGuildAccessKey(value) {
-  const v = (value || '').toString().trim();
-  if (!v) return 'Nenhuma chave gerada';
-  if (v.length <= 6) return '••••••';
-  return `${v.slice(0, 4)}•••••••••`;
-}
+      if (!hasValue) {
+        guildAccessKeyEl.textContent = 'Nenhuma chave gerada';
+        guildAccessKeyEl.classList.remove('blur-[6px]', 'select-none');
+        guildAccessKeyAdminPill?.classList.add('hidden');
+        return;
+      }
 
-function applyGuildKeyVisibility(value, isAdmin = false) {
-  const hasValue = !!(value && String(value).trim());
-  if (!guildAccessKeyEl) return;
+      if (isAdmin) {
+        guildAccessKeyEl.textContent = maskGuildAccessKey(value);
+        guildAccessKeyEl.classList.add('blur-[6px]', 'select-none');
+        guildAccessKeyAdminPill?.classList.remove('hidden');
+        return;
+      }
 
-  if (!hasValue) {
-    guildAccessKeyEl.textContent = 'Nenhuma chave gerada';
-    guildAccessKeyEl.classList.remove('blur-[6px]', 'select-none');
-    guildAccessKeyAdminPill?.classList.add('hidden');
-    btnCopyGuildKey?.classList.add('hidden');
-    return;
-  }
+      guildAccessKeyEl.textContent = String(value);
+      guildAccessKeyEl.classList.remove('blur-[6px]', 'select-none');
+      guildAccessKeyAdminPill?.classList.add('hidden');
+    }
 
-  if (isAdmin) {
-    guildAccessKeyEl.textContent = maskGuildAccessKey(value);
-    guildAccessKeyEl.classList.add('blur-[6px]', 'select-none');
-    guildAccessKeyAdminPill?.classList.remove('hidden');
-    btnCopyGuildKey?.classList.add('hidden');
-    return;
-  }
+    function syncGuildKeyButtons(value, isLeader = false, isAdmin = false, profileExists = null) {
+      const hasValue = !!(value && String(value).trim());
+      const hasProfile = profileExists === true;
+      const needsProfile = hasValue && profileExists === false;
 
-  guildAccessKeyEl.textContent = String(value);
-  guildAccessKeyEl.classList.remove('blur-[6px]', 'select-none');
-  guildAccessKeyAdminPill?.classList.add('hidden');
-  btnCopyGuildKey?.classList.remove('hidden');
-}
+      if (btnGenerateGuildKey) {
+        if (isLeader && !hasValue) btnGenerateGuildKey.classList.remove('hidden');
+        else btnGenerateGuildKey.classList.add('hidden');
+      }
 
-function syncGuildKeyButtons(value, isLeader = false, isAdmin = false) {
-  const hasValue = !!(value && String(value).trim());
-  if (btnGenerateGuildKey) {
-    if (isLeader && !hasValue) btnGenerateGuildKey.classList.remove('hidden');
-    else btnGenerateGuildKey.classList.add('hidden');
-  }
+      if (btnCopyGuildKey) {
+        if (hasValue && hasProfile && !isAdmin) btnCopyGuildKey.classList.remove('hidden');
+        else btnCopyGuildKey.classList.add('hidden');
+      }
 
-  if (btnCopyGuildKey) {
-    if (hasValue && !isAdmin) btnCopyGuildKey.classList.remove('hidden');
-    else btnCopyGuildKey.classList.add('hidden');
-  }
+      if (btnCreateGuildProfile) {
+        if (hasValue && needsProfile && isLeader && !isAdmin) btnCreateGuildProfile.classList.remove('hidden');
+        else btnCreateGuildProfile.classList.add('hidden');
+      }
 
-  if (guildAccessKeyHintEl) {
-    guildAccessKeyHintEl.textContent = hasValue
-      ? 'Use essa chave para criar e acessar o perfil da guilda. Nunca compartilhe com ninguém.'
-      : (isLeader
-          ? 'Ainda não existe uma chave. Gere uma para usar no perfil da guilda e guarde com segurança.'
-          : 'Ainda não existe uma chave gerada para essa guilda.');
-  }
-}
+      if (guildAccessKeyHintEl) {
+        guildAccessKeyHintEl.textContent = !hasValue
+          ? (isLeader
+              ? 'Ainda não existe uma chave. Gere uma para usar no perfil da guilda e guarde com segurança.'
+              : 'Ainda não existe uma chave gerada para essa guilda.')
+          : hasProfile
+            ? 'Perfil da guilda já criado. Use essa chave para acessar o perfil da guilda. Nunca compartilhe com ninguém.'
+            : 'Essa chave já foi gerada. Agora crie o perfil da guilda e nunca compartilhe essa chave com ninguém.';
+      }
+    }
 
     function setReadonly(isReadonly, showAdminNote = false) {
       tagInput.disabled = isReadonly;
@@ -295,22 +304,22 @@ function syncGuildKeyButtons(value, isLeader = false, isAdmin = false) {
       }
     }
 
-    // --- CACHE INSTANTÂNEO ---
-    // Trava instantaneamente baseado no localStorage antes do Firebase carregar
+    btnCopyGuildUid?.addEventListener('click', async () => {
+      const value = (guildUidEl?.textContent || '').trim();
+      if (!value) return;
+      try { await navigator.clipboard.writeText(value); showToast('success', 'Copiado!'); } catch (_) { showToast('info', value); }
+    });
+
     try {
       const ctx = getGuildContext();
       if (ctx) {
         const isLeader = ctx.role === 'Líder';
         const isAdmin = ctx.role === 'Admin';
+        const gid = ctx.guildId;
         setReadonly(!isLeader, isAdmin);
 
-        const gid = ctx.guildId;
         if (guildUidEl) guildUidEl.textContent = gid || '';
-        btnCopyGuildUid?.addEventListener('click', async () => {
-          try { await navigator.clipboard.writeText(gid); showToast('success','Copiado!'); } catch (_) { showToast('info', gid); }
-        });
 
-        // tenta puxar dados básicos da guilda do cache (evita leitura ao trocar de tela)
         try {
           const rawInfo = localStorage.getItem(`guildInfo_${gid}`);
           if (rawInfo) {
@@ -320,7 +329,7 @@ function syncGuildKeyButtons(value, isLeader = false, isAdmin = false) {
           }
         } catch (_) {}
 
-        if (gid) {
+        try {
           const raw = localStorage.getItem(`tagMembros_${gid}`);
           if (raw) {
             const cached = JSON.parse(raw);
@@ -329,66 +338,72 @@ function syncGuildKeyButtons(value, isLeader = false, isAdmin = false) {
               hint.textContent = `Tag configurada: “${cached.value}”`;
             }
           }
+        } catch (_) {}
 
-          try {
-            const rawKey = localStorage.getItem(`guildAccessKey_${gid}`);
-            if (rawKey) {
-              const cachedKey = JSON.parse(rawKey);
-              const value = cachedKey?.value ? String(cachedKey.value) : '';
-              applyGuildKeyVisibility(value, isAdmin);
-              syncGuildKeyButtons(value, isLeader, isAdmin);
-            } else {
-              applyGuildKeyVisibility('', isAdmin);
-              syncGuildKeyButtons('', isLeader, isAdmin);
-            }
-          } catch (_) {
+        try {
+          const rawKey = localStorage.getItem(`guildAccessKey_${gid}`);
+          if (rawKey) {
+            const cachedKey = JSON.parse(rawKey);
+            const value = cachedKey?.value ? String(cachedKey.value) : '';
+            applyGuildKeyVisibility(value, isAdmin);
+            syncGuildKeyButtons(value, isLeader, isAdmin, getCachedGuildProfileState(gid));
+          } else {
             applyGuildKeyVisibility('', isAdmin);
-            syncGuildKeyButtons('', isLeader, isAdmin);
+            syncGuildKeyButtons('', isLeader, isAdmin, null);
           }
+        } catch (_) {
+          applyGuildKeyVisibility('', isAdmin);
+          syncGuildKeyButtons('', isLeader, isAdmin, null);
         }
       } else {
         setReadonly(true, false);
         applyGuildKeyVisibility('', false);
-        syncGuildKeyButtons('', false, false);
+        syncGuildKeyButtons('', false, false, null);
       }
     } catch (_) {
       setReadonly(true, false);
       applyGuildKeyVisibility('', false);
-      syncGuildKeyButtons('', false, false);
+      syncGuildKeyButtons('', false, false, null);
     }
-    // --------------------------------------------------------
 
     checkAuth().then(async (user) => {
       if (!user) return;
       document.getElementById('btn-logout').onclick = logout;
 
-      // Confirma o papel vindo do checkAuth (mais seguro)
       const ctx = getGuildContext();
       const isLeader = ctx?.role === 'Líder';
       const isAdmin = ctx?.role === 'Admin';
       setReadonly(!isLeader, isAdmin);
 
       const current = await getMemberTagConfig();
-      const currentGuildKey = await getGuildAccessKeyConfig();
+      let currentGuildKey = await getGuildAccessKeyConfig();
+      let guildProfileExists = null;
 
-      // Dados da guilda (1ª vez lê do Firebase e salva cache; depois só usa cache)
       try {
         const info = await getGuildInfoCached(ctx?.guildId);
         if (guildUidEl && info?.guildId) guildUidEl.textContent = info.guildId;
-        if (guildNameEl) guildNameEl.textContent = info?.name || (ctx?.guildName || '-') ;
+        if (guildNameEl) guildNameEl.textContent = info?.name || (ctx?.guildName || '-');
         if (guildCreatedEl) guildCreatedEl.textContent = fmtDate(info?.createdAtMs);
       } catch (_) {
-        if (guildNameEl) guildNameEl.textContent = (ctx?.guildName || '-') ;
+        if (guildNameEl) guildNameEl.textContent = (ctx?.guildName || '-');
       }
 
       tagInput.value = current || '';
       hint.textContent = current ? `Tag configurada: “${current}”` : 'Nenhuma tag configurada ainda.';
+
+      if (currentGuildKey) {
+        try {
+          guildProfileExists = await getGuildProfileExists();
+        } catch (_) {
+          guildProfileExists = getCachedGuildProfileState(ctx?.guildId);
+        }
+      }
+
       applyGuildKeyVisibility(currentGuildKey || '', isAdmin);
-      syncGuildKeyButtons(currentGuildKey || '', isLeader, isAdmin);
+      syncGuildKeyButtons(currentGuildKey || '', isLeader, isAdmin, guildProfileExists);
 
       btnCopyGuildKey?.addEventListener('click', async () => {
-        const value = (guildAccessKeyEl?.textContent || '').trim();
-        const realValue = currentGuildKey || value;
+        const realValue = currentGuildKey || (guildAccessKeyEl?.textContent || '').trim();
         if (!realValue || realValue === 'Nenhuma chave gerada') return;
         try {
           await navigator.clipboard.writeText(realValue);
@@ -403,9 +418,10 @@ function syncGuildKeyButtons(value, isLeader = false, isAdmin = false) {
         try {
           btnGenerateGuildKey.disabled = true;
           btnGenerateGuildKey.classList.add('opacity-50', 'cursor-not-allowed');
-          const created = await generateGuildAccessKey();
-          applyGuildKeyVisibility(created, false);
-          syncGuildKeyButtons(created, true, false);
+          currentGuildKey = await generateGuildAccessKey();
+          guildProfileExists = false;
+          applyGuildKeyVisibility(currentGuildKey, false);
+          syncGuildKeyButtons(currentGuildKey, true, false, guildProfileExists);
           showToast('success', 'Chave gerada com sucesso!');
         } catch (e) {
           console.error(e);
@@ -413,6 +429,24 @@ function syncGuildKeyButtons(value, isLeader = false, isAdmin = false) {
         } finally {
           btnGenerateGuildKey.disabled = false;
           btnGenerateGuildKey.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      });
+
+      btnCreateGuildProfile?.addEventListener('click', async () => {
+        if (!isLeader) return;
+        try {
+          btnCreateGuildProfile.disabled = true;
+          btnCreateGuildProfile.classList.add('opacity-50', 'cursor-not-allowed');
+          const result = await createGuildProfile();
+          guildProfileExists = true;
+          syncGuildKeyButtons(currentGuildKey || '', true, false, guildProfileExists);
+          showToast('success', result?.alreadyExists ? 'Perfil da guilda já existia.' : 'Perfil da guilda criado com sucesso!');
+        } catch (e) {
+          console.error(e);
+          showToast('error', 'Não foi possível criar o perfil da guilda.');
+        } finally {
+          btnCreateGuildProfile.disabled = false;
+          btnCreateGuildProfile.classList.remove('opacity-50', 'cursor-not-allowed');
         }
       });
 
