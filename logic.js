@@ -622,6 +622,64 @@ export async function setMemberTagConfig(tag) {
   return true;
 }
 
+const GUILD_ACCESS_KEY_PREFIX = 'guildAccessKey_';
+
+function makeGuildAccessKey() {
+  const random = Math.floor(100000000 + Math.random() * 900000000);
+  return `ghub-${random}`;
+}
+
+export async function getGuildAccessKeyConfig() {
+  let guildId = null;
+  try {
+    guildId = requireGuildId();
+  } catch (_) {
+    return null;
+  }
+
+  const cacheKey = `${GUILD_ACCESS_KEY_PREFIX}${guildId}`;
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      const cached = JSON.parse(raw);
+      if (cached?.value) return String(cached.value);
+    }
+  } catch (_) {}
+
+  try {
+    const snap = await getDoc(doc(db, 'configGuilda', guildId));
+    if (!snap.exists()) return null;
+    const data = snap.data() || {};
+    const value = (data.guildAccessKey || '').toString().trim();
+    if (value) {
+      try { localStorage.setItem(cacheKey, JSON.stringify({ value, ts: Date.now() })); } catch (_) {}
+      return value;
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+export async function generateGuildAccessKey() {
+  const guildId = requireGuildId();
+  const cacheKey = `${GUILD_ACCESS_KEY_PREFIX}${guildId}`;
+
+  try {
+    const current = await getGuildAccessKeyConfig();
+    if (current) return current;
+  } catch (_) {}
+
+  const value = makeGuildAccessKey();
+  await setDoc(
+    doc(db, 'configGuilda', guildId),
+    { guildAccessKey: value, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
+  try { localStorage.setItem(cacheKey, JSON.stringify({ value, ts: Date.now() })); } catch (_) {}
+  return value;
+}
+
 export function showToast(type = "info", message = "") {
   const containerId = "toast-container";
   let container = document.getElementById(containerId);
@@ -1093,7 +1151,7 @@ export async function logout() {
       localStorage.removeItem("campsList");
       for (let i = localStorage.length - 1; i >= 0; i--) {
         const k = localStorage.key(i) || "";
-        if (k.startsWith("securityConfig_") || k.startsWith("tagMembros_")) {
+        if (k.startsWith("securityConfig_") || k.startsWith("tagMembros_") || k.startsWith("guildAccessKey_")) {
           localStorage.removeItem(k);
         }
       }

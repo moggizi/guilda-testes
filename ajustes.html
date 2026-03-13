@@ -138,6 +138,27 @@
       </div>
     </div>
 
+    <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <p class="text-[11px] text-gray-500 font-semibold">Chave da guilda</p>
+          <div class="mt-1 flex items-center gap-2 flex-wrap">
+            <code id="guild-access-key" class="text-xs text-gray-800 break-all transition-all duration-200">Nenhuma chave gerada</code>
+            <span id="guild-access-key-admin-pill" class="hidden text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full bg-amber-100 text-amber-700">Oculta para admin</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="btn-generate-guild-key" class="hidden text-xs bg-gradient-to-r from-emerald-500 to-green-600 text-white px-3 py-2 rounded-lg font-bold hover:shadow-md active:scale-95">
+            Gerar chave
+          </button>
+          <button id="btn-copy-guild-key" class="hidden text-xs bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg font-bold hover:bg-gray-50">
+            Copiar
+          </button>
+        </div>
+      </div>
+      <p id="guild-access-key-hint" class="mt-2 text-[11px] text-gray-500">Use essa chave para criar e acessar o perfil da guilda. Nunca compartilhe com ninguém.</p>
+    </div>
+
     <div class="grid sm:grid-cols-2 gap-3">
       <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
         <p class="text-[11px] text-gray-500 font-semibold">Nome da guilda</p>
@@ -162,7 +183,9 @@
               <ul class="mt-2 text-xs text-gray-600 space-y-1 list-disc pl-4">
                 <li>Ao marcar “Tem Tag” em <b>Membros</b>, o site prefixa o nick com a tag definida aqui.</li>
                 <li>Se não existir tag salva, o site mostra um aviso e não deixa marcar “Tem Tag”.</li>
-                <li>O UID serve para o membro da sua <code class="px-1 py-0.5 rounded bg-gray-100">Guilda</code> poder ver as suas estatisticas basicas cadastradas na plataforma!.</li>
+                <li>O UID identifica a sua <code class="px-1 py-0.5 rounded bg-gray-100">Guilda</code> dentro da plataforma.</li>
+                <li>A chave da guilda serve para criar e acessar o perfil da guilda em outra tela.</li>
+                <li>Guarde essa chave com segurança e não compartilhe com <b>NINGUÉM</b>.</li>
               </ul>
             </div>
           </div>
@@ -172,7 +195,7 @@
   </div>
 
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConfig, setMemberTagConfig, getGuildContext, getGuildInfoCached } from './logic.js';
+    import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConfig, setMemberTagConfig, getGuildContext, getGuildInfoCached, getGuildAccessKeyConfig, generateGuildAccessKey } from './logic.js';
 
     setupSidebar();
     initIcons();
@@ -187,6 +210,11 @@ const guildUidEl = document.getElementById('guild-uid');
 const btnCopyGuildUid = document.getElementById('btn-copy-guild-uid');
 const guildNameEl = document.getElementById('guild-name');
 const guildCreatedEl = document.getElementById('guild-created');
+const guildAccessKeyEl = document.getElementById('guild-access-key');
+const guildAccessKeyHintEl = document.getElementById('guild-access-key-hint');
+const guildAccessKeyAdminPill = document.getElementById('guild-access-key-admin-pill');
+const btnGenerateGuildKey = document.getElementById('btn-generate-guild-key');
+const btnCopyGuildKey = document.getElementById('btn-copy-guild-key');
 
 function fmtDate(ms) {
   try {
@@ -195,6 +223,60 @@ function fmtDate(ms) {
     return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   } catch (_) {
     return '-';
+  }
+}
+
+function maskGuildAccessKey(value) {
+  const v = (value || '').toString().trim();
+  if (!v) return 'Nenhuma chave gerada';
+  if (v.length <= 6) return '••••••';
+  return `${v.slice(0, 4)}•••••••••`;
+}
+
+function applyGuildKeyVisibility(value, isAdmin = false) {
+  const hasValue = !!(value && String(value).trim());
+  if (!guildAccessKeyEl) return;
+
+  if (!hasValue) {
+    guildAccessKeyEl.textContent = 'Nenhuma chave gerada';
+    guildAccessKeyEl.classList.remove('blur-[6px]', 'select-none');
+    guildAccessKeyAdminPill?.classList.add('hidden');
+    btnCopyGuildKey?.classList.add('hidden');
+    return;
+  }
+
+  if (isAdmin) {
+    guildAccessKeyEl.textContent = maskGuildAccessKey(value);
+    guildAccessKeyEl.classList.add('blur-[6px]', 'select-none');
+    guildAccessKeyAdminPill?.classList.remove('hidden');
+    btnCopyGuildKey?.classList.add('hidden');
+    return;
+  }
+
+  guildAccessKeyEl.textContent = String(value);
+  guildAccessKeyEl.classList.remove('blur-[6px]', 'select-none');
+  guildAccessKeyAdminPill?.classList.add('hidden');
+  btnCopyGuildKey?.classList.remove('hidden');
+}
+
+function syncGuildKeyButtons(value, isLeader = false, isAdmin = false) {
+  const hasValue = !!(value && String(value).trim());
+  if (btnGenerateGuildKey) {
+    if (isLeader && !hasValue) btnGenerateGuildKey.classList.remove('hidden');
+    else btnGenerateGuildKey.classList.add('hidden');
+  }
+
+  if (btnCopyGuildKey) {
+    if (hasValue && !isAdmin) btnCopyGuildKey.classList.remove('hidden');
+    else btnCopyGuildKey.classList.add('hidden');
+  }
+
+  if (guildAccessKeyHintEl) {
+    guildAccessKeyHintEl.textContent = hasValue
+      ? 'Use essa chave para criar e acessar o perfil da guilda. Nunca compartilhe com ninguém.'
+      : (isLeader
+          ? 'Ainda não existe uma chave. Gere uma para usar no perfil da guilda e guarde com segurança.'
+          : 'Ainda não existe uma chave gerada para essa guilda.');
   }
 }
 
@@ -247,12 +329,32 @@ function fmtDate(ms) {
               hint.textContent = `Tag configurada: “${cached.value}”`;
             }
           }
+
+          try {
+            const rawKey = localStorage.getItem(`guildAccessKey_${gid}`);
+            if (rawKey) {
+              const cachedKey = JSON.parse(rawKey);
+              const value = cachedKey?.value ? String(cachedKey.value) : '';
+              applyGuildKeyVisibility(value, isAdmin);
+              syncGuildKeyButtons(value, isLeader, isAdmin);
+            } else {
+              applyGuildKeyVisibility('', isAdmin);
+              syncGuildKeyButtons('', isLeader, isAdmin);
+            }
+          } catch (_) {
+            applyGuildKeyVisibility('', isAdmin);
+            syncGuildKeyButtons('', isLeader, isAdmin);
+          }
         }
       } else {
         setReadonly(true, false);
+        applyGuildKeyVisibility('', false);
+        syncGuildKeyButtons('', false, false);
       }
     } catch (_) {
       setReadonly(true, false);
+      applyGuildKeyVisibility('', false);
+      syncGuildKeyButtons('', false, false);
     }
     // --------------------------------------------------------
 
@@ -267,6 +369,7 @@ function fmtDate(ms) {
       setReadonly(!isLeader, isAdmin);
 
       const current = await getMemberTagConfig();
+      const currentGuildKey = await getGuildAccessKeyConfig();
 
       // Dados da guilda (1ª vez lê do Firebase e salva cache; depois só usa cache)
       try {
@@ -280,6 +383,38 @@ function fmtDate(ms) {
 
       tagInput.value = current || '';
       hint.textContent = current ? `Tag configurada: “${current}”` : 'Nenhuma tag configurada ainda.';
+      applyGuildKeyVisibility(currentGuildKey || '', isAdmin);
+      syncGuildKeyButtons(currentGuildKey || '', isLeader, isAdmin);
+
+      btnCopyGuildKey?.addEventListener('click', async () => {
+        const value = (guildAccessKeyEl?.textContent || '').trim();
+        const realValue = currentGuildKey || value;
+        if (!realValue || realValue === 'Nenhuma chave gerada') return;
+        try {
+          await navigator.clipboard.writeText(realValue);
+          showToast('success', 'Chave copiada!');
+        } catch (_) {
+          showToast('info', realValue);
+        }
+      });
+
+      btnGenerateGuildKey?.addEventListener('click', async () => {
+        if (!isLeader) return;
+        try {
+          btnGenerateGuildKey.disabled = true;
+          btnGenerateGuildKey.classList.add('opacity-50', 'cursor-not-allowed');
+          const created = await generateGuildAccessKey();
+          applyGuildKeyVisibility(created, false);
+          syncGuildKeyButtons(created, true, false);
+          showToast('success', 'Chave gerada com sucesso!');
+        } catch (e) {
+          console.error(e);
+          showToast('error', 'Não foi possível gerar a chave.');
+        } finally {
+          btnGenerateGuildKey.disabled = false;
+          btnGenerateGuildKey.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      });
 
       btnSave.addEventListener('click', async () => {
         if (!isLeader) return;
