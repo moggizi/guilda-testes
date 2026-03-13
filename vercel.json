@@ -60,6 +60,10 @@
     {
       "source": "/suporte",
       "destination": "/suporte.html"
+     },
+     {
+      "source": "/perfil-guilda",
+      "destination": "/perfil-guilda.html"
     }
   ]
 }
