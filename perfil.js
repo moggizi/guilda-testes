@@ -6,7 +6,8 @@ import {
   setDoc,
   getDocs,
   collection,
-  writeBatch
+  writeBatch,
+  deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db as normalDb } from './logic.js';
 
@@ -21,15 +22,6 @@ const hubPerfisFirebaseConfig = {
 };
 
 const PROFILE_ACCESS_CACHE_PREFIX = 'guildProfileAccess_';
-const WEEK_UPDATE_COOLDOWN_DAYS = 4;
-const WEEK_UPDATE_COOLDOWN_MS = WEEK_UPDATE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
-const PROFILE_EXPIRES_DAYS = 4;
-const PROFILE_EXPIRES_MS = PROFILE_EXPIRES_DAYS * 24 * 60 * 60 * 1000;
-
-let charts = {};
-let currentUid = null;
-let currentProfileData = null;
-let isBooted = false;
 
 function createHubDb(tag = 'perfil') {
   const name = `hub_perfis_${tag}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -70,6 +62,17 @@ function fmtDate(value) {
   } catch (_) {
     return 'Sem informação ainda';
   }
+}
+
+
+function formatRemainingTime(ms) {
+  const safe = Math.max(0, Number(ms || 0));
+  const totalHours = Math.ceil(safe / (60 * 60 * 1000));
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  if (days > 0 && hours > 0) return `${days} dia(s) e ${hours} hora(s)`;
+  if (days > 0) return `${days} dia(s)`;
+  return `${Math.max(1, hours)} hora(s)`;
 }
 
 function normalizeString(...values) {
@@ -149,32 +152,45 @@ function normalizeMember(raw) {
 
   const nick = normalizeString(raw?.nick, raw?.nickname, raw?.nome, raw?.name, `Jogador ${playerId}`);
 
-  const weeklyHonor = toNumber(
-    raw?.weeklyMetaValue,
-    raw?.pontosSemanais,
-    raw?.pontosHonra,
-    raw?.pontosDeHonra,
-    raw?.honra,
-    raw?.honor,
-    raw?.weeklyHonor,
-    raw?.weeklyHonorPoints,
-    raw?.honorPoints,
-    raw?.points
-  );
+  const weeklyHonorEnabled = raw?.weeklyMeta === undefined ? true : !!raw?.weeklyMeta;
+  const guildWarEnabled = raw?.guildWar === undefined ? true : !!raw?.guildWar;
 
-  const guildWar = toNumber(
-    raw?.guildWarMeta,
-    raw?.pontosGuerra,
-    raw?.guerraGuilda,
-    raw?.pontosGuerraGuilda,
-    raw?.guildWarPoints,
-    raw?.guildWar,
-    raw?.warPoints,
-    raw?.guerra,
-    raw?.gg
-  );
+  const weeklyHonor = weeklyHonorEnabled
+    ? toNumber(
+        raw?.weeklyMetaValue,
+        raw?.pontosSemanais,
+        raw?.pontosHonra,
+        raw?.pontosDeHonra,
+        raw?.honra,
+        raw?.honor,
+        raw?.weeklyHonor,
+        raw?.weeklyHonorPoints,
+        raw?.honorPoints,
+        raw?.points
+      )
+    : 0;
 
-  return { playerId, nick, weeklyHonor, guildWar, updatedAtMs: Date.now() };
+  const guildWar = guildWarEnabled
+    ? toNumber(
+        raw?.guildWarMeta,
+        raw?.pontosGuerra,
+        raw?.guerraGuilda,
+        raw?.pontosGuerraGuilda,
+        raw?.guildWarPoints,
+        raw?.guildWar,
+        raw?.warPoints,
+        raw?.guerra,
+        raw?.gg
+      )
+    : 0;
+
+  return {
+    playerId,
+    nick,
+    weeklyHonor,
+    guildWar,
+    updatedAtMs: Date.now()
+  };
 }
 
 function normalizeMembersArray(list) {
@@ -190,9 +206,12 @@ function normalizeMembersArray(list) {
 async function getCurrentGuildMembers() {
   const ctx = getGuildCtx();
   const guildId = normalizeString(ctx?.guildId);
+
   const cached = normalizeMembersArray(readMembersCache(guildId));
   if (cached.length) return cached;
+
   if (!guildId) return [];
+
   try {
     const snap = await getDocs(collection(normalDb, 'guildas', guildId, 'membros'));
     const fresh = [];
@@ -202,7 +221,7 @@ async function getCurrentGuildMembers() {
     }
     return normalizeMembersArray(fresh);
   } catch (_) {
-    return [];
+    return cached;
   }
 }
 
@@ -210,7 +229,11 @@ function getTop3(list, field) {
   return [...(list || [])]
     .sort((a, b) => Number(b?.[field] || 0) - Number(a?.[field] || 0))
     .slice(0, 3)
-    .map((item) => ({ playerId: item.playerId, nick: item.nick, pontos: Number(item[field] || 0) }));
+    .map((item) => ({
+      playerId: item.playerId,
+      nick: item.nick,
+      pontos: Number(item[field] || 0)
+    }));
 }
 
 function saveAccessCache(keyValue, uid) {
@@ -233,8 +256,10 @@ function getAccessCache(keyValue) {
 async function resolveUidByKey(keyValue) {
   const key = String(keyValue || '').trim();
   if (!key) throw new Error('Digite a chave da guilda.');
+
   const cached = getAccessCache(key);
   if (cached) return cached;
+
   return withHubDb('resolve_key', async (db) => {
     const snap = await getDoc(doc(db, 'chave', key));
     if (!snap.exists()) throw new Error('Chave da guilda não encontrada.');
@@ -250,16 +275,23 @@ async function loadGuildProfile(uid) {
     const profileSnap = await getDoc(doc(db, 'perfil', uid));
     if (!profileSnap.exists()) throw new Error('Perfil da guilda não encontrado.');
     const profile = profileSnap.data() || {};
+
     let members = [];
     try {
       const membersSnap = await getDocs(collection(db, 'perfil', uid, 'membros'));
       members = membersSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-    } catch (_) {}
+    } catch (_) {
+      members = [];
+    }
+
     let previousWeek = {};
     try {
       const prevSnap = await getDoc(doc(db, 'perfil', uid, 'semanaPassada', 'resumo'));
       previousWeek = prevSnap.exists() ? (prevSnap.data() || {}) : {};
-    } catch (_) {}
+    } catch (_) {
+      previousWeek = {};
+    }
+
     return { profile, members, previousWeek };
   });
 }
@@ -303,15 +335,19 @@ async function updateWeeklyData(uid) {
     }
 
     for (const [docId] of existingMap) {
-      if (!currentIds.has(docId)) batch.delete(doc(db, 'perfil', uid, 'membros', docId));
+      if (!currentIds.has(docId)) {
+        batch.delete(doc(db, 'perfil', uid, 'membros', docId));
+      }
     }
 
-    const now = Date.now();
     batch.set(doc(db, 'perfil', uid, 'semanaPassada', 'resumo'), {
       topHonra: oldTopHonra,
       topGuerra: oldTopGuerra,
-      updatedAtMs: now
+      updatedAtMs: Date.now()
     }, { merge: true });
+
+    const nowMs = Date.now();
+    const expiresAtMs = nowMs + UPDATE_EXPIRES_MS;
 
     batch.set(profileRef, {
       nomeGuilda: normalizeString(guildInfo.name, profileData.nomeGuilda),
@@ -319,16 +355,24 @@ async function updateWeeklyData(uid) {
       tag: normalizeString(guildInfo.tag, profileData.tag),
       topHonraSemanaAtual: currentTopHonra,
       topGuerraSemanaAtual: currentTopGuerra,
-      updatedAtMs: now,
-      lastWeekUpdateAtMs: now,
-      nextWeekUpdateAtMs: now + WEEK_UPDATE_COOLDOWN_MS,
-      expiresAtMs: now + PROFILE_EXPIRES_MS
+      updatedAtMs: nowMs,
+      expiresAtMs
     }, { merge: true });
 
     await batch.commit();
-    return { updatedCount: members.length };
+    return {
+      updatedCount: members.length,
+      currentTopHonra,
+      currentTopGuerra,
+      previousTopHonra: oldTopHonra,
+      previousTopGuerra: oldTopGuerra
+    };
   });
 }
+
+let charts = {};
+let currentUid = null;
+let currentProfileData = null;
 
 function destroyCharts() {
   Object.values(charts).forEach((chart) => {
@@ -341,17 +385,20 @@ function chartOptions(labelText) {
   return {
     responsive: true,
     maintainAspectRatio: false,
-    layout: { padding: 1 },
     plugins: {
       legend: {
         position: 'bottom',
-        labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, padding: 5, font: { size: 8 } }
+        labels: {
+          boxWidth: 10,
+          padding: 8,
+          font: { size: 10 }
+        }
       },
       title: {
         display: true,
         text: labelText,
-        font: { size: 9, weight: '700' },
-        padding: { bottom: 4 }
+        font: { size: 11, weight: '700' },
+        padding: { bottom: 8 }
       }
     }
   };
@@ -359,12 +406,15 @@ function chartOptions(labelText) {
 
 function ensureNoInfoCanvas(canvasId, labelText) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas || !window.Chart) return null;
+  if (!canvas) return null;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
+  if (!ctx || !window.Chart) return null;
   return new window.Chart(ctx, {
     type: 'pie',
-    data: { labels: ['Sem informação ainda'], datasets: [{ data: [1], backgroundColor: ['#10b981'] }] },
+    data: {
+      labels: ['Sem informação ainda'],
+      datasets: [{ data: [1] }]
+    },
     options: chartOptions(labelText)
   });
 }
@@ -383,7 +433,7 @@ function makePieChart(canvasId, labelText, items) {
     type: 'pie',
     data: {
       labels: valid.map((x) => `${x.nick} (${x.pontos})`),
-      datasets: [{ data: valid.map((x) => Number(x.pontos || 0)), backgroundColor: ['#10b981', '#22c55e', '#86efac'], borderColor: '#ffffff', borderWidth: 2 }]
+      datasets: [{ data: valid.map((x) => Number(x.pontos || 0)) }]
     },
     options: chartOptions(labelText)
   });
@@ -392,71 +442,31 @@ function makePieChart(canvasId, labelText, items) {
 function renderMemberList(members) {
   const container = document.getElementById('members-ranking-list');
   if (!container) return;
-  const sorted = [...(members || [])].sort((a, b) => (Number(b.totalHonra || 0) + Number(b.totalGuerra || 0)) - (Number(a.totalHonra || 0) + Number(a.totalGuerra || 0)));
+  const sorted = [...(members || [])].sort((a, b) => {
+    const scoreA = Number(a.totalHonra || 0) + Number(a.totalGuerra || 0);
+    const scoreB = Number(b.totalHonra || 0) + Number(b.totalGuerra || 0);
+    return scoreB - scoreA;
+  });
+
   if (!sorted.length) {
     container.innerHTML = `<div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-sm text-gray-500">Sem informação ainda</div>`;
     return;
   }
+
   container.innerHTML = sorted.map((member, index) => {
     const total = Number(member.totalHonra || 0) + Number(member.totalGuerra || 0);
-    return `<div class="rounded-xl border border-gray-100 bg-white px-4 py-4 flex items-center justify-between gap-3"><div class="min-w-0"><p class="text-sm font-semibold text-gray-900">${index + 1}. ${escapeHtml(member.nick || member.playerId)}</p><p class="text-xs text-gray-500 mt-1">ID: ${escapeHtml(member.playerId || '-')}</p></div><div class="text-right shrink-0"><p class="text-sm font-bold text-emerald-700">${total}</p><p class="text-[11px] text-gray-500">Honra: ${Number(member.totalHonra || 0)} • GG: ${Number(member.totalGuerra || 0)}</p></div></div>`;
+    return `
+      <div class="rounded-xl border border-gray-100 bg-white px-4 py-4 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-gray-900">${index + 1}. ${escapeHtml(member.nick || member.playerId)}</p>
+          <p class="text-xs text-gray-500 mt-1">ID: ${escapeHtml(member.playerId || '-')}</p>
+        </div>
+        <div class="text-right shrink-0">
+          <p class="text-sm font-bold text-emerald-700">${total}</p>
+          <p class="text-[11px] text-gray-500">Honra: ${Number(member.totalHonra || 0)} • GG: ${Number(member.totalGuerra || 0)}</p>
+        </div>
+      </div>`;
   }).join('');
-}
-
-function getNextWeekUpdateMs(profile) {
-  const explicit = Number(profile?.nextWeekUpdateAtMs || 0);
-  if (isFinite(explicit) && explicit > 0) return explicit;
-  const last = Number(profile?.lastWeekUpdateAtMs || profile?.updatedAtMs || 0);
-  if (isFinite(last) && last > 0) return last + WEEK_UPDATE_COOLDOWN_MS;
-  return null;
-}
-
-function canUpdateWeek(profile) {
-  const nextMs = getNextWeekUpdateMs(profile);
-  if (!nextMs) return true;
-  return Date.now() >= nextMs;
-}
-
-function renderUpdateInfo(profile) {
-  const lastEl = document.getElementById('profile-last-week-update');
-  const nextEl = document.getElementById('profile-next-week-update');
-  const expiresEl = document.getElementById('profile-expires-at');
-  const btn = document.getElementById('btn-update-week');
-  const lastMs = Number(profile?.lastWeekUpdateAtMs || 0) || null;
-  const nextMs = getNextWeekUpdateMs(profile);
-  const expiresMs = Number(profile?.expiresAtMs || 0) || null;
-  if (lastEl) lastEl.textContent = lastMs ? fmtDate(lastMs) : 'Sem informação ainda';
-  if (nextEl) nextEl.textContent = nextMs ? fmtDate(nextMs) : 'Sem informação ainda';
-  if (expiresEl) expiresEl.textContent = expiresMs ? fmtDate(expiresMs) : `Em ${PROFILE_EXPIRES_DAYS} dias após a atualização`;
-  if (btn) {
-    const allowed = canUpdateWeek(profile);
-    btn.disabled = !allowed;
-    btn.classList.toggle('opacity-50', !allowed);
-    btn.classList.toggle('cursor-not-allowed', !allowed);
-    btn.title = allowed ? '' : `A atualização estará liberada em ${fmtDate(nextMs)}.`;
-  }
-}
-
-function setAccessUiLoaded(isLoaded) {
-  const card = document.getElementById('guild-access-card');
-  const btn = document.getElementById('btn-update-week');
-  if (card) card.classList.toggle('hidden', !!isLoaded);
-  if (btn) btn.classList.toggle('hidden', !isLoaded);
-}
-
-function bindRankingToggle() {
-  const btn = document.getElementById('btn-toggle-ranking');
-  const text = document.getElementById('btn-toggle-ranking-text');
-  const list = document.getElementById('members-ranking-list');
-  if (!btn || !text || !list || btn.dataset.bound === '1') return;
-  btn.dataset.bound = '1';
-  btn.addEventListener('click', () => {
-    const hidden = list.classList.toggle('hidden');
-    text.textContent = hidden ? 'Mostrar' : 'Ocultar';
-    const icon = btn.querySelector('i');
-    if (icon) icon.setAttribute('data-lucide', hidden ? 'eye' : 'eye-off');
-    try { if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons(); } catch (_) {}
-  });
 }
 
 function renderGuildCard(profile) {
@@ -464,11 +474,13 @@ function renderGuildCard(profile) {
   const dateEl = document.getElementById('profile-created-at');
   const tagEl = document.getElementById('profile-guild-tag');
   const statusEl = document.getElementById('profile-status-text');
+  const expiresEl = document.getElementById('profile-expires-text');
+
   if (nameEl) nameEl.textContent = normalizeString(profile?.nomeGuilda, 'Sem informação ainda');
   if (dateEl) dateEl.textContent = fmtDate(profile?.dataCriacao);
   if (tagEl) tagEl.textContent = normalizeString(profile?.tag, 'Sem informação ainda');
-  if (statusEl) statusEl.textContent = profile?.updatedAtMs ? `Última atualização: ${fmtDate(profile.updatedAtMs)}` : 'Sem informação ainda';
-  renderUpdateInfo(profile || {});
+  if (statusEl) statusEl.textContent = `Última atualização: ${fmtDate(profile?.updatedAtMs)}`;
+  if (expiresEl) expiresEl.textContent = `Expires: ${fmtDate(profile?.expiresAtMs)}`;
 }
 
 function renderProfileState(data) {
@@ -481,11 +493,9 @@ function renderProfileState(data) {
   makePieChart('chart-guerra-atual', 'Guerra • Semana atual', Array.isArray(profile?.topGuerraSemanaAtual) ? profile.topGuerraSemanaAtual : []);
   makePieChart('chart-guerra-passada', 'Guerra • Semana passada', Array.isArray(previousWeek?.topGuerra) ? previousWeek.topGuerra : []);
   renderMemberList(members || []);
+
   const profileContent = document.getElementById('guild-profile-content');
   if (profileContent) profileContent.classList.remove('hidden');
-  setAccessUiLoaded(true);
-  bindRankingToggle();
-  try { initIcons(); } catch (_) {}
 }
 
 async function handleEnterProfile() {
@@ -497,10 +507,8 @@ async function handleEnterProfile() {
     return;
   }
   try {
-    if (button) {
-      button.disabled = true;
-      button.classList.add('opacity-50', 'cursor-not-allowed');
-    }
+    button.disabled = true;
+    button.classList.add('opacity-50', 'cursor-not-allowed');
     const uid = await resolveUidByKey(keyValue);
     currentUid = uid;
     const data = await loadGuildProfile(uid);
@@ -510,10 +518,8 @@ async function handleEnterProfile() {
     console.error(e);
     showToast('error', e?.message || 'Não foi possível carregar o perfil.');
   } finally {
-    if (button) {
-      button.disabled = false;
-      button.classList.remove('opacity-50', 'cursor-not-allowed');
-    }
+    button.disabled = false;
+    button.classList.remove('opacity-50', 'cursor-not-allowed');
   }
 }
 
@@ -522,16 +528,18 @@ async function handleUpdateWeek() {
     showToast('error', 'Entre no perfil antes de atualizar.');
     return;
   }
-  const button = document.getElementById('btn-update-week');
-  if (currentProfileData?.profile && !canUpdateWeek(currentProfileData.profile)) {
-    showToast('error', `Você só poderá atualizar novamente em ${fmtDate(getNextWeekUpdateMs(currentProfileData.profile))}.`);
+
+  const nowMs = Date.now();
+  const expiresAtMs = Number(currentProfileData?.profile?.expiresAtMs || 0);
+  if (expiresAtMs && nowMs < expiresAtMs) {
+    showToast('error', `Você só pode atualizar novamente em ${formatRemainingTime(expiresAtMs - nowMs)}.`);
     return;
   }
+
+  const button = document.getElementById('btn-update-week');
   try {
-    if (button) {
-      button.disabled = true;
-      button.classList.add('opacity-50', 'cursor-not-allowed');
-    }
+    button.disabled = true;
+    button.classList.add('opacity-50', 'cursor-not-allowed');
     const result = await updateWeeklyData(currentUid);
     const data = await loadGuildProfile(currentUid);
     renderProfileState(data);
@@ -540,63 +548,24 @@ async function handleUpdateWeek() {
     console.error(e);
     showToast('error', e?.message || 'Não foi possível atualizar a semana.');
   } finally {
-    if (button) {
-      button.disabled = false;
-      button.classList.remove('opacity-50', 'cursor-not-allowed');
-      renderUpdateInfo(currentProfileData?.profile || {});
-    }
+    button.disabled = false;
+    button.classList.remove('opacity-50', 'cursor-not-allowed');
   }
 }
 
-function bindInitialEvents() {
+setupSidebar();
+initIcons();
+
+checkAuth().then((user) => {
+  if (!user) return;
   const logoutBtn = document.getElementById('btn-logout');
-  if (logoutBtn && logoutBtn.dataset.bound !== '1') {
-    logoutBtn.dataset.bound = '1';
-    logoutBtn.addEventListener('click', logout);
-  }
+  if (logoutBtn) logoutBtn.onclick = logout;
 
-  const enterBtn = document.getElementById('btn-enter-guild-profile');
-  if (enterBtn && enterBtn.dataset.bound !== '1') {
-    enterBtn.dataset.bound = '1';
-    enterBtn.addEventListener('click', handleEnterProfile);
-  }
-
-  const updateBtn = document.getElementById('btn-update-week');
-  if (updateBtn && updateBtn.dataset.bound !== '1') {
-    updateBtn.dataset.bound = '1';
-    updateBtn.addEventListener('click', handleUpdateWeek);
-  }
+  document.getElementById('btn-enter-guild-profile')?.addEventListener('click', handleEnterProfile);
+  document.getElementById('btn-update-week')?.addEventListener('click', handleUpdateWeek);
 
   const input = document.getElementById('guild-key-input');
-  if (input && input.dataset.bound !== '1') {
-    input.dataset.bound = '1';
-    input.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter') handleEnterProfile();
-    });
-  }
-
-  bindRankingToggle();
-}
-
-async function boot() {
-  if (isBooted) return;
-  isBooted = true;
-  try { setupSidebar(); } catch (e) { console.error(e); }
-  try { initIcons(); } catch (e) { console.error(e); }
-  setAccessUiLoaded(false);
-  bindInitialEvents();
-
-  try {
-    const user = await checkAuth();
-    if (!user) return;
-    bindInitialEvents();
-  } catch (e) {
-    console.error(e);
-  }
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', boot, { once: true });
-} else {
-  boot();
-}
+  input?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') handleEnterProfile();
+  });
+});
