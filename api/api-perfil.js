@@ -3,9 +3,9 @@ import admin from "firebase-admin";
 const APP_NAME = "hub-perfis-admin";
 
 function getHubPerfisDb() {
-  const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT_PERFIS;
   if (!serviceAccountRaw) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT não configurado.");
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_PERFIS não configurado.");
   }
 
   const existing = admin.apps.find((app) => app?.name === APP_NAME);
