@@ -1,30 +1,38 @@
-import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore,
   doc,
   getDoc,
-  setDoc,
   getDocs,
-  collection,
-  writeBatch
+  collection
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db as normalDb } from './logic.js';
-
-const hubPerfisFirebaseConfig = {
-  apiKey: "AIzaSyASInYDbSFxfgbF7yjXDM4THipLYdZwjXs",
-  authDomain: "hub-perfis.firebaseapp.com",
-  projectId: "hub-perfis",
-  storageBucket: "hub-perfis.firebasestorage.app",
-  messagingSenderId: "231971973267",
-  appId: "1:231971973267:web:8b67cca5cfbe7b3f934566",
-  measurementId: "G-0N7WY0984C"
-};
 
 const PROFILE_ACCESS_CACHE_PREFIX = 'guildProfileAccess_';
 const WEEK_UPDATE_COOLDOWN_DAYS = 4;
 const WEEK_UPDATE_COOLDOWN_MS = WEEK_UPDATE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
 const PROFILE_EXPIRES_DAYS = 4;
 const PROFILE_EXPIRES_MS = PROFILE_EXPIRES_DAYS * 24 * 60 * 60 * 1000;
+
+
+const PROFILE_API_ENDPOINT = '/api/api-perfil';
+
+async function callProfileApi(action, payload = {}) {
+  const res = await fetch(PROFILE_API_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...payload })
+  });
+
+  let data = {};
+  try {
+    data = await res.json();
+  } catch (_) {}
+
+  if (!res.ok) {
+    throw new Error(data?.error || 'Não foi possível concluir a operação no perfil.');
+  }
+
+  return data || {};
+}
 
 let charts = {};
 let currentUid = null;
@@ -93,21 +101,6 @@ function formatRemainingTime(ms) {
   if (parts.length === 1) return parts[0];
   if (parts.length === 2) return `${parts[0]} e ${parts[1]}`;
   return `${parts[0]}, ${parts[1]} e ${parts[2]}`;
-}
-
-function createHubDb(tag = 'perfil') {
-  const name = `hub_perfis_${tag}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const app = initializeApp(hubPerfisFirebaseConfig, name);
-  return { app, db: getFirestore(app) };
-}
-
-async function withHubDb(tag, run) {
-  const { app, db } = createHubDb(tag);
-  try {
-    return await run(db);
-  } finally {
-    try { await deleteApp(app); } catch (_) {}
-  }
 }
 
 function escapeHtml(str) {
@@ -299,99 +292,28 @@ async function resolveUidByKey(keyValue) {
   if (!key) throw new Error('Digite a chave da guilda.');
   const cached = getAccessCache(key);
   if (cached) return cached;
-  return withHubDb('resolve_key', async (db) => {
-    const snap = await getDoc(doc(db, 'chave', key));
-    if (!snap.exists()) throw new Error('Chave da guilda não encontrada.');
-    const uid = normalizeString(snap.data()?.uid);
-    if (!uid) throw new Error('UID da guilda não encontrado para essa chave.');
-    saveAccessCache(key, uid);
-    return uid;
-  });
+
+  const data = await callProfileApi('resolveKey', { key });
+  const uid = normalizeString(data?.uid);
+  if (!uid) throw new Error('UID da guilda não encontrado para essa chave.');
+  saveAccessCache(key, uid);
+  return uid;
 }
 
 async function loadGuildProfile(uid) {
-  return withHubDb('load_profile', async (db) => {
-    const profileSnap = await getDoc(doc(db, 'perfil', uid));
-    if (!profileSnap.exists()) throw new Error('Perfil da guilda não encontrado.');
-    const profile = profileSnap.data() || {};
-    let members = [];
-    try {
-      const membersSnap = await getDocs(collection(db, 'perfil', uid, 'membros'));
-      members = membersSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-    } catch (_) {}
-    let previousWeek = {};
-    try {
-      const prevSnap = await getDoc(doc(db, 'perfil', uid, 'semanaPassada', 'resumo'));
-      previousWeek = prevSnap.exists() ? (prevSnap.data() || {}) : {};
-    } catch (_) {}
-    return { profile, members, previousWeek };
-  });
+  const data = await callProfileApi('loadProfile', { uid });
+  return {
+    profile: data?.profile || {},
+    members: Array.isArray(data?.members) ? data.members : [],
+    previousWeek: data?.previousWeek || {}
+  };
 }
 
 async function updateWeeklyData(uid) {
   const guildInfo = getCachedGuildInfo(uid);
   const members = await getCurrentGuildMembers();
-  const currentTopHonra = getTop3(members, 'weeklyHonor');
-  const currentTopGuerra = getTop3(members, 'guildWar');
-
-  return withHubDb('update_week', async (db) => {
-    const profileRef = doc(db, 'perfil', uid);
-    const profileSnap = await getDoc(profileRef);
-    if (!profileSnap.exists()) throw new Error('Perfil da guilda não encontrado para atualizar.');
-    const profileData = profileSnap.data() || {};
-
-    const oldTopHonra = Array.isArray(profileData.topHonraSemanaAtual) ? profileData.topHonraSemanaAtual : [];
-    const oldTopGuerra = Array.isArray(profileData.topGuerraSemanaAtual) ? profileData.topGuerraSemanaAtual : [];
-
-    const batch = writeBatch(db);
-    const membersCol = collection(db, 'perfil', uid, 'membros');
-    const existingSnap = await getDocs(membersCol);
-    const existingMap = new Map(existingSnap.docs.map((d) => [d.id, d.data() || {}]));
-    const currentIds = new Set();
-
-    for (const member of members) {
-      currentIds.add(member.playerId);
-      const memberRef = doc(db, 'perfil', uid, 'membros', member.playerId);
-      const prev = existingMap.get(member.playerId) || {};
-      const totalHonra = Number(prev.totalHonra || 0) + Number(member.weeklyHonor || 0);
-      const totalGuerra = Number(prev.totalGuerra || 0) + Number(member.guildWar || 0);
-      batch.set(memberRef, {
-        playerId: member.playerId,
-        nick: member.nick,
-        honraSemanaAtual: Number(member.weeklyHonor || 0),
-        guerraSemanaAtual: Number(member.guildWar || 0),
-        totalHonra,
-        totalGuerra,
-        updatedAtMs: Date.now()
-      }, { merge: true });
-    }
-
-    for (const [docId] of existingMap) {
-      if (!currentIds.has(docId)) batch.delete(doc(db, 'perfil', uid, 'membros', docId));
-    }
-
-    const now = Date.now();
-    batch.set(doc(db, 'perfil', uid, 'semanaPassada', 'resumo'), {
-      topHonra: oldTopHonra,
-      topGuerra: oldTopGuerra,
-      updatedAtMs: now
-    }, { merge: true });
-
-    batch.set(profileRef, {
-      nomeGuilda: normalizeString(guildInfo.name, profileData.nomeGuilda),
-      dataCriacao: guildInfo.createdAtMs ?? profileData.dataCriacao ?? null,
-      tag: normalizeString(guildInfo.tag, profileData.tag),
-      topHonraSemanaAtual: currentTopHonra,
-      topGuerraSemanaAtual: currentTopGuerra,
-      updatedAtMs: now,
-      lastWeekUpdateAtMs: now,
-      nextWeekUpdateAtMs: now + WEEK_UPDATE_COOLDOWN_MS,
-      expiresAtMs: now + PROFILE_EXPIRES_MS
-    }, { merge: true });
-
-    await batch.commit();
-    return { updatedCount: members.length };
-  });
+  const data = await callProfileApi('updateWeek', { uid, guildInfo, members });
+  return { updatedCount: Number(data?.updatedCount || members.length || 0) };
 }
 
 function destroyCharts() {
