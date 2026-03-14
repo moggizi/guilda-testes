@@ -473,7 +473,7 @@ function renderUpdateInfo(profile) {
   const btn = document.getElementById('btn-update-week');
   if (!btn) return;
   const allowed = canUpdateWeek(profile);
-  btn.disabled = !allowed;
+  btn.dataset.cooldownBlocked = allowed ? '0' : '1';
   btn.classList.toggle('opacity-50', !allowed);
   btn.classList.toggle('cursor-not-allowed', !allowed);
   btn.title = allowed ? '' : `A atualização estará liberada em ${fmtDate(getNextWeekUpdateMs(profile))}.`;
