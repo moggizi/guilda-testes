@@ -22,6 +22,8 @@ const hubPerfisFirebaseConfig = {
 };
 
 const PROFILE_ACCESS_CACHE_PREFIX = 'guildProfileAccess_';
+const WEEK_UPDATE_COOLDOWN_DAYS = 9;
+const WEEK_UPDATE_COOLDOWN_MS = WEEK_UPDATE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
 
 function createHubDb(tag = 'perfil') {
   const name = `hub_perfis_${tag}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -141,37 +143,30 @@ function normalizeMember(raw) {
 
   const nick = normalizeString(raw?.nick, raw?.nickname, raw?.nome, raw?.name, `Jogador ${playerId}`);
 
-  const weeklyHonorEnabled = raw?.weeklyMeta === undefined ? true : !!raw?.weeklyMeta;
-  const guildWarEnabled = raw?.guildWar === undefined ? true : !!raw?.guildWar;
+  const weeklyHonor = toNumber(
+    raw?.weeklyMetaValue,
+    raw?.pontosSemanais,
+    raw?.pontosHonra,
+    raw?.pontosDeHonra,
+    raw?.honra,
+    raw?.honor,
+    raw?.weeklyHonor,
+    raw?.weeklyHonorPoints,
+    raw?.honorPoints,
+    raw?.points
+  );
 
-  const weeklyHonor = weeklyHonorEnabled
-    ? toNumber(
-        raw?.weeklyMetaValue,
-        raw?.pontosSemanais,
-        raw?.pontosHonra,
-        raw?.pontosDeHonra,
-        raw?.honra,
-        raw?.honor,
-        raw?.weeklyHonor,
-        raw?.weeklyHonorPoints,
-        raw?.honorPoints,
-        raw?.points
-      )
-    : 0;
-
-  const guildWar = guildWarEnabled
-    ? toNumber(
-        raw?.guildWarMeta,
-        raw?.pontosGuerra,
-        raw?.guerraGuilda,
-        raw?.pontosGuerraGuilda,
-        raw?.guildWarPoints,
-        raw?.guildWar,
-        raw?.warPoints,
-        raw?.guerra,
-        raw?.gg
-      )
-    : 0;
+  const guildWar = toNumber(
+    raw?.guildWarMeta,
+    raw?.pontosGuerra,
+    raw?.guerraGuilda,
+    raw?.pontosGuerraGuilda,
+    raw?.guildWarPoints,
+    raw?.guildWar,
+    raw?.warPoints,
+    raw?.guerra,
+    raw?.gg
+  );
 
   return {
     playerId,
@@ -341,7 +336,9 @@ async function updateWeeklyData(uid) {
       tag: normalizeString(guildInfo.tag, profileData.tag),
       topHonraSemanaAtual: currentTopHonra,
       topGuerraSemanaAtual: currentTopGuerra,
-      updatedAtMs: Date.now()
+      updatedAtMs: Date.now(),
+      lastWeekUpdateAtMs: Date.now(),
+      nextWeekUpdateAtMs: Date.now() + WEEK_UPDATE_COOLDOWN_MS
     }, { merge: true });
 
     await batch.commit();
@@ -370,20 +367,23 @@ function chartOptions(labelText) {
   return {
     responsive: true,
     maintainAspectRatio: false,
+    layout: { padding: 2 },
     plugins: {
       legend: {
         position: 'bottom',
         labels: {
-          boxWidth: 10,
-          padding: 8,
-          font: { size: 10 }
+          usePointStyle: true,
+          pointStyle: 'circle',
+          boxWidth: 8,
+          padding: 6,
+          font: { size: 9 }
         }
       },
       title: {
         display: true,
         text: labelText,
-        font: { size: 11, weight: '700' },
-        padding: { bottom: 8 }
+        font: { size: 10, weight: '700' },
+        padding: { bottom: 6 }
       }
     }
   };
@@ -398,7 +398,7 @@ function ensureNoInfoCanvas(canvasId, labelText) {
     type: 'pie',
     data: {
       labels: ['Sem informação ainda'],
-      datasets: [{ data: [1] }]
+      datasets: [{ data: [1], backgroundColor: ['#10b981'] }]
     },
     options: chartOptions(labelText)
   });
@@ -418,7 +418,7 @@ function makePieChart(canvasId, labelText, items) {
     type: 'pie',
     data: {
       labels: valid.map((x) => `${x.nick} (${x.pontos})`),
-      datasets: [{ data: valid.map((x) => Number(x.pontos || 0)) }]
+      datasets: [{ data: valid.map((x) => Number(x.pontos || 0)), backgroundColor: ['#10b981', '#22c55e', '#86efac'], borderColor: '#ffffff', borderWidth: 2 }]}
     },
     options: chartOptions(labelText)
   });
@@ -454,6 +454,59 @@ function renderMemberList(members) {
   }).join('');
 }
 
+function getNextWeekUpdateMs(profile) {
+  const explicit = Number(profile?.nextWeekUpdateAtMs || 0);
+  if (isFinite(explicit) && explicit > 0) return explicit;
+  const last = Number(profile?.lastWeekUpdateAtMs || profile?.updatedAtMs || 0);
+  if (isFinite(last) && last > 0) return last + WEEK_UPDATE_COOLDOWN_MS;
+  return null;
+}
+
+function canUpdateWeek(profile) {
+  const nextMs = getNextWeekUpdateMs(profile);
+  if (!nextMs) return true;
+  return Date.now() >= nextMs;
+}
+
+function renderUpdateInfo(profile) {
+  const lastEl = document.getElementById('profile-last-week-update');
+  const nextEl = document.getElementById('profile-next-week-update');
+  const btn = document.getElementById('btn-update-week');
+  const lastMs = Number(profile?.lastWeekUpdateAtMs || 0) || null;
+  const nextMs = getNextWeekUpdateMs(profile);
+  if (lastEl) lastEl.textContent = lastMs ? fmtDate(lastMs) : 'Sem informação ainda';
+  if (nextEl) nextEl.textContent = nextMs ? fmtDate(nextMs) : 'Sem informação ainda';
+  if (btn) {
+    const allowed = canUpdateWeek(profile);
+    btn.disabled = !allowed;
+    btn.classList.toggle('opacity-50', !allowed);
+    btn.classList.toggle('cursor-not-allowed', !allowed);
+    btn.title = allowed ? '' : `A atualização estará liberada em ${fmtDate(nextMs)}.`;
+  }
+}
+
+function setAccessUiLoaded(isLoaded) {
+  const card = document.getElementById('guild-access-card');
+  const btn = document.getElementById('btn-update-week');
+  if (card) card.classList.toggle('hidden', !!isLoaded);
+  if (btn) btn.classList.toggle('hidden', !isLoaded);
+}
+
+function bindRankingToggle() {
+  const btn = document.getElementById('btn-toggle-ranking');
+  const text = document.getElementById('btn-toggle-ranking-text');
+  const list = document.getElementById('members-ranking-list');
+  if (!btn || !text || !list || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', () => {
+    const hidden = list.classList.toggle('hidden');
+    text.textContent = hidden ? 'Mostrar' : 'Ocultar';
+    const icon = btn.querySelector('i');
+    if (icon) icon.setAttribute('data-lucide', hidden ? 'eye' : 'eye-off');
+    try { if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons(); } catch (_) {}
+  });
+}
+
 function renderGuildCard(profile) {
   const nameEl = document.getElementById('profile-guild-name');
   const dateEl = document.getElementById('profile-created-at');
@@ -464,6 +517,7 @@ function renderGuildCard(profile) {
   if (dateEl) dateEl.textContent = fmtDate(profile?.dataCriacao);
   if (tagEl) tagEl.textContent = normalizeString(profile?.tag, 'Sem informação ainda');
   if (statusEl) statusEl.textContent = normalizeString(profile?.updatedAtMs ? `Última atualização: ${fmtDate(profile.updatedAtMs)}` : '', 'Sem informação ainda');
+  renderUpdateInfo(profile || {});
 }
 
 function renderProfileState(data) {
@@ -479,7 +533,10 @@ function renderProfileState(data) {
 
   const profileContent = document.getElementById('guild-profile-content');
   if (profileContent) profileContent.classList.remove('hidden');
+  setAccessUiLoaded(true);
+  bindRankingToggle();
 }
+
 
 async function handleEnterProfile() {
   const input = document.getElementById('guild-key-input');
@@ -512,6 +569,10 @@ async function handleUpdateWeek() {
     return;
   }
   const button = document.getElementById('btn-update-week');
+  if (currentProfileData?.profile && !canUpdateWeek(currentProfileData.profile)) {
+    showToast('error', `Você só poderá atualizar novamente em ${fmtDate(getNextWeekUpdateMs(currentProfileData.profile))}.`);
+    return;
+  }
   try {
     button.disabled = true;
     button.classList.add('opacity-50', 'cursor-not-allowed');
@@ -536,6 +597,8 @@ checkAuth().then((user) => {
   const logoutBtn = document.getElementById('btn-logout');
   if (logoutBtn) logoutBtn.onclick = logout;
 
+  setAccessUiLoaded(false);
+  bindRankingToggle();
   document.getElementById('btn-enter-guild-profile')?.addEventListener('click', handleEnterProfile);
   document.getElementById('btn-update-week')?.addEventListener('click', handleUpdateWeek);
 
