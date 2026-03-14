@@ -6,6 +6,7 @@
   <title>Perfil da Guilda - Guild Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body class="bg-gray-50/80">
@@ -83,10 +84,10 @@
         </div>
       </header>
 
-      <div class="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
+      <div class="p-4 sm:p-6 max-w-6xl mx-auto space-y-6 pb-28">
         <div>
           <h2 class="text-2xl font-bold text-gray-900">Perfil da guilda</h2>
-          <p class="text-gray-500 text-sm mt-1">Entre com a chave da guilda para acessar o perfil.</p>
+          <p class="text-gray-500 text-sm mt-1">Entre com a chave da guilda para acessar as informações.</p>
         </div>
 
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
@@ -96,33 +97,85 @@
             </div>
             <div>
               <h3 class="font-semibold text-gray-900">Chave da guilda</h3>
-              <p class="text-xs text-gray-500 mt-0.5">Por enquanto, informe a chave para continuar.</p>
+              <p class="text-xs text-gray-500 mt-0.5">Ao entrar, a tela lê a chave, encontra o UID e carrega o perfil da guilda.</p>
             </div>
           </div>
 
           <div class="space-y-3">
-            <input id="guild-key-input" type="text" inputmode="numeric" placeholder="Digite a chave da guilda" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+            <input id="guild-key-input" type="text" placeholder="Digite a chave da guilda" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
             <button id="btn-enter-guild-profile" type="button" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-semibold shadow-lg hover:shadow-xl transition-all active:scale-95">
               <i data-lucide="log-in" class="w-4 h-4"></i>
               Entrar
             </button>
           </div>
         </div>
+
+        <section id="guild-profile-content" class="hidden space-y-6">
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
+            <div class="flex items-start gap-3 mb-4">
+              <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                <i data-lucide="badge-info" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="font-semibold text-gray-900">Informações da guilda</h3>
+                <p class="text-xs text-gray-500 mt-0.5" id="profile-status-text">Sem informação ainda</p>
+              </div>
+            </div>
+            <div class="grid md:grid-cols-3 gap-3">
+              <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
+                <p class="text-[11px] text-gray-500 font-semibold">Nome</p>
+                <p id="profile-guild-name" class="mt-1 text-sm font-bold text-gray-900">Sem informação ainda</p>
+              </div>
+              <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
+                <p class="text-[11px] text-gray-500 font-semibold">Data de entrada</p>
+                <p id="profile-created-at" class="mt-1 text-sm font-bold text-gray-900">Sem informação ainda</p>
+              </div>
+              <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
+                <p class="text-[11px] text-gray-500 font-semibold">Tag</p>
+                <p id="profile-guild-tag" class="mt-1 text-sm font-bold text-gray-900">Sem informação ainda</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-2 gap-4">
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <canvas id="chart-honra-atual"></canvas>
+            </div>
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <canvas id="chart-guerra-atual"></canvas>
+            </div>
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <canvas id="chart-honra-passada"></canvas>
+            </div>
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <canvas id="chart-guerra-passada"></canvas>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
+            <div class="flex items-start gap-3 mb-4">
+              <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                <i data-lucide="list-ordered" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="font-semibold text-gray-900">Ranking de membros</h3>
+                <p class="text-xs text-gray-500 mt-0.5">Ordenado do maior total para o menor.</p>
+              </div>
+            </div>
+            <div id="members-ranking-list" class="space-y-3">
+              <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-sm text-gray-500">Sem informação ainda</div>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   </div>
 
-  <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout } from './logic.js';
+  <button id="btn-refresh-week" type="button" class="fixed bottom-5 right-5 inline-flex items-center justify-center gap-2 px-5 py-4 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-bold shadow-xl hover:shadow-2xl active:scale-95 z-50">
+    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+    Atualizar semana
+  </button>
 
-    setupSidebar();
-    initIcons();
-
-    checkAuth().then((user) => {
-      if (!user) return;
-      const logoutBtn = document.getElementById('btn-logout');
-      if (logoutBtn) logoutBtn.onclick = logout;
-    });
-  </script>
+  <script type="module" src="./perfil.js"></script>
 </body>
 </html>
