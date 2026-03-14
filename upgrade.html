@@ -171,7 +171,7 @@
   setupSidebar();
   initIcons();
 
-  const PLANS_LS_KEY = 'plans_upgrade_cache_v2';
+  try { localStorage.removeItem('plans_upgrade_cache_v2'); } catch (_) {}
 
   function normalizeTier(raw){
     const s = (raw || 'free').toString().toLowerCase().trim();
@@ -195,13 +195,6 @@
   }
 
   function getPlans(){
-    try {
-      const raw = localStorage.getItem(PLANS_LS_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) {
-      console.warn("WebView bloqueou acesso ao storage, gerando planos em memória...", e);
-    }
-
     const basePlans = [
       {
         id: 'free',
@@ -238,9 +231,7 @@
       },
     ];
 
-    const computed = computeDiscounts(basePlans);
-    try { localStorage.setItem(PLANS_LS_KEY, JSON.stringify(computed)); } catch (_) {}
-    return computed;
+    return computeDiscounts(basePlans);
   }
 
   // --- Pagamento Mercado Pago (PIX automático) ------------------------------
