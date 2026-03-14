@@ -75,12 +75,24 @@ function showWarningToast(message) {
 }
 
 function formatRemainingTime(ms) {
-  const totalHours = Math.max(1, Math.ceil(Number(ms || 0) / 3600000));
-  const days = Math.floor(totalHours / 24);
-  const hours = totalHours % 24;
-  if (days > 0 && hours > 0) return `${days} dia(s) e ${hours} hora(s)`;
-  if (days > 0) return `${days} dia(s)`;
-  return `${hours} hora(s)`;
+  const totalMs = Math.max(0, Number(ms || 0));
+  let totalMinutes = Math.ceil(totalMs / 60000);
+  if (totalMinutes < 1) totalMinutes = 1;
+
+  const days = Math.floor(totalMinutes / 1440);
+  totalMinutes -= days * 1440;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes - (hours * 60);
+
+  const parts = [];
+  if (days > 0) parts.push(`${days} dia(s)`);
+  if (hours > 0) parts.push(`${hours} hora(s)`);
+  if (minutes > 0) parts.push(`${minutes} min`);
+
+  if (!parts.length) return '1 min';
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} e ${parts[1]}`;
+  return `${parts[0]}, ${parts[1]} e ${parts[2]}`;
 }
 
 function createHubDb(tag = 'perfil') {
