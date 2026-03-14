@@ -6,8 +6,7 @@ import {
   setDoc,
   getDocs,
   collection,
-  writeBatch,
-  deleteDoc
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db as normalDb } from './logic.js';
 
@@ -26,6 +25,11 @@ const WEEK_UPDATE_COOLDOWN_DAYS = 4;
 const WEEK_UPDATE_COOLDOWN_MS = WEEK_UPDATE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
 const PROFILE_EXPIRES_DAYS = 4;
 const PROFILE_EXPIRES_MS = PROFILE_EXPIRES_DAYS * 24 * 60 * 60 * 1000;
+
+let charts = {};
+let currentUid = null;
+let currentProfileData = null;
+let isBooted = false;
 
 function createHubDb(tag = 'perfil') {
   const name = `hub_perfis_${tag}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -170,13 +174,7 @@ function normalizeMember(raw) {
     raw?.gg
   );
 
-  return {
-    playerId,
-    nick,
-    weeklyHonor,
-    guildWar,
-    updatedAtMs: Date.now()
-  };
+  return { playerId, nick, weeklyHonor, guildWar, updatedAtMs: Date.now() };
 }
 
 function normalizeMembersArray(list) {
@@ -192,12 +190,9 @@ function normalizeMembersArray(list) {
 async function getCurrentGuildMembers() {
   const ctx = getGuildCtx();
   const guildId = normalizeString(ctx?.guildId);
-
   const cached = normalizeMembersArray(readMembersCache(guildId));
   if (cached.length) return cached;
-
   if (!guildId) return [];
-
   try {
     const snap = await getDocs(collection(normalDb, 'guildas', guildId, 'membros'));
     const fresh = [];
@@ -207,7 +202,7 @@ async function getCurrentGuildMembers() {
     }
     return normalizeMembersArray(fresh);
   } catch (_) {
-    return cached;
+    return [];
   }
 }
 
@@ -215,11 +210,7 @@ function getTop3(list, field) {
   return [...(list || [])]
     .sort((a, b) => Number(b?.[field] || 0) - Number(a?.[field] || 0))
     .slice(0, 3)
-    .map((item) => ({
-      playerId: item.playerId,
-      nick: item.nick,
-      pontos: Number(item[field] || 0)
-    }));
+    .map((item) => ({ playerId: item.playerId, nick: item.nick, pontos: Number(item[field] || 0) }));
 }
 
 function saveAccessCache(keyValue, uid) {
@@ -242,10 +233,8 @@ function getAccessCache(keyValue) {
 async function resolveUidByKey(keyValue) {
   const key = String(keyValue || '').trim();
   if (!key) throw new Error('Digite a chave da guilda.');
-
   const cached = getAccessCache(key);
   if (cached) return cached;
-
   return withHubDb('resolve_key', async (db) => {
     const snap = await getDoc(doc(db, 'chave', key));
     if (!snap.exists()) throw new Error('Chave da guilda não encontrada.');
@@ -261,23 +250,16 @@ async function loadGuildProfile(uid) {
     const profileSnap = await getDoc(doc(db, 'perfil', uid));
     if (!profileSnap.exists()) throw new Error('Perfil da guilda não encontrado.');
     const profile = profileSnap.data() || {};
-
     let members = [];
     try {
       const membersSnap = await getDocs(collection(db, 'perfil', uid, 'membros'));
       members = membersSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-    } catch (_) {
-      members = [];
-    }
-
+    } catch (_) {}
     let previousWeek = {};
     try {
       const prevSnap = await getDoc(doc(db, 'perfil', uid, 'semanaPassada', 'resumo'));
       previousWeek = prevSnap.exists() ? (prevSnap.data() || {}) : {};
-    } catch (_) {
-      previousWeek = {};
-    }
-
+    } catch (_) {}
     return { profile, members, previousWeek };
   });
 }
@@ -321,15 +303,14 @@ async function updateWeeklyData(uid) {
     }
 
     for (const [docId] of existingMap) {
-      if (!currentIds.has(docId)) {
-        batch.delete(doc(db, 'perfil', uid, 'membros', docId));
-      }
+      if (!currentIds.has(docId)) batch.delete(doc(db, 'perfil', uid, 'membros', docId));
     }
 
+    const now = Date.now();
     batch.set(doc(db, 'perfil', uid, 'semanaPassada', 'resumo'), {
       topHonra: oldTopHonra,
       topGuerra: oldTopGuerra,
-      updatedAtMs: Date.now()
+      updatedAtMs: now
     }, { merge: true });
 
     batch.set(profileRef, {
@@ -338,26 +319,16 @@ async function updateWeeklyData(uid) {
       tag: normalizeString(guildInfo.tag, profileData.tag),
       topHonraSemanaAtual: currentTopHonra,
       topGuerraSemanaAtual: currentTopGuerra,
-      updatedAtMs: Date.now(),
-      lastWeekUpdateAtMs: Date.now(),
-      nextWeekUpdateAtMs: Date.now() + WEEK_UPDATE_COOLDOWN_MS,
-      expiresAtMs: Date.now() + PROFILE_EXPIRES_MS
+      updatedAtMs: now,
+      lastWeekUpdateAtMs: now,
+      nextWeekUpdateAtMs: now + WEEK_UPDATE_COOLDOWN_MS,
+      expiresAtMs: now + PROFILE_EXPIRES_MS
     }, { merge: true });
 
     await batch.commit();
-    return {
-      updatedCount: members.length,
-      currentTopHonra,
-      currentTopGuerra,
-      previousTopHonra: oldTopHonra,
-      previousTopGuerra: oldTopGuerra
-    };
+    return { updatedCount: members.length };
   });
 }
-
-let charts = {};
-let currentUid = null;
-let currentProfileData = null;
 
 function destroyCharts() {
   Object.values(charts).forEach((chart) => {
@@ -370,23 +341,17 @@ function chartOptions(labelText) {
   return {
     responsive: true,
     maintainAspectRatio: false,
-    layout: { padding: 2 },
+    layout: { padding: 1 },
     plugins: {
       legend: {
         position: 'bottom',
-        labels: {
-          usePointStyle: true,
-          pointStyle: 'circle',
-          boxWidth: 8,
-          padding: 6,
-          font: { size: 9 }
-        }
+        labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, padding: 5, font: { size: 8 } }
       },
       title: {
         display: true,
         text: labelText,
-        font: { size: 10, weight: '700' },
-        padding: { bottom: 6 }
+        font: { size: 9, weight: '700' },
+        padding: { bottom: 4 }
       }
     }
   };
@@ -394,15 +359,12 @@ function chartOptions(labelText) {
 
 function ensureNoInfoCanvas(canvasId, labelText) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas) return null;
+  if (!canvas || !window.Chart) return null;
   const ctx = canvas.getContext('2d');
-  if (!ctx || !window.Chart) return null;
+  if (!ctx) return null;
   return new window.Chart(ctx, {
     type: 'pie',
-    data: {
-      labels: ['Sem informação ainda'],
-      datasets: [{ data: [1], backgroundColor: ['#10b981'] }]
-    },
+    data: { labels: ['Sem informação ainda'], datasets: [{ data: [1], backgroundColor: ['#10b981'] }] },
     options: chartOptions(labelText)
   });
 }
@@ -421,7 +383,7 @@ function makePieChart(canvasId, labelText, items) {
     type: 'pie',
     data: {
       labels: valid.map((x) => `${x.nick} (${x.pontos})`),
-      datasets: [{ data: valid.map((x) => Number(x.pontos || 0)), backgroundColor: ['#10b981', '#22c55e', '#86efac'], borderColor: '#ffffff', borderWidth: 2 }]}
+      datasets: [{ data: valid.map((x) => Number(x.pontos || 0)), backgroundColor: ['#10b981', '#22c55e', '#86efac'], borderColor: '#ffffff', borderWidth: 2 }]
     },
     options: chartOptions(labelText)
   });
@@ -430,30 +392,14 @@ function makePieChart(canvasId, labelText, items) {
 function renderMemberList(members) {
   const container = document.getElementById('members-ranking-list');
   if (!container) return;
-  const sorted = [...(members || [])].sort((a, b) => {
-    const scoreA = Number(a.totalHonra || 0) + Number(a.totalGuerra || 0);
-    const scoreB = Number(b.totalHonra || 0) + Number(b.totalGuerra || 0);
-    return scoreB - scoreA;
-  });
-
+  const sorted = [...(members || [])].sort((a, b) => (Number(b.totalHonra || 0) + Number(b.totalGuerra || 0)) - (Number(a.totalHonra || 0) + Number(a.totalGuerra || 0)));
   if (!sorted.length) {
     container.innerHTML = `<div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-sm text-gray-500">Sem informação ainda</div>`;
     return;
   }
-
   container.innerHTML = sorted.map((member, index) => {
     const total = Number(member.totalHonra || 0) + Number(member.totalGuerra || 0);
-    return `
-      <div class="rounded-xl border border-gray-100 bg-white px-4 py-4 flex items-center justify-between gap-3">
-        <div class="min-w-0">
-          <p class="text-sm font-semibold text-gray-900">${index + 1}. ${escapeHtml(member.nick || member.playerId)}</p>
-          <p class="text-xs text-gray-500 mt-1">ID: ${escapeHtml(member.playerId || '-')}</p>
-        </div>
-        <div class="text-right shrink-0">
-          <p class="text-sm font-bold text-emerald-700">${total}</p>
-          <p class="text-[11px] text-gray-500">Honra: ${Number(member.totalHonra || 0)} • GG: ${Number(member.totalGuerra || 0)}</p>
-        </div>
-      </div>`;
+    return `<div class="rounded-xl border border-gray-100 bg-white px-4 py-4 flex items-center justify-between gap-3"><div class="min-w-0"><p class="text-sm font-semibold text-gray-900">${index + 1}. ${escapeHtml(member.nick || member.playerId)}</p><p class="text-xs text-gray-500 mt-1">ID: ${escapeHtml(member.playerId || '-')}</p></div><div class="text-right shrink-0"><p class="text-sm font-bold text-emerald-700">${total}</p><p class="text-[11px] text-gray-500">Honra: ${Number(member.totalHonra || 0)} • GG: ${Number(member.totalGuerra || 0)}</p></div></div>`;
   }).join('');
 }
 
@@ -518,11 +464,10 @@ function renderGuildCard(profile) {
   const dateEl = document.getElementById('profile-created-at');
   const tagEl = document.getElementById('profile-guild-tag');
   const statusEl = document.getElementById('profile-status-text');
-
   if (nameEl) nameEl.textContent = normalizeString(profile?.nomeGuilda, 'Sem informação ainda');
   if (dateEl) dateEl.textContent = fmtDate(profile?.dataCriacao);
   if (tagEl) tagEl.textContent = normalizeString(profile?.tag, 'Sem informação ainda');
-  if (statusEl) statusEl.textContent = normalizeString(profile?.updatedAtMs ? `Última atualização: ${fmtDate(profile.updatedAtMs)}` : '', 'Sem informação ainda');
+  if (statusEl) statusEl.textContent = profile?.updatedAtMs ? `Última atualização: ${fmtDate(profile.updatedAtMs)}` : 'Sem informação ainda';
   renderUpdateInfo(profile || {});
 }
 
@@ -536,13 +481,12 @@ function renderProfileState(data) {
   makePieChart('chart-guerra-atual', 'Guerra • Semana atual', Array.isArray(profile?.topGuerraSemanaAtual) ? profile.topGuerraSemanaAtual : []);
   makePieChart('chart-guerra-passada', 'Guerra • Semana passada', Array.isArray(previousWeek?.topGuerra) ? previousWeek.topGuerra : []);
   renderMemberList(members || []);
-
   const profileContent = document.getElementById('guild-profile-content');
   if (profileContent) profileContent.classList.remove('hidden');
   setAccessUiLoaded(true);
   bindRankingToggle();
+  try { initIcons(); } catch (_) {}
 }
-
 
 async function handleEnterProfile() {
   const input = document.getElementById('guild-key-input');
@@ -553,8 +497,10 @@ async function handleEnterProfile() {
     return;
   }
   try {
-    button.disabled = true;
-    button.classList.add('opacity-50', 'cursor-not-allowed');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('opacity-50', 'cursor-not-allowed');
+    }
     const uid = await resolveUidByKey(keyValue);
     currentUid = uid;
     const data = await loadGuildProfile(uid);
@@ -564,8 +510,10 @@ async function handleEnterProfile() {
     console.error(e);
     showToast('error', e?.message || 'Não foi possível carregar o perfil.');
   } finally {
-    button.disabled = false;
-    button.classList.remove('opacity-50', 'cursor-not-allowed');
+    if (button) {
+      button.disabled = false;
+      button.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
   }
 }
 
@@ -580,8 +528,10 @@ async function handleUpdateWeek() {
     return;
   }
   try {
-    button.disabled = true;
-    button.classList.add('opacity-50', 'cursor-not-allowed');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('opacity-50', 'cursor-not-allowed');
+    }
     const result = await updateWeeklyData(currentUid);
     const data = await loadGuildProfile(currentUid);
     renderProfileState(data);
@@ -590,26 +540,63 @@ async function handleUpdateWeek() {
     console.error(e);
     showToast('error', e?.message || 'Não foi possível atualizar a semana.');
   } finally {
-    button.disabled = false;
-    button.classList.remove('opacity-50', 'cursor-not-allowed');
+    if (button) {
+      button.disabled = false;
+      button.classList.remove('opacity-50', 'cursor-not-allowed');
+      renderUpdateInfo(currentProfileData?.profile || {});
+    }
   }
 }
 
-setupSidebar();
-initIcons();
-
-checkAuth().then((user) => {
-  if (!user) return;
+function bindInitialEvents() {
   const logoutBtn = document.getElementById('btn-logout');
-  if (logoutBtn) logoutBtn.onclick = logout;
+  if (logoutBtn && logoutBtn.dataset.bound !== '1') {
+    logoutBtn.dataset.bound = '1';
+    logoutBtn.addEventListener('click', logout);
+  }
 
-  setAccessUiLoaded(false);
-  bindRankingToggle();
-  document.getElementById('btn-enter-guild-profile')?.addEventListener('click', handleEnterProfile);
-  document.getElementById('btn-update-week')?.addEventListener('click', handleUpdateWeek);
+  const enterBtn = document.getElementById('btn-enter-guild-profile');
+  if (enterBtn && enterBtn.dataset.bound !== '1') {
+    enterBtn.dataset.bound = '1';
+    enterBtn.addEventListener('click', handleEnterProfile);
+  }
+
+  const updateBtn = document.getElementById('btn-update-week');
+  if (updateBtn && updateBtn.dataset.bound !== '1') {
+    updateBtn.dataset.bound = '1';
+    updateBtn.addEventListener('click', handleUpdateWeek);
+  }
 
   const input = document.getElementById('guild-key-input');
-  input?.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter') handleEnterProfile();
-  });
-});
+  if (input && input.dataset.bound !== '1') {
+    input.dataset.bound = '1';
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') handleEnterProfile();
+    });
+  }
+
+  bindRankingToggle();
+}
+
+async function boot() {
+  if (isBooted) return;
+  isBooted = true;
+  try { setupSidebar(); } catch (e) { console.error(e); }
+  try { initIcons(); } catch (e) { console.error(e); }
+  setAccessUiLoaded(false);
+  bindInitialEvents();
+
+  try {
+    const user = await checkAuth();
+    if (!user) return;
+    bindInitialEvents();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot, { once: true });
+} else {
+  boot();
+}
