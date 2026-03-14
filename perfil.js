@@ -31,6 +31,58 @@ let currentUid = null;
 let currentProfileData = null;
 let isBooted = false;
 
+function normalizeVipTierValue(v) {
+  const s = (v || '').toString().toLowerCase().trim();
+  if (s.includes('business') || s.includes('buss')) return 'business';
+  if (s.includes('pro')) return 'pro';
+  if (s.includes('plus')) return 'plus';
+  return 'free';
+}
+
+async function getCurrentGuildVipTier() {
+  const ctx = getGuildCtx();
+  const guildId = normalizeString(ctx?.guildId);
+  if (!guildId) return 'free';
+  try {
+    const snap = await getDoc(doc(normalDb, 'configGuilda', guildId));
+    if (!snap.exists()) return normalizeVipTierValue(ctx?.vipTier);
+    const data = snap.data() || {};
+    return normalizeVipTierValue(data.vipTier ?? data.vip ?? data.planoVip ?? data.planoVIP ?? data.vipLevel ?? data.vipPlano ?? data.vipName ?? data.plano ?? data.plan ?? data.tier ?? ctx?.vipTier);
+  } catch (_) {
+    return normalizeVipTierValue(ctx?.vipTier);
+  }
+}
+
+function showWarningToast(message) {
+  const containerId = 'toast-container';
+  let container = document.getElementById(containerId);
+  if (!container) {
+    container = document.createElement('div');
+    container.id = containerId;
+    container.className = 'fixed top-4 right-4 z-[9999] flex flex-col gap-2';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'px-4 py-3 rounded-xl shadow-lg border text-sm font-medium flex items-start gap-2 max-w-[340px] bg-amber-50 text-amber-900 border-amber-200';
+  toast.innerHTML = `<div class="flex-1 leading-snug">${escapeHtml(message)}</div>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-4px)';
+    toast.style.transition = 'all 180ms ease';
+  }, 2600);
+  setTimeout(() => { try { toast.remove(); } catch (_) {} }, 3000);
+}
+
+function formatRemainingTime(ms) {
+  const totalHours = Math.max(1, Math.ceil(Number(ms || 0) / 3600000));
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  if (days > 0 && hours > 0) return `${days} dia(s) e ${hours} hora(s)`;
+  if (days > 0) return `${days} dia(s)`;
+  return `${hours} hora(s)`;
+}
+
 function createHubDb(tag = 'perfil') {
   const name = `hub_perfis_${tag}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const app = initializeApp(hubPerfisFirebaseConfig, name);
@@ -70,17 +122,6 @@ function fmtDate(value) {
   } catch (_) {
     return 'Sem informação ainda';
   }
-}
-
-
-function formatRemaining(ms) {
-  const total = Math.max(0, Number(ms || 0));
-  if (!isFinite(total) || total <= 0) return '0 hora(s)';
-  const hoursTotal = Math.ceil(total / (60 * 60 * 1000));
-  const days = Math.floor(hoursTotal / 24);
-  const hours = hoursTotal % 24;
-  if (days > 0) return `${days} dia(s) e ${hours} hora(s)`;
-  return `${hours} hora(s)`;
 }
 
 function normalizeString(...values) {
@@ -429,24 +470,15 @@ function canUpdateWeek(profile) {
 }
 
 function renderUpdateInfo(profile) {
-  const lastEl = document.getElementById('profile-last-week-update');
-  const nextEl = document.getElementById('profile-next-week-update');
-  const expiresEl = document.getElementById('profile-expires-at');
   const btn = document.getElementById('btn-update-week');
-  const lastMs = Number(profile?.lastWeekUpdateAtMs || 0) || null;
-  const nextMs = getNextWeekUpdateMs(profile);
-  const expiresMs = Number(profile?.expiresAtMs || 0) || null;
-  if (lastEl) lastEl.textContent = lastMs ? fmtDate(lastMs) : 'Sem informação ainda';
-  if (nextEl) nextEl.textContent = nextMs ? fmtDate(nextMs) : 'Sem informação ainda';
-  if (expiresEl) expiresEl.textContent = expiresMs ? fmtDate(expiresMs) : 'Sem informação ainda';
-  if (btn) {
-    const allowed = canUpdateWeek(profile);
-    btn.disabled = false;
-    btn.classList.toggle('opacity-80', !allowed);
-    btn.classList.toggle('cursor-not-allowed', !allowed);
-    btn.title = allowed || !nextMs ? '' : `Você poderá atualizar novamente em ${formatRemaining(nextMs - Date.now())}.`;
-  }
+  if (!btn) return;
+  const allowed = canUpdateWeek(profile);
+  btn.disabled = !allowed;
+  btn.classList.toggle('opacity-50', !allowed);
+  btn.classList.toggle('cursor-not-allowed', !allowed);
+  btn.title = allowed ? '' : `A atualização estará liberada em ${fmtDate(getNextWeekUpdateMs(profile))}.`;
 }
+
 
 function setAccessUiLoaded(isLoaded) {
   const card = document.getElementById('guild-access-card');
@@ -533,11 +565,19 @@ async function handleUpdateWeek() {
     showToast('error', 'Entre no perfil antes de atualizar.');
     return;
   }
+
+  const vipTier = await getCurrentGuildVipTier();
+  if (!['plus', 'pro', 'business'].includes(vipTier)) {
+    showWarningToast('Opção disponível apenas para usuários VIP!');
+    return;
+  }
+
   const button = document.getElementById('btn-update-week');
-  if (currentProfileData?.profile && !canUpdateWeek(currentProfileData.profile)) {
-    const nextMs = getNextWeekUpdateMs(currentProfileData.profile);
-    const remaining = nextMs ? formatRemaining(nextMs - Date.now()) : `${WEEK_UPDATE_COOLDOWN_DAYS} dia(s)`;
-    showToast('error', `Você só poderá atualizar novamente em ${remaining}.`);
+  const latestProfile = currentProfileData?.profile || {};
+  const nextMs = getNextWeekUpdateMs(latestProfile);
+  if (nextMs && Date.now() < nextMs) {
+    showWarningToast(`Você só pode atualizar novamente em ${formatRemainingTime(nextMs - Date.now())}.`);
+    renderUpdateInfo(latestProfile);
     return;
   }
   try {
@@ -560,6 +600,7 @@ async function handleUpdateWeek() {
     }
   }
 }
+
 
 function bindInitialEvents() {
   const logoutBtn = document.getElementById('btn-logout');
