@@ -22,8 +22,10 @@ const hubPerfisFirebaseConfig = {
 };
 
 const PROFILE_ACCESS_CACHE_PREFIX = 'guildProfileAccess_';
-const WEEK_UPDATE_COOLDOWN_DAYS = 9;
+const WEEK_UPDATE_COOLDOWN_DAYS = 4;
 const WEEK_UPDATE_COOLDOWN_MS = WEEK_UPDATE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+const PROFILE_EXPIRES_DAYS = 4;
+const PROFILE_EXPIRES_MS = PROFILE_EXPIRES_DAYS * 24 * 60 * 60 * 1000;
 
 function createHubDb(tag = 'perfil') {
   const name = `hub_perfis_${tag}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -338,7 +340,8 @@ async function updateWeeklyData(uid) {
       topGuerraSemanaAtual: currentTopGuerra,
       updatedAtMs: Date.now(),
       lastWeekUpdateAtMs: Date.now(),
-      nextWeekUpdateAtMs: Date.now() + WEEK_UPDATE_COOLDOWN_MS
+      nextWeekUpdateAtMs: Date.now() + WEEK_UPDATE_COOLDOWN_MS,
+      expiresAtMs: Date.now() + PROFILE_EXPIRES_MS
     }, { merge: true });
 
     await batch.commit();
@@ -471,11 +474,14 @@ function canUpdateWeek(profile) {
 function renderUpdateInfo(profile) {
   const lastEl = document.getElementById('profile-last-week-update');
   const nextEl = document.getElementById('profile-next-week-update');
+  const expiresEl = document.getElementById('profile-expires-at');
   const btn = document.getElementById('btn-update-week');
   const lastMs = Number(profile?.lastWeekUpdateAtMs || 0) || null;
   const nextMs = getNextWeekUpdateMs(profile);
+  const expiresMs = Number(profile?.expiresAtMs || 0) || null;
   if (lastEl) lastEl.textContent = lastMs ? fmtDate(lastMs) : 'Sem informação ainda';
   if (nextEl) nextEl.textContent = nextMs ? fmtDate(nextMs) : 'Sem informação ainda';
+  if (expiresEl) expiresEl.textContent = expiresMs ? fmtDate(expiresMs) : `Em ${PROFILE_EXPIRES_DAYS} dias após a atualização`;
   if (btn) {
     const allowed = canUpdateWeek(profile);
     btn.disabled = !allowed;
