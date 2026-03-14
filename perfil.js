@@ -9,7 +9,7 @@ import {
   writeBatch,
   deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast } from './logic.js';
+import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db as normalDb } from './logic.js';
 
 const hubPerfisFirebaseConfig = {
   apiKey: "AIzaSyASInYDbSFxfgbF7yjXDM4THipLYdZwjXs",
@@ -21,7 +21,6 @@ const hubPerfisFirebaseConfig = {
   measurementId: "G-0N7WY0984C"
 };
 
-const MEMBERS_CACHE_KEY = 'membersList';
 const PROFILE_ACCESS_CACHE_PREFIX = 'guildProfileAccess_';
 
 function createHubDb(tag = 'perfil') {
@@ -63,18 +62,6 @@ function fmtDate(value) {
   } catch (_) {
     return 'Sem informação ainda';
   }
-}
-
-function fmtShortDate(value) {
-  if (value == null || value === '') return 'Sem informação ainda';
-  let ms = null;
-  if (typeof value === 'number' && isFinite(value)) ms = value;
-  else if (typeof value === 'string') {
-    const t = Date.parse(value);
-    ms = isFinite(t) ? t : null;
-  } else if (value && typeof value.toMillis === 'function') ms = value.toMillis();
-  if (!ms) return 'Sem informação ainda';
-  try { return new Date(ms).toLocaleDateString('pt-BR'); } catch (_) { return 'Sem informação ainda'; }
 }
 
 function normalizeString(...values) {
@@ -121,19 +108,26 @@ function getCachedGuildInfo(guildId) {
   return { guildId: gid, name, createdAtMs, tag };
 }
 
-function readMembersCache() {
-  try {
-    const raw = localStorage.getItem(MEMBERS_CACHE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (_) {
-    return [];
+function getMembersCacheKeys(guildId) {
+  const gid = (guildId || '').toString().trim();
+  return gid ? [`membersList_${gid}`, 'membersList'] : ['membersList'];
+}
+
+function readMembersCache(guildId) {
+  for (const key of getMembersCacheKeys(guildId)) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch (_) {}
   }
+  return [];
 }
 
 function normalizeMember(raw) {
   const playerId = normalizeString(
+    raw?.visibleId,
     raw?.idJogador,
     raw?.playerId,
     raw?.playerID,
@@ -146,28 +140,38 @@ function normalizeMember(raw) {
   if (!playerId) return null;
 
   const nick = normalizeString(raw?.nick, raw?.nickname, raw?.nome, raw?.name, `Jogador ${playerId}`);
-  const weeklyHonor = toNumber(
-    raw?.pontosSemanais,
-    raw?.pontosSemanais,
-    raw?.pontosHonra,
-    raw?.pontosDeHonra,
-    raw?.honra,
-    raw?.honor,
-    raw?.weeklyHonor,
-    raw?.weeklyHonorPoints,
-    raw?.honorPoints,
-    raw?.points
-  );
-  const guildWar = toNumber(
-    raw?.pontosGuerra,
-    raw?.guerraGuilda,
-    raw?.pontosGuerraGuilda,
-    raw?.guildWar,
-    raw?.guildWarPoints,
-    raw?.warPoints,
-    raw?.guerra,
-    raw?.gg
-  );
+
+  const weeklyHonorEnabled = raw?.weeklyMeta === undefined ? true : !!raw?.weeklyMeta;
+  const guildWarEnabled = raw?.guildWar === undefined ? true : !!raw?.guildWar;
+
+  const weeklyHonor = weeklyHonorEnabled
+    ? toNumber(
+        raw?.weeklyMetaValue,
+        raw?.pontosSemanais,
+        raw?.pontosHonra,
+        raw?.pontosDeHonra,
+        raw?.honra,
+        raw?.honor,
+        raw?.weeklyHonor,
+        raw?.weeklyHonorPoints,
+        raw?.honorPoints,
+        raw?.points
+      )
+    : 0;
+
+  const guildWar = guildWarEnabled
+    ? toNumber(
+        raw?.guildWarMeta,
+        raw?.pontosGuerra,
+        raw?.guerraGuilda,
+        raw?.pontosGuerraGuilda,
+        raw?.guildWarPoints,
+        raw?.guildWar,
+        raw?.warPoints,
+        raw?.guerra,
+        raw?.gg
+      )
+    : 0;
 
   return {
     playerId,
@@ -178,14 +182,36 @@ function normalizeMember(raw) {
   };
 }
 
-function getNormalizedMembersFromCache() {
+function normalizeMembersArray(list) {
   const map = new Map();
-  for (const raw of readMembersCache()) {
+  for (const raw of Array.isArray(list) ? list : []) {
     const item = normalizeMember(raw);
     if (!item) continue;
     map.set(item.playerId, item);
   }
   return Array.from(map.values());
+}
+
+async function getCurrentGuildMembers() {
+  const ctx = getGuildCtx();
+  const guildId = normalizeString(ctx?.guildId);
+
+  const cached = normalizeMembersArray(readMembersCache(guildId));
+  if (cached.length) return cached;
+
+  if (!guildId) return [];
+
+  try {
+    const snap = await getDocs(collection(normalDb, 'guildas', guildId, 'membros'));
+    const fresh = [];
+    snap.forEach((d) => fresh.push({ id: d.id, ...(d.data() || {}) }));
+    if (fresh.length) {
+      try { localStorage.setItem(`membersList_${guildId}`, JSON.stringify(fresh)); } catch (_) {}
+    }
+    return normalizeMembersArray(fresh);
+  } catch (_) {
+    return cached;
+  }
 }
 
 function getTop3(list, field) {
@@ -261,7 +287,7 @@ async function loadGuildProfile(uid) {
 
 async function updateWeeklyData(uid) {
   const guildInfo = getCachedGuildInfo(uid);
-  const members = getNormalizedMembersFromCache();
+  const members = await getCurrentGuildMembers();
   const currentTopHonra = getTop3(members, 'weeklyHonor');
   const currentTopGuerra = getTop3(members, 'guildWar');
 
@@ -340,25 +366,41 @@ function destroyCharts() {
   charts = {};
 }
 
+function chartOptions(labelText) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          boxWidth: 10,
+          padding: 8,
+          font: { size: 10 }
+        }
+      },
+      title: {
+        display: true,
+        text: labelText,
+        font: { size: 11, weight: '700' },
+        padding: { bottom: 8 }
+      }
+    }
+  };
+}
+
 function ensureNoInfoCanvas(canvasId, labelText) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return null;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  if (!window.Chart) return null;
+  if (!ctx || !window.Chart) return null;
   return new window.Chart(ctx, {
     type: 'pie',
     data: {
       labels: ['Sem informação ainda'],
       datasets: [{ data: [1] }]
     },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { position: 'bottom' },
-        title: { display: true, text: labelText }
-      }
-    }
+    options: chartOptions(labelText)
   });
 }
 
@@ -378,13 +420,7 @@ function makePieChart(canvasId, labelText, items) {
       labels: valid.map((x) => `${x.nick} (${x.pontos})`),
       datasets: [{ data: valid.map((x) => Number(x.pontos || 0)) }]
     },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { position: 'bottom' },
-        title: { display: true, text: labelText }
-      }
-    }
+    options: chartOptions(labelText)
   });
 }
 
@@ -436,9 +472,9 @@ function renderProfileState(data) {
   renderGuildCard(profile || {});
   destroyCharts();
   makePieChart('chart-honra-atual', 'Honra • Semana atual', Array.isArray(profile?.topHonraSemanaAtual) ? profile.topHonraSemanaAtual : []);
-  makePieChart('chart-guerra-atual', 'Guerra de guilda • Semana atual', Array.isArray(profile?.topGuerraSemanaAtual) ? profile.topGuerraSemanaAtual : []);
   makePieChart('chart-honra-passada', 'Honra • Semana passada', Array.isArray(previousWeek?.topHonra) ? previousWeek.topHonra : []);
-  makePieChart('chart-guerra-passada', 'Guerra de guilda • Semana passada', Array.isArray(previousWeek?.topGuerra) ? previousWeek.topGuerra : []);
+  makePieChart('chart-guerra-atual', 'Guerra • Semana atual', Array.isArray(profile?.topGuerraSemanaAtual) ? profile.topGuerraSemanaAtual : []);
+  makePieChart('chart-guerra-passada', 'Guerra • Semana passada', Array.isArray(previousWeek?.topGuerra) ? previousWeek.topGuerra : []);
   renderMemberList(members || []);
 
   const profileContent = document.getElementById('guild-profile-content');
@@ -470,46 +506,41 @@ async function handleEnterProfile() {
   }
 }
 
-async function handleRefreshWeek() {
+async function handleUpdateWeek() {
   if (!currentUid) {
-    showToast('error', 'Entre no perfil da guilda antes de atualizar a semana.');
+    showToast('error', 'Entre no perfil antes de atualizar.');
     return;
   }
-  const btn = document.getElementById('btn-refresh-week');
+  const button = document.getElementById('btn-update-week');
   try {
-    btn.disabled = true;
-    btn.classList.add('opacity-50', 'cursor-not-allowed');
+    button.disabled = true;
+    button.classList.add('opacity-50', 'cursor-not-allowed');
     const result = await updateWeeklyData(currentUid);
     const data = await loadGuildProfile(currentUid);
     renderProfileState(data);
-    showToast('success', `Semana atualizada! ${Number(result.updatedCount || 0)} membro(s) processado(s).`);
+    showToast('success', `${result.updatedCount} membro(s) processado(s)!`);
   } catch (e) {
     console.error(e);
     showToast('error', e?.message || 'Não foi possível atualizar a semana.');
   } finally {
-    btn.disabled = false;
-    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+    button.disabled = false;
+    button.classList.remove('opacity-50', 'cursor-not-allowed');
   }
-}
-
-function bindUi() {
-  const logoutBtn = document.getElementById('btn-logout');
-  if (logoutBtn) logoutBtn.onclick = logout;
-
-  const enterBtn = document.getElementById('btn-enter-guild-profile');
-  const input = document.getElementById('guild-key-input');
-  const refreshBtn = document.getElementById('btn-refresh-week');
-
-  enterBtn?.addEventListener('click', handleEnterProfile);
-  input?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleEnterProfile();
-  });
-  refreshBtn?.addEventListener('click', handleRefreshWeek);
 }
 
 setupSidebar();
 initIcons();
+
 checkAuth().then((user) => {
   if (!user) return;
-  bindUi();
+  const logoutBtn = document.getElementById('btn-logout');
+  if (logoutBtn) logoutBtn.onclick = logout;
+
+  document.getElementById('btn-enter-guild-profile')?.addEventListener('click', handleEnterProfile);
+  document.getElementById('btn-update-week')?.addEventListener('click', handleUpdateWeek);
+
+  const input = document.getElementById('guild-key-input');
+  input?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') handleEnterProfile();
+  });
 });

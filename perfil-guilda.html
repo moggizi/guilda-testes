@@ -44,18 +44,6 @@
         <a href="ajustes.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
           <i data-lucide="sliders" class="w-5 h-5"></i> Ajustes
         </a>
-        <a href="upgrade.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="sparkles" class="w-5 h-5"></i> Upgrade
-        </a>
-        <a href="camp.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="trophy" class="w-5 h-5"></i> Campeonato
-        </a>
-        <a href="admin.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="settings" class="w-5 h-5"></i> Admin
-        </a>
-        <a id="nav-chefe" href="chefe.html" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="crown" class="w-5 h-5"></i> Chefe
-        </a>
       </nav>
 
       <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100">
@@ -84,10 +72,10 @@
         </div>
       </header>
 
-      <div class="p-4 sm:p-6 max-w-6xl mx-auto space-y-6 pb-28">
+      <div class="p-4 sm:p-6 max-w-4xl mx-auto space-y-6 pb-28">
         <div>
           <h2 class="text-2xl font-bold text-gray-900">Perfil da guilda</h2>
-          <p class="text-gray-500 text-sm mt-1">Entre com a chave da guilda para acessar as informações.</p>
+          <p class="text-gray-500 text-sm mt-1">Entre com a chave da guilda para acessar o perfil.</p>
         </div>
 
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
@@ -97,7 +85,7 @@
             </div>
             <div>
               <h3 class="font-semibold text-gray-900">Chave da guilda</h3>
-              <p class="text-xs text-gray-500 mt-0.5">Ao entrar, a tela lê a chave, encontra o UID e carrega o perfil da guilda.</p>
+              <p class="text-xs text-gray-500 mt-0.5">Informe a chave para abrir o perfil.</p>
             </div>
           </div>
 
@@ -118,46 +106,50 @@
               </div>
               <div>
                 <h3 class="font-semibold text-gray-900">Informações da guilda</h3>
-                <p class="text-xs text-gray-500 mt-0.5" id="profile-status-text">Sem informação ainda</p>
+                <p id="profile-status-text" class="text-xs text-gray-500 mt-0.5">Sem informação ainda</p>
               </div>
             </div>
-            <div class="grid md:grid-cols-3 gap-3">
-              <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
                 <p class="text-[11px] text-gray-500 font-semibold">Nome</p>
-                <p id="profile-guild-name" class="mt-1 text-sm font-bold text-gray-900">Sem informação ainda</p>
+                <p id="profile-guild-name" class="mt-1 text-sm font-bold text-gray-900 break-words">Sem informação ainda</p>
               </div>
-              <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
+              <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
                 <p class="text-[11px] text-gray-500 font-semibold">Data de entrada</p>
                 <p id="profile-created-at" class="mt-1 text-sm font-bold text-gray-900">Sem informação ainda</p>
               </div>
-              <div class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
+              <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
                 <p class="text-[11px] text-gray-500 font-semibold">Tag</p>
-                <p id="profile-guild-tag" class="mt-1 text-sm font-bold text-gray-900">Sem informação ainda</p>
+                <p id="profile-guild-tag" class="mt-1 text-sm font-bold text-gray-900 break-words">Sem informação ainda</p>
               </div>
             </div>
           </div>
 
-          <div class="space-y-4">
-            <div class="grid md:grid-cols-2 gap-4">
-              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                <div class="relative h-60">
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 space-y-5">
+            <div>
+              <h3 class="font-semibold text-gray-900">Top 3 da guilda</h3>
+              <p class="text-xs text-gray-500 mt-0.5">Os gráficos mostram os 3 membros com mais pontos.</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 sm:gap-4">
+              <div class="rounded-2xl border border-gray-100 bg-gray-50 p-3 flex justify-center">
+                <div class="w-full max-w-[145px] h-[180px] sm:max-w-[160px] sm:h-[190px]">
                   <canvas id="chart-honra-atual"></canvas>
                 </div>
               </div>
-              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                <div class="relative h-60">
+              <div class="rounded-2xl border border-gray-100 bg-gray-50 p-3 flex justify-center">
+                <div class="w-full max-w-[145px] h-[180px] sm:max-w-[160px] sm:h-[190px]">
                   <canvas id="chart-honra-passada"></canvas>
                 </div>
               </div>
-            </div>
-            <div class="grid md:grid-cols-2 gap-4">
-              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                <div class="relative h-60">
+              <div class="rounded-2xl border border-gray-100 bg-gray-50 p-3 flex justify-center">
+                <div class="w-full max-w-[145px] h-[180px] sm:max-w-[160px] sm:h-[190px]">
                   <canvas id="chart-guerra-atual"></canvas>
                 </div>
               </div>
-              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                <div class="relative h-60">
+              <div class="rounded-2xl border border-gray-100 bg-gray-50 p-3 flex justify-center">
+                <div class="w-full max-w-[145px] h-[180px] sm:max-w-[160px] sm:h-[190px]">
                   <canvas id="chart-guerra-passada"></canvas>
                 </div>
               </div>
@@ -170,8 +162,8 @@
                 <i data-lucide="list-ordered" class="w-5 h-5"></i>
               </div>
               <div>
-                <h3 class="font-semibold text-gray-900">Ranking de membros</h3>
-                <p class="text-xs text-gray-500 mt-0.5">Ordenado do maior total para o menor.</p>
+                <h3 class="font-semibold text-gray-900">Ranking geral</h3>
+                <p class="text-xs text-gray-500 mt-0.5">Ordem do maior total para o menor.</p>
               </div>
             </div>
             <div id="members-ranking-list" class="space-y-3">
@@ -180,13 +172,13 @@
           </div>
         </section>
       </div>
+
+      <button id="btn-update-week" type="button" class="fixed right-4 bottom-4 z-30 inline-flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-semibold shadow-xl hover:shadow-2xl active:scale-95">
+        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        Atualizar semana
+      </button>
     </main>
   </div>
-
-  <button id="btn-refresh-week" type="button" class="fixed bottom-5 right-5 inline-flex items-center justify-center gap-2 px-5 py-4 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-bold shadow-xl hover:shadow-2xl active:scale-95 z-50">
-    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-    Atualizar semana
-  </button>
 
   <script type="module" src="./perfil.js"></script>
 </body>
