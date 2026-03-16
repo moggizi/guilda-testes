@@ -1,7 +1,7 @@
 // Vercel Serverless Function (Node)
 // Proxy seguro para evitar CORS e esconder a chave no servidor.
 // Front:
-//   GET /api/proxy?endpoint=ff_info&query=130098219
+//   GET /api/proxy?e
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,11 +26,11 @@ module.exports = async (req, res) => {
     if (!/^[0-9]{5,20}$/.test(q)) return res.status(400).json({ error: 'ID inválido' });
 
     // Recomendo configurar no Vercel (Project Settings > Environment Variables):
-    // MITSURI_API_ORIGIN = https://api.mitsuri.fun
-    // MITSURI_API_KEY    = dn_vffredz543
+    // MITSURI_API_ORIGIN = https://api
+    // MITSURI_API_KEY    = 
     // (Assim você troca a chave sem precisar editar código.)
-    const origin = (process.env.MITSURI_API_ORIGIN || 'https://apis-mitsuri-ofc.vercel.app/').replace(/\/$/, '');
-    const apiKey = process.env.MITSURI_API_KEY || 'dn_vffredz543';
+    const origin = (process.env.api || 'https://api/').replace(/\/$/, '');
+    const apiKey = process.env.api || 'gh-';
 
     // A API nova que você mandou usa exatamente esse formato.
     const upstreamUrl = `${origin}/api/proxy?endpoint=${encodeURIComponent(endpoint)}&query=${encodeURIComponent(q)}`;
