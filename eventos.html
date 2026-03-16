@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Recrutamento de Guilda</title>
+  <title>Recrutamentos</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -13,26 +13,31 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     .dd { position: relative; }
-    .dd-btn { width: 100%; display:flex; align-items:center; justify-content:space-between; gap:.75rem; border-radius: 1rem; background:#fff; border:1px solid rgba(15,23,42,.12); padding: .85rem 1rem; font-size: .875rem; }
-    .dd-menu { position:absolute; left:0; right:0; top: calc(100% + .5rem); background:#fff; border:1px solid rgba(15,23,42,.12); border-radius: 1rem; overflow:hidden; z-index:40; box-shadow: 0 20px 60px rgba(2,6,23,.18); }
-    .dd-item { width:100%; text-align:left; padding:.8rem 1rem; font-size:.875rem; display:flex; align-items:center; gap:.6rem; }
+    .dd-btn { width:100%; display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+      border:1px solid rgba(15,23,42,.12); background:#fff; border-radius:1rem; padding:.82rem 1rem;
+      box-shadow: 0 1px 2px rgba(2,6,23,.04); outline:none; }
+    .dd-btn:focus { box-shadow: 0 0 0 4px rgba(16,185,129,.18); border-color: rgba(16,185,129,.55); }
+    .dd-menu { position:absolute; left:0; right:0; top: calc(100% + .5rem); background:#ffffff; color:#0f172a;
+      border:1px solid rgba(15,23,42,.12); border-radius: 1rem; overflow:hidden; z-index:40;
+      box-shadow: 0 20px 60px rgba(2,6,23,.18); max-height: 360px; overflow-y:auto; }
+    .dd-item { width:100%; text-align:left; padding:.7rem 1rem; font-size:.875rem; display:flex; align-items:center; gap:.6rem; }
     .dd-item:hover { background: rgba(15,23,42,.06); }
     .dd-item[aria-selected="true"] { background: rgba(16,185,129,.16); color:#065f46; font-weight:800; }
     .select-chip input { display:none; }
-    .select-chip span { display:flex; align-items:center; gap:.5rem; border:1px solid #e5e7eb; border-radius:1rem; padding:.75rem .9rem; background:#fff; color:#374151; font-size:.875rem; font-weight:600; cursor:pointer; transition:.2s ease; }
-    .select-chip input:checked + span { background:#ecfdf5; border-color:#34d399; color:#047857; box-shadow:0 0 0 3px rgba(16,185,129,.1); }
+    .select-chip span { display:inline-flex; align-items:center; gap:.45rem; border-radius:9999px; border:1px solid rgb(226 232 240); background:white; color:#334155; padding:.62rem .9rem; font-size:.875rem; font-weight:700; cursor:pointer; }
+    .select-chip input:checked + span { background:#ecfdf5; color:#047857; border-color:#a7f3d0; }
   </style>
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-900">
+<body class="min-h-screen bg-white text-slate-900">
   <div id="sidebar-overlay" class="fixed inset-0 z-40 hidden bg-black/40"></div>
-  <aside id="sidebar" class="fixed left-0 top-0 z-50 h-full w-[280px] -translate-x-full bg-white border-r border-slate-200 transition-transform">
+  <aside id="sidebar" class="fixed left-0 top-0 z-50 h-full w-[280px] -translate-x-full bg-white backdrop-blur border-r border-slate-200 transition-transform">
     <div class="p-4 border-b border-slate-200 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
         <div class="leading-tight">
           <div class="text-slate-900 font-black">Guilda • HUB</div>
-          <div class="text-xs text-slate-500">Recrutamento de guilda</div>
+          <div class="text-xs text-slate-500">Recrutamento • Guildas</div>
         </div>
       </div>
       <button id="sidebar-close" class="h-10 w-10 grid place-items-center rounded-xl hover:bg-slate-100">
@@ -41,115 +46,155 @@
     </div>
 
     <nav class="p-3 space-y-1">
-      <a href="index.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100"><i data-lucide="home" class="h-4 w-4"></i><span class="font-semibold">Início</span></a>
-      <a href="eventos.html" class="flex items-center gap-3 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700"><i data-lucide="users-round" class="h-4 w-4"></i><span class="font-semibold">Recrutamento</span></a>
-      <a href="stats.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100"><i data-lucide="bar-chart-3" class="h-4 w-4"></i><span class="font-semibold">Minhas estatísticas</span></a>
-      <a href="suporte.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100"><i data-lucide="help-circle" class="h-4 w-4"></i><span class="font-semibold">Suporte</span></a>
+      <a href="index.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
+        <i data-lucide="home" class="h-4 w-4"></i>
+        <span class="font-semibold">Início</span>
+      </a>
+      <a href="eventos.html" class="flex items-center gap-3 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700">
+        <i data-lucide="users-round" class="h-4 w-4"></i>
+        <span class="font-semibold">Recrutamentos</span>
+      </a>
+      <a href="stats.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
+        <i data-lucide="bar-chart-3" class="h-4 w-4"></i>
+        <span class="font-semibold">Minhas estatísticas</span>
+      </a>
+      <a href="suporte.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
+        <i data-lucide="help-circle" class="h-4 w-4"></i>
+        <span class="font-semibold">Suporte</span>
+      </a>
     </nav>
+
+    <div class="mt-auto p-4 text-xs text-slate-500 border-t border-slate-200">
+      <div class="leading-relaxed">Encontre guildas abertas para recrutamento e envie seu pedido direto pela plataforma.</div>
+    </div>
   </aside>
 
-  <header class="sticky top-0 z-30 bg-white/85 backdrop-blur border-b border-slate-200">
-    <div class="mx-auto w-full max-w-6xl px-4 py-3 flex items-center justify-between gap-4">
+  <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
+    <div class="mx-auto w-full max-w-6xl px-4 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <button id="sidebar-open" class="h-10 w-10 grid place-items-center rounded-xl bg-white ring-1 ring-slate-200 text-slate-900 shadow-sm hover:bg-slate-50"><i data-lucide="menu" class="h-5 w-5"></i></button>
+        <button id="sidebar-open" class="h-10 w-10 grid place-items-center rounded-xl bg-white ring-1 ring-slate-200 text-slate-900 shadow-sm hover:bg-slate-50">
+          <i data-lucide="menu" class="h-5 w-5 text-slate-900"></i>
+        </button>
         <div class="leading-tight">
-          <div class="font-black text-slate-900">Recrutamento de Guilda</div>
-          <div class="text-xs text-slate-500">Encontre guildas e envie seu pedido</div>
+          <div class="font-black text-slate-900">Guilda • HUB</div>
+          <div class="text-xs text-slate-500">Recrutamento • Guildas</div>
         </div>
       </div>
       <a href="index.html" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">Voltar</a>
     </div>
   </header>
 
-  <main class="mx-auto w-full max-w-6xl px-4 py-6 space-y-5">
-    <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+  <main class="mx-auto w-full max-w-6xl px-4 py-6">
+    <section class="space-y-5">
+      <div class="rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-5 shadow-sm">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p class="text-sm font-semibold text-emerald-700">Encontre uma guilda para entrar</p>
+            <h1 class="mt-1 text-2xl font-black text-slate-900">Recrutamentos abertos</h1>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600">Pesquise e filtre por tipo de guilda, foco, funções e formas de contato para achar a melhor opção para você.</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+            <span class="font-bold text-slate-900">Como funciona:</span> escolha uma guilda, clique em <b>Enviar pedido</b> e preencha seus dados.
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div class="flex-1">
           <label class="text-xs text-slate-500">Pesquisar</label>
-          <input id="q" type="text" placeholder="Ex: nome da guilda, rush, feminina, discord..." class="mt-1 w-full rounded-2xl bg-white ring-1 ring-slate-200 px-4 py-3 text-sm outline-none focus:ring-emerald-400/40" />
+          <input id="q" type="text" placeholder="Ex: nome da guilda, descrição, rush, honras..."
+            class="mt-1 w-full rounded-2xl bg-white ring-1 ring-slate-200 px-4 py-3 text-sm outline-none focus:ring-emerald-400/40" />
         </div>
-        <div class="w-full lg:w-[320px]">
+        <div class="w-full sm:w-[300px]">
           <label class="text-xs text-slate-500">Filtro</label>
-          <input type="hidden" id="filter" value="all" />
-          <div class="dd mt-1">
-            <button type="button" id="filterBtn" class="dd-btn"><span id="filterLabel" class="font-semibold text-slate-900">Todos</span><i data-lucide="chevron-down" class="h-4 w-4 text-slate-600"></i></button>
-            <div id="filterMenu" class="dd-menu hidden">
-              <button type="button" class="dd-item" data-value="all" aria-selected="true"><i data-lucide="layers" class="h-4 w-4"></i>Todos</button>
-              <button type="button" class="dd-item" data-value="Masculina"><i data-lucide="mars" class="h-4 w-4"></i>Masculina</button>
-              <button type="button" class="dd-item" data-value="Feminina"><i data-lucide="venus" class="h-4 w-4"></i>Feminina</button>
-              <button type="button" class="dd-item" data-value="Mista"><i data-lucide="venus-and-mars" class="h-4 w-4"></i>Mista</button>
-              <button type="button" class="dd-item" data-value="GG"><i data-lucide="swords" class="h-4 w-4"></i>Foco GG</button>
-              <button type="button" class="dd-item" data-value="Honras"><i data-lucide="badge-plus" class="h-4 w-4"></i>Foco Honras</button>
-              <button type="button" class="dd-item" data-value="Todos"><i data-lucide="sparkles" class="h-4 w-4"></i>Foco Todos</button>
-              <button type="button" class="dd-item" data-value="Rush"><i data-lucide="zap" class="h-4 w-4"></i>Rush</button>
-              <button type="button" class="dd-item" data-value="Fuzileiro"><i data-lucide="crosshair" class="h-4 w-4"></i>Fuzileiro</button>
-              <button type="button" class="dd-item" data-value="Full Gás"><i data-lucide="flame" class="h-4 w-4"></i>Full Gás</button>
-              <button type="button" class="dd-item" data-value="Curandeiro"><i data-lucide="heart-pulse" class="h-4 w-4"></i>Curandeiro</button>
-              <button type="button" class="dd-item" data-value="Suporte"><i data-lucide="shield-plus" class="h-4 w-4"></i>Suporte</button>
-              <button type="button" class="dd-item" data-value="Discord"><i data-lucide="message-circle-more" class="h-4 w-4"></i>Discord</button>
-              <button type="button" class="dd-item" data-value="WhatsApp (grupo)"><i data-lucide="messages-square" class="h-4 w-4"></i>WhatsApp</button>
+          <div class="relative mt-1">
+            <input type="hidden" id="filter" value="all" />
+            <div class="dd">
+              <button type="button" id="filterBtn" class="dd-btn">
+                <span id="filterLabel" class="font-semibold text-slate-900">Todos</span>
+                <i data-lucide="chevron-down" class="h-4 w-4 text-slate-600"></i>
+              </button>
+              <div id="filterMenu" class="dd-menu hidden">
+                <button type="button" class="dd-item" data-value="all" aria-selected="true"><i data-lucide="layers" class="h-4 w-4"></i>Todos</button>
+                <button type="button" class="dd-item" data-value="masculina"><i data-lucide="shield" class="h-4 w-4"></i>Guilda masculina</button>
+                <button type="button" class="dd-item" data-value="feminina"><i data-lucide="heart" class="h-4 w-4"></i>Guilda feminina</button>
+                <button type="button" class="dd-item" data-value="mista"><i data-lucide="users" class="h-4 w-4"></i>Guilda mista</button>
+                <button type="button" class="dd-item" data-value="gg"><i data-lucide="swords" class="h-4 w-4"></i>Foco em GG</button>
+                <button type="button" class="dd-item" data-value="honras"><i data-lucide="award" class="h-4 w-4"></i>Foco em honras</button>
+                <button type="button" class="dd-item" data-value="todos"><i data-lucide="target" class="h-4 w-4"></i>Foco em todos</button>
+                <button type="button" class="dd-item" data-value="rush"><i data-lucide="zap" class="h-4 w-4"></i>Rush</button>
+                <button type="button" class="dd-item" data-value="fuzileiro"><i data-lucide="crosshair" class="h-4 w-4"></i>Fuzileiro</button>
+                <button type="button" class="dd-item" data-value="full gás"><i data-lucide="flame" class="h-4 w-4"></i>Full Gás</button>
+                <button type="button" class="dd-item" data-value="curandeiro"><i data-lucide="plus-circle" class="h-4 w-4"></i>Curandeiro</button>
+                <button type="button" class="dd-item" data-value="suporte"><i data-lucide="life-buoy" class="h-4 w-4"></i>Suporte</button>
+                <button type="button" class="dd-item" data-value="discord"><i data-lucide="messages-square" class="h-4 w-4"></i>Discord</button>
+                <button type="button" class="dd-item" data-value="whatsapp"><i data-lucide="message-circle" class="h-4 w-4"></i>WhatsApp</button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <div id="status" class="mt-4 text-sm text-slate-500"></div>
-    </section>
 
-    <section id="grid" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3"></section>
+      <div id="status" class="text-sm text-slate-500"></div>
+      <div id="grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+    </section>
   </main>
 
-  <div id="request-modal" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center">
-    <div class="fixed inset-0 bg-black/45" data-close-request></div>
-    <div class="relative z-10 w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl bg-white p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-      <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
-        <div>
-          <h3 class="text-lg font-black text-slate-900">Enviar pedido</h3>
-          <p class="text-sm text-slate-500 mt-1">Guilda: <span id="request-modal-guild" class="font-semibold text-slate-700">-</span></p>
+  <div id="request-modal" class="fixed inset-0 z-[80] hidden">
+    <div data-close-request class="absolute inset-0 bg-slate-950/55"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Enviar pedido</p>
+            <h3 class="text-lg font-black text-slate-900" id="request-modal-guild">Guilda</h3>
+          </div>
+          <button type="button" data-close-request class="grid h-10 w-10 place-items-center rounded-2xl hover:bg-slate-100">
+            <i data-lucide="x" class="h-5 w-5 text-slate-700"></i>
+          </button>
         </div>
-        <button type="button" data-close-request class="grid h-10 w-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100"><i data-lucide="x" class="h-5 w-5"></i></button>
+        <form id="request-form" class="space-y-4 p-5">
+          <p id="request-helper" class="text-sm text-slate-500">Preencha seus dados para enviar o pedido.</p>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Seu ID</label>
+            <input id="applicant-id" type="text" inputmode="numeric" placeholder="Somente números" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Seu nick</label>
+            <input id="applicant-nick" type="text" maxlength="30" placeholder="Digite seu nick" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">WhatsApp</label>
+            <input id="applicant-whatsapp" type="text" inputmode="numeric" placeholder="Apenas números" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Qual modo você joga?</label>
+            <div id="applicant-modes-wrap" class="mt-2 flex flex-wrap gap-2"></div>
+          </div>
+          <button id="btn-send-request" type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800">
+            <i data-lucide="send" class="h-4 w-4"></i>
+            Enviar pedido
+          </button>
+        </form>
       </div>
-
-      <form id="request-form" class="mt-5 space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">Seu ID *</label>
-          <input id="applicant-id" type="text" inputmode="numeric" maxlength="20" placeholder="Somente números" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500" required>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">Seu nick *</label>
-          <input id="applicant-nick" type="text" maxlength="30" placeholder="Digite seu nick" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500" required>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">WhatsApp *</label>
-          <input id="applicant-whatsapp" type="text" inputmode="numeric" maxlength="15" placeholder="Somente números" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500" required>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">Qual modo você joga? *</label>
-          <div id="applicant-modes-wrap" class="grid grid-cols-1 gap-2 sm:grid-cols-2"></div>
-        </div>
-        <p id="request-helper" class="text-sm text-slate-500">Preencha seus dados para enviar o pedido.</p>
-        <button id="btn-send-request" type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-emerald-700"><i data-lucide="send" class="h-4 w-4"></i> Enviar</button>
-      </form>
     </div>
   </div>
 
   <script>
-  (function(){
-    const openBtn = document.getElementById('sidebar-open');
-    const closeBtn = document.getElementById('sidebar-close');
-    const overlay = document.getElementById('sidebar-overlay');
-    const sidebar = document.getElementById('sidebar');
-    function open(){ overlay.classList.remove('hidden'); sidebar.classList.remove('-translate-x-full'); document.body.style.overflow='hidden'; }
-    function close(){ overlay.classList.add('hidden'); sidebar.classList.add('-translate-x-full'); document.body.style.overflow=''; }
-    openBtn?.addEventListener('click', open);
-    closeBtn?.addEventListener('click', close);
-    overlay?.addEventListener('click', close);
-    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') close(); });
-  })();
+    (function(){
+      const openBtn = document.getElementById('sidebar-open');
+      const closeBtn = document.getElementById('sidebar-close');
+      const overlay = document.getElementById('sidebar-overlay');
+      const sidebar = document.getElementById('sidebar');
+      function open(){ overlay.classList.remove('hidden'); sidebar.classList.remove('-translate-x-full'); document.body.style.overflow='hidden'; }
+      function close(){ overlay.classList.add('hidden'); sidebar.classList.add('-translate-x-full'); document.body.style.overflow=''; }
+      openBtn?.addEventListener('click', open);
+      closeBtn?.addEventListener('click', close);
+      overlay?.addEventListener('click', close);
+      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') close(); });
+    })();
+    lucide.createIcons();
   </script>
-  <script>lucide.createIcons();</script>
-  <script type="module">
-    import { initRecruitmentMarketplace } from './rec.js';
-    initRecruitmentMarketplace();
-  </script>
+  <script type="module" src="./rec.js"></script>
 </body>
 </html>
