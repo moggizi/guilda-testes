@@ -71,7 +71,7 @@
             <div class="flex items-start justify-between gap-3">
               <div>
                 <h2 class="text-2xl font-bold text-gray-900">Painel de recrutamento</h2>
-                <p class="text-sm text-gray-500 mt-1">Use a chave da guilda para criar ou acessar um recrutamento único.</p>
+                <p class="text-sm text-gray-500 mt-1">Abra a chave da sua guilda para ver ou publicar um recrutamento.</p>
               </div>
               <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><i data-lucide="users-round" class="w-6 h-6"></i></div>
             </div>
@@ -83,7 +83,7 @@
               </div>
               <div class="sm:pt-7">
                 <button id="btn-load-recruitment" class="w-full sm:w-auto px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95">
-                  Acessar recrutamento
+                  Abrir recrutamento
                 </button>
               </div>
             </div>
@@ -92,11 +92,11 @@
 
             <div class="mt-5 grid sm:grid-cols-3 gap-3">
               <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <p class="text-[11px] text-gray-500 font-semibold">UID atual</p>
+                <p class="text-[11px] text-gray-500 font-semibold">Seu UID</p>
                 <p id="current-uid" class="mt-1 text-sm font-bold text-gray-900 break-all">-</p>
               </div>
               <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <p class="text-[11px] text-gray-500 font-semibold">Guilda atual</p>
+                <p class="text-[11px] text-gray-500 font-semibold">Sua guilda</p>
                 <p id="current-guild-name" class="mt-1 text-sm font-bold text-gray-900 break-words">-</p>
               </div>
               <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
@@ -110,13 +110,13 @@
             <div class="flex items-start gap-3">
               <div class="w-10 h-10 rounded-xl bg-gray-50 text-gray-700 flex items-center justify-center"><i data-lucide="info" class="w-5 h-5"></i></div>
               <div>
-                <p class="text-sm font-semibold text-gray-900">Como vai funcionar</p>
+                <p class="text-sm font-semibold text-gray-900">Como usar</p>
                 <ul class="mt-2 text-xs text-gray-600 space-y-1 list-disc pl-4">
-                  <li>Digite a chave da guilda para abrir o recrutamento ligado a ela.</li>
-                  <li>Se essa chave ainda não existir, ela será criada automaticamente para sua conta atual.</li>
-                  <li>Cada guilda pode manter um recrutamento principal por vez nessa tela.</li>
-                  <li>Quando já existir um recrutamento salvo, os dados aparecem aqui para editar, revisar ou excluir.</li>
-                  <li>Para publicar, é preciso escolher pelo menos uma função.</li>
+                  <li>Digite a chave da sua guilda e toque em <b>Abrir recrutamento</b>.</li>
+                  <li>Se essa chave ainda não tiver sido usada aqui, ela será vinculada automaticamente à sua conta.</li>
+                  <li>Depois disso, a tela procura se já existe um anúncio de recrutamento dessa guilda.</li>
+                  <li>Se ainda não existir, o botão para criar recrutamento aparece para você publicar.</li>
+                  <li>Para salvar, escolha pelo menos uma função e envie uma foto.</li>
                 </ul>
               </div>
             </div>
@@ -125,8 +125,8 @@
 
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h3 class="text-xl font-bold text-gray-900">Recrutamento encontrado</h3>
-            <p class="text-sm text-gray-500 mt-1">Aqui você vê o recrutamento salvo para a chave aberta no momento.</p>
+            <h3 class="text-xl font-bold text-gray-900">Seu recrutamento</h3>
+            <p class="text-sm text-gray-500 mt-1">Depois de abrir a chave, aqui aparece o anúncio de recrutamento vinculado a ela.</p>
           </div>
           <button id="btn-new-rec" class="hidden flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95">
             <i data-lucide="plus" class="w-4 h-4"></i> Criar recrutamento
@@ -135,9 +135,22 @@
 
         <div id="recruitment-view" class="space-y-4">
           <div class="bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center">
-            <p class="text-gray-500 font-medium">Abra uma chave da guilda para ver o recrutamento.</p>
+            <p class="text-gray-500 font-medium">Abra uma chave da guilda para visualizar seu recrutamento.</p>
           </div>
         </div>
+
+        <section id="requests-section" class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hidden">
+          <div class="p-5 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div>
+              <h4 class="text-lg font-bold text-gray-900">Pedidos de recrutamento</h4>
+              <p class="text-sm text-gray-500 mt-1">Aqui você pode aceitar ou recusar os pedidos enviados para sua guilda.</p>
+            </div>
+            <span id="requests-badge" class="inline-flex items-center rounded-full bg-gray-100 text-gray-700 px-2.5 py-1 text-xs font-bold">0</span>
+          </div>
+          <div id="requests-view" class="p-5 space-y-4">
+            <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-500 text-center">Abra um recrutamento para visualizar os pedidos.</div>
+          </div>
+        </section>
       </div>
     </main>
   </div>
@@ -179,7 +192,7 @@
 
             <div>
               <p class="text-xs font-semibold text-gray-500 mb-2">Tipo da guilda</p>
-              <div class="grid sm:grid-cols-3 gap-2" id="gender-group">
+              <div class="grid sm:grid-cols-3 gap-2" id="guild-type-group">
                 <label class="select-chip"><input type="checkbox" name="guildType" value="Masculina"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Masculina</span></label>
                 <label class="select-chip"><input type="checkbox" name="guildType" value="Feminina"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Feminina</span></label>
                 <label class="select-chip"><input type="checkbox" name="guildType" value="Mista"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Mista</span></label>
@@ -194,6 +207,16 @@
                 <label class="select-chip"><input type="checkbox" name="focus" value="Todos"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Todos</span></label>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Foto do recrutamento *</label>
+          <input id="rec-photo" type="file" accept="image/*" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+          <p class="text-xs text-gray-400 mt-1">A imagem será comprimida automaticamente para ficar leve e salvar em base64.</p>
+          <div id="rec-photo-status" class="mt-2 text-xs text-gray-500"></div>
+          <div id="rec-photo-preview-wrap" class="mt-3 hidden">
+            <img id="rec-photo-preview" src="" alt="Prévia da foto" class="w-full max-h-64 object-cover rounded-2xl border border-gray-200 bg-gray-50">
           </div>
         </div>
 
