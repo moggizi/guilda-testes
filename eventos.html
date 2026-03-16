@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Recrutamentos</title>
+  <title>Eventos e Camp</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -11,25 +11,44 @@
     }
   </script>
   <script src="https://unpkg.com/lucide@latest"></script>
+
   <style>
-    .dd { position: relative; }
-    .dd-btn { width:100%; display:flex; align-items:center; justify-content:space-between; gap:.75rem;
-      border:1px solid rgba(15,23,42,.12); background:#fff; border-radius:1rem; padding:.82rem 1rem;
-      box-shadow: 0 1px 2px rgba(2,6,23,.04); outline:none; }
-    .dd-btn:focus { box-shadow: 0 0 0 4px rgba(16,185,129,.18); border-color: rgba(16,185,129,.55); }
-    .dd-menu { position:absolute; left:0; right:0; top: calc(100% + .5rem); background:#ffffff; color:#0f172a;
-      border:1px solid rgba(15,23,42,.12); border-radius: 1rem; overflow:hidden; z-index:40;
-      box-shadow: 0 20px 60px rgba(2,6,23,.18); max-height: 360px; overflow-y:auto; }
-    .dd-item { width:100%; text-align:left; padding:.7rem 1rem; font-size:.875rem; display:flex; align-items:center; gap:.6rem; }
-    .dd-item:hover { background: rgba(15,23,42,.06); }
-    .dd-item[aria-selected="true"] { background: rgba(16,185,129,.16); color:#065f46; font-weight:800; }
-    .select-chip input { display:none; }
-    .select-chip span { display:inline-flex; align-items:center; gap:.45rem; border-radius:9999px; border:1px solid rgb(226 232 240); background:white; color:#334155; padding:.62rem .9rem; font-size:.875rem; font-weight:700; cursor:pointer; }
-    .select-chip input:checked + span { background:#ecfdf5; color:#047857; border-color:#a7f3d0; }
-  </style>
+    /* micro UX */
+    .reveal { opacity: 0; transform: translateY(18px); filter: blur(2px); transition: opacity .55s ease, transform .55s ease, filter .55s ease; }
+    .reveal.show { opacity: 1; transform: translateY(0); filter: blur(0); }
+
+    .btn-spinner{
+      width:18px;height:18px;border-radius:999px;border:2px solid rgba(255,255,255,.55);
+      border-top-color:rgba(255,255,255,0);display:inline-block;animation:spin .9s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* drawer */
+    .drawer-backdrop{ opacity:0; pointer-events:none; transition: opacity .25s ease; }
+    .drawer-backdrop.show{ opacity:1; pointer-events:auto; }
+    .drawer-panel{ transform: translateX(110%); transition: transform .35s cubic-bezier(.2,.9,.2,1); }
+    .drawer-panel.show{ transform: translateX(0); }
+  
+  .dd { position: relative; }
+  .dd-btn { width: 100%; display:flex; align-items:center; justify-content:space-between; gap:.75rem; border-radius: 1rem;
+    background: rgba(255,255,255,.9); border:1px solid rgba(15,23,42,.14); padding: .75rem 1rem; font-size: .875rem;
+    outline:none; }
+  .dd-btn:focus { box-shadow: 0 0 0 4px rgba(16,185,129,.18); border-color: rgba(16,185,129,.55); }
+  .dd-menu { position:absolute; left:0; right:0; top: calc(100% + .5rem); background:#ffffff; color:#0f172a;
+    border:1px solid rgba(15,23,42,.12); border-radius: 1rem; overflow:hidden; z-index:40;
+    box-shadow: 0 20px 60px rgba(2,6,23,.18); }
+  .dd-item { width:100%; text-align:left; padding:.7rem 1rem; font-size:.875rem; display:flex; align-items:center; gap:.6rem; }
+  .dd-item:hover { background: rgba(15,23,42,.06); }
+  .dd-item[aria-selected="true"] { background: rgba(16,185,129,.16); color:#065f46; font-weight:800; }
+
+
+  .clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+</style>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="min-h-screen bg-white text-slate-900">
+
+  
   <div id="sidebar-overlay" class="fixed inset-0 z-40 hidden bg-black/40"></div>
   <aside id="sidebar" class="fixed left-0 top-0 z-50 h-full w-[280px] -translate-x-full bg-white backdrop-blur border-r border-slate-200 transition-transform">
     <div class="p-4 border-b border-slate-200 flex items-center justify-between">
@@ -37,7 +56,7 @@
         <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
         <div class="leading-tight">
           <div class="text-slate-900 font-black">Guilda • HUB</div>
-          <div class="text-xs text-slate-500">Recrutamento • Guildas</div>
+          <div class="text-xs text-slate-500">Eventos • Camps</div>
         </div>
       </div>
       <button id="sidebar-close" class="h-10 w-10 grid place-items-center rounded-xl hover:bg-slate-100">
@@ -50,9 +69,9 @@
         <i data-lucide="home" class="h-4 w-4"></i>
         <span class="font-semibold">Início</span>
       </a>
-      <a href="eventos.html" class="flex items-center gap-3 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700">
-        <i data-lucide="users-round" class="h-4 w-4"></i>
-        <span class="font-semibold">Recrutamentos</span>
+      <a href="eventos.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
+        <i data-lucide="calendar" class="h-4 w-4"></i>
+        <span class="font-semibold">Eventos e Camp</span>
       </a>
       <a href="stats.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
         <i data-lucide="bar-chart-3" class="h-4 w-4"></i>
@@ -64,12 +83,12 @@
       </a>
     </nav>
 
-    <div class="mt-auto p-4 text-xs text-slate-500 border-t border-slate-200">
-      <div class="leading-relaxed">Encontre guildas abertas para recrutamento e envie seu pedido direto pela plataforma.</div>
+    <div class="mt-auto p-4 text-xs text-slate-500 border-t border-white/10">
+      <div class="leading-relaxed">Dica: você pode navegar sem login para ver eventos e consultar stats públicas.</div>
     </div>
   </aside>
 
-  <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
+<header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
     <div class="mx-auto w-full max-w-6xl px-4 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <button id="sidebar-open" class="h-10 w-10 grid place-items-center rounded-xl bg-white ring-1 ring-slate-200 text-slate-900 shadow-sm hover:bg-slate-50">
@@ -77,111 +96,476 @@
         </button>
         <div class="leading-tight">
           <div class="font-black text-slate-900">Guilda • HUB</div>
-          <div class="text-xs text-slate-500">Recrutamento • Guildas</div>
+          <div class="text-xs text-slate-500">Eventos • Camps</div>
         </div>
       </div>
       <a href="index.html" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">Voltar</a>
     </div>
   </header>
 
-  <main class="mx-auto w-full max-w-6xl px-4 py-6">
-    <section class="space-y-5">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div class="flex-1">
-          <label class="text-xs text-slate-500">Pesquisar</label>
-          <input id="q" type="text" placeholder="Ex: nome da guilda, descrição, rush, honras..."
-            class="mt-1 w-full rounded-2xl bg-white ring-1 ring-slate-200 px-4 py-3 text-sm outline-none focus:ring-emerald-400/40" />
-        </div>
-        <div class="w-full sm:w-[300px]">
-          <label class="text-xs text-slate-500">Filtro</label>
-          <div class="relative mt-1">
-            <input type="hidden" id="filter" value="all" />
-            <div class="dd">
-              <button type="button" id="filterBtn" class="dd-btn">
-                <span id="filterLabel" class="font-semibold text-slate-900">Todos</span>
-                <i data-lucide="chevron-down" class="h-4 w-4 text-slate-600"></i>
-              </button>
-              <div id="filterMenu" class="dd-menu hidden">
-                <button type="button" class="dd-item" data-value="all" aria-selected="true"><i data-lucide="layers" class="h-4 w-4"></i>Todos</button>
-                <button type="button" class="dd-item" data-value="masculina"><i data-lucide="shield" class="h-4 w-4"></i>Guilda masculina</button>
-                <button type="button" class="dd-item" data-value="feminina"><i data-lucide="heart" class="h-4 w-4"></i>Guilda feminina</button>
-                <button type="button" class="dd-item" data-value="mista"><i data-lucide="users" class="h-4 w-4"></i>Guilda mista</button>
-                <button type="button" class="dd-item" data-value="gg"><i data-lucide="swords" class="h-4 w-4"></i>Foco em GG</button>
-                <button type="button" class="dd-item" data-value="honras"><i data-lucide="award" class="h-4 w-4"></i>Foco em honras</button>
-                <button type="button" class="dd-item" data-value="todos"><i data-lucide="target" class="h-4 w-4"></i>Foco em todos</button>
-                <button type="button" class="dd-item" data-value="rush"><i data-lucide="zap" class="h-4 w-4"></i>Rush</button>
-                <button type="button" class="dd-item" data-value="fuzileiro"><i data-lucide="crosshair" class="h-4 w-4"></i>Fuzileiro</button>
-                <button type="button" class="dd-item" data-value="full gás"><i data-lucide="flame" class="h-4 w-4"></i>Full Gás</button>
-                <button type="button" class="dd-item" data-value="curandeiro"><i data-lucide="plus-circle" class="h-4 w-4"></i>Curandeiro</button>
-                <button type="button" class="dd-item" data-value="suporte"><i data-lucide="life-buoy" class="h-4 w-4"></i>Suporte</button>
-                <button type="button" class="dd-item" data-value="discord"><i data-lucide="messages-square" class="h-4 w-4"></i>Discord</button>
-                <button type="button" class="dd-item" data-value="whatsapp"><i data-lucide="message-circle" class="h-4 w-4"></i>WhatsApp</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div id="status" class="text-sm text-slate-500"></div>
-      <div id="grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
-    </section>
-  </main>
+  
 
-  <div id="request-modal" class="fixed inset-0 z-[80] hidden">
-    <div data-close-request class="absolute inset-0 bg-slate-950/55"></div>
-    <div class="absolute inset-0 flex items-center justify-center p-4">
-      <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
-        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Enviar pedido</p>
-            <h3 class="text-lg font-black text-slate-900" id="request-modal-guild">Guilda</h3>
-          </div>
-          <button type="button" data-close-request class="grid h-10 w-10 place-items-center rounded-2xl hover:bg-slate-100">
-            <i data-lucide="x" class="h-5 w-5 text-slate-700"></i>
+
+
+
+<main class="mx-auto w-full max-w-6xl px-4 py-6">
+<section class="space-y-4">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div class="flex-1">
+      <label class="text-xs text-slate-500">Pesquisar</label>
+      <input id="q" type="text" placeholder="Ex: nome da guilda, título, descrição..."
+        class="mt-1 w-full rounded-2xl bg-white ring-1 ring-slate-200 px-4 py-3 text-sm outline-none focus:ring-emerald-400/40" />
+    </div>
+    <div class="w-full sm:w-[280px]">
+      <label class="text-xs text-slate-500">Filtro</label>
+      <div class="relative mt-1">
+        
+        <input type="hidden" id="filter" value="all" />
+        <div class="dd">
+          <button type="button" id="filterBtn" class="dd-btn">
+            <span id="filterLabel" class="font-semibold text-slate-900">Todos</span>
+            <i data-lucide="chevron-down" class="h-4 w-4 text-slate-600"></i>
           </button>
+          <div id="filterMenu" class="dd-menu hidden">
+            <button type="button" class="dd-item" data-value="all" aria-selected="true"><i data-lucide="layers" class="h-4 w-4"></i>Todos</button>
+            <button type="button" class="dd-item" data-value="br"><i data-lucide="zap" class="h-4 w-4"></i>Battle Royale</button>
+            <button type="button" class="dd-item" data-value="xvx"><i data-lucide="swords" class="h-4 w-4"></i>XvX (1v1, 2v2...)</button>
+            <button type="button" class="dd-item" data-value="paid"><i data-lucide="badge-dollar-sign" class="h-4 w-4"></i>Pago</button>
+            <button type="button" class="dd-item" data-value="free"><i data-lucide="leaf" class="h-4 w-4"></i>Gratuito</button>
+            <button type="button" class="dd-item" data-value="prize"><i data-lucide="trophy" class="h-4 w-4"></i>Com premiação</button>
+            <button type="button" class="dd-item" data-value="solo"><i data-lucide="user" class="h-4 w-4"></i>Solo</button>
+            <button type="button" class="dd-item" data-value="duo"><i data-lucide="users" class="h-4 w-4"></i>Duo</button>
+            <button type="button" class="dd-item" data-value="squad"><i data-lucide="users-2" class="h-4 w-4"></i>Squad</button>
+            <button type="button" class="dd-item" data-value="1v1"><i data-lucide="swords" class="h-4 w-4"></i>1v1</button>
+            <button type="button" class="dd-item" data-value="2v2"><i data-lucide="swords" class="h-4 w-4"></i>2v2</button>
+            <button type="button" class="dd-item" data-value="3v3"><i data-lucide="swords" class="h-4 w-4"></i>3v3</button>
+            <button type="button" class="dd-item" data-value="4v4"><i data-lucide="swords" class="h-4 w-4"></i>4v4</button>
+          </div>
         </div>
-        <form id="request-form" class="space-y-4 p-5">
-          <p id="request-helper" class="text-sm text-slate-500">Preencha seus dados para enviar o pedido.</p>
-          <div>
-            <label class="text-xs font-semibold text-slate-500">Seu ID</label>
-            <input id="applicant-id" type="text" inputmode="numeric" placeholder="Somente números" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
-          </div>
-          <div>
-            <label class="text-xs font-semibold text-slate-500">Seu nick</label>
-            <input id="applicant-nick" type="text" maxlength="30" placeholder="Digite seu nick" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
-          </div>
-          <div>
-            <label class="text-xs font-semibold text-slate-500">WhatsApp</label>
-            <input id="applicant-whatsapp" type="text" inputmode="numeric" placeholder="Apenas números" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
-          </div>
-          <div>
-            <label class="text-xs font-semibold text-slate-500">Qual modo você joga?</label>
-            <div id="applicant-modes-wrap" class="mt-2 flex flex-wrap gap-2"></div>
-          </div>
-          <button id="btn-send-request" type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800">
-            <i data-lucide="send" class="h-4 w-4"></i>
-            Enviar pedido
-          </button>
-        </form>
+
+        <i data-lucide="chevron-down" class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500"></i>
       </div>
     </div>
   </div>
+  <div id="status" class="text-sm text-slate-500"></div>
+  <div id="grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+</section>
+</main>
 
-  <script>
-    (function(){
-      const openBtn = document.getElementById('sidebar-open');
-      const closeBtn = document.getElementById('sidebar-close');
-      const overlay = document.getElementById('sidebar-overlay');
-      const sidebar = document.getElementById('sidebar');
-      function open(){ overlay.classList.remove('hidden'); sidebar.classList.remove('-translate-x-full'); document.body.style.overflow='hidden'; }
-      function close(){ overlay.classList.add('hidden'); sidebar.classList.add('-translate-x-full'); document.body.style.overflow=''; }
-      openBtn?.addEventListener('click', open);
-      closeBtn?.addEventListener('click', close);
-      overlay?.addEventListener('click', close);
-      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') close(); });
+<script>
+(function(){
+  const openBtn = document.getElementById('sidebar-open');
+  const closeBtn = document.getElementById('sidebar-close');
+  const overlay = document.getElementById('sidebar-overlay');
+  const sidebar = document.getElementById('sidebar');
+  function open(){
+    overlay.classList.remove('hidden');
+    sidebar.classList.remove('-translate-x-full');
+    document.body.style.overflow='hidden';
+  }
+  function close(){
+    overlay.classList.add('hidden');
+    sidebar.classList.add('-translate-x-full');
+    document.body.style.overflow='';
+  }
+  if(openBtn) openBtn.addEventListener('click', open);
+  if(closeBtn) closeBtn.addEventListener('click', close);
+  if(overlay) overlay.addEventListener('click', close);
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') close(); });
+})();
+</script>
+
+<script>lucide.createIcons();</script>
+<script type="module">
+
+import { db, initIcons } from './logic.js';
+import { collection, getDocs, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+initIcons();
+
+const elGrid = document.getElementById('grid');
+const elStatus = document.getElementById('status');
+const elQ = document.getElementById('q');
+const elFilter = document.getElementById('filter');
+
+const ddBtn = document.getElementById('filterBtn');
+const ddMenu = document.getElementById('filterMenu');
+const ddLabel = document.getElementById('filterLabel');
+
+let allItems = [];
+
+const safeStr = (v) => (v == null ? '' : String(v));
+const norm = (v) => safeStr(v).toLowerCase().trim();
+
+function setStatus(msg = "") {
+  if (!elStatus) return;
+  elStatus.textContent = msg;
+}
+
+function toggleMenu(forceOpen = null) {
+  const open = forceOpen != null ? !!forceOpen : ddMenu.classList.contains('hidden');
+  ddMenu.classList.toggle('hidden', !open);
+}
+
+ddBtn?.addEventListener('click', () => toggleMenu());
+document.addEventListener('click', (e) => {
+  if (!ddMenu || !ddBtn) return;
+  const inDd = ddMenu.contains(e.target) || ddBtn.contains(e.target);
+  if (!inDd) toggleMenu(false);
+});
+ddMenu?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-value]');
+  if (!btn) return;
+  const v = btn.getAttribute('data-value') || 'all';
+  elFilter.value = v;
+
+  ddMenu.querySelectorAll('[data-value]').forEach(x => x.setAttribute('aria-selected', 'false'));
+  btn.setAttribute('aria-selected', 'true');
+
+  ddLabel.textContent = btn.textContent.trim();
+  toggleMenu(false);
+  applyFilters();
+  try { initIcons(); } catch (_) {}
+});
+
+function moneyBRL(v) {
+  const n = Number(v);
+  if (!isFinite(n) || n <= 0) return null;
+  try {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
+  } catch {
+    return `R$ ${n.toFixed(2).replace('.', ',')}`;
+  }
+}
+
+
+
+function statusPt(raw) {
+  const s = norm(raw).replace(/\s+/g,'_');
+  const map = {
+    upcoming: "PROXIMO",
+    open: "ABERTO",
+    opened: "ABERTO",
+    active: "ABERTO",
+    scheduled: "AGENDADO",
+    schedule: "AGENDADO",
+    soon: "EM BREVE",
+    in_progress: "EM ANDAMENTO",
+    running: "EM ANDAMENTO",
+    live: "EM ANDAMENTO",
+    ongoing: "EM ANDAMENTO",
+    closed: "ENCERRADO",
+    finished: "FINALIZADO",
+    completed: "FINALIZADO",
+    cancel: "CANCELADO",
+    cancelled: "CANCELADO",
+    canceled: "CANCELADO"
+  };
+  if (!s) return "";
+  return map[s] || map[s.toLowerCase()] || raw.toString().toUpperCase();
+}
+
+function fmtDateOnly(v) {
+  if (v == null || v === "") return "";
+  try {
+    // Firestore Timestamp-like
+    if (typeof v === "object" && v.seconds) {
+      const d = new Date(v.seconds * 1000);
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const yy = d.getUTCFullYear();
+      return `${dd}/${mm}/${yy}`;
+    }
+
+    // ms number (assume UTC for date-only fields to avoid -1 day shift)
+    if (typeof v === "number" && isFinite(v)) {
+      const d = new Date(v);
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const yy = d.getUTCFullYear();
+      return `${dd}/${mm}/${yy}`;
+    }
+
+    if (typeof v === "string") {
+      const s = v.trim();
+      if (!s) return "";
+
+      // dd/mm/yyyy (keeps exactly as provided)
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const dd = String(m[1]).padStart(2, "0");
+        const mm = String(m[2]).padStart(2, "0");
+        const yy = m[3];
+        return `${dd}/${mm}/${yy}`;
+      }
+
+      // ISO / others: use UTC date parts to avoid timezone shifting the day
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        const dd = String(d.getUTCDate()).padStart(2, "0");
+        const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const yy = d.getUTCFullYear();
+        return `${dd}/${mm}/${yy}`;
+      }
+    }
+  } catch (_) {}
+  return safeStr(v);
+}
+
+function fmtTime(v) {
+  if (v == null || v === "") return "";
+  try {
+    if (typeof v === "string") {
+      const s = v.trim();
+      if (!s) return "";
+      // accepts HH:mm or HH:mm:ss (shows HH:mm)
+      const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+      if (m) return `${String(m[1]).padStart(2, "0")}:${m[2]}`;
+      return s;
+    }
+    // if someone saved a timestamp/number as "time", show local HH:mm
+    if (typeof v === "number" && isFinite(v)) {
+      const d = new Date(v);
+      return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    }
+    if (typeof v === "object" && v.seconds) {
+      const d = new Date(v.seconds * 1000);
+      return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    }
+  } catch (_) {}
+  return safeStr(v);
+}
+
+function buildWhenText(dateVal, timeVal) {
+  const dateTxt = fmtDateOnly(dateVal);
+  const timeTxt = fmtTime(timeVal);
+  if (!dateTxt) return "";
+  return timeTxt ? `${dateTxt} • ${timeTxt}` : dateTxt;
+}
+
+
+function getTypeFlags(d) {
+  const mode = norm(d.mode || d.modo || d.brMode);
+  const matchup = norm(d.matchup || d.xvx || d.partida || d.duelo);
+  const kind = norm(d.kind || d.tipo || d.type || d.format);
+
+  const isBR = kind === 'br' || kind === 'battle' || kind.includes('battle') || ['solo','duo','squad'].includes(mode);
+  const isXVX = kind === 'xvx' || matchup.includes('v') || ['1v1','2v2','3v3','4v4'].includes(matchup);
+
+  const fee = Number(d.feeValue ?? d.fee ?? d.taxa ?? d.inscricao ?? 0);
+  const isPaid = !!(d.isPaid === true || norm(d.feeType) === 'paid' || fee > 0);
+  const hasPrize = Number(d.prizeTotal ?? d.premiacao ?? d.premio ?? 0) > 0;
+
+  return { isBR, isXVX, mode, matchup, isPaid, hasPrize };
+}
+
+function matchFilter(d, f) {
+  if (f === 'all') return true;
+  const t = getTypeFlags(d);
+  if (f === 'br') return t.isBR && !t.isXVX;
+  if (f === 'xvx') return t.isXVX;
+  if (f === 'paid') return t.isPaid;
+  if (f === 'free') return !t.isPaid;
+  if (f === 'prize') return t.hasPrize;
+  if (['solo','duo','squad'].includes(f)) return t.mode === f;
+  if (['1v1','2v2','3v3','4v4'].includes(f)) return t.matchup === f;
+  return true;
+}
+
+function matchQuery(item, q) {
+  if (!q) return true;
+  const hay = [
+    item.title, item.description, item.guildName,
+    item.raw?.title, item.raw?.titulo, item.raw?.name
+  ].map(norm).join(' ');
+  return hay.includes(q);
+}
+
+function tag(text, cls = "bg-slate-100 text-slate-700 ring-1 ring-slate-200") {
+  return `<span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-extrabold ${cls}">${text}</span>`;
+}
+
+function render(items) {
+  if (!elGrid) return;
+
+  if (!items.length) {
+    elGrid.innerHTML = `<div class="col-span-full rounded-2xl border border-slate-200 bg-white p-5 text-slate-600">
+      Nenhum evento encontrado com esse filtro/pesquisa.
+    </div>`;
+    return;
+  }
+
+  const pick = (obj, keys, fallback="") => {
+    for (const k of keys) {
+      const v = obj?.[k];
+      if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+    }
+    return fallback;
+  };
+
+  const iconPill = (ico, text) => `
+    <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 text-xs font-extrabold text-slate-700 ring-1 ring-slate-200">
+      <i data-lucide="${ico}" class="h-3.5 w-3.5"></i>${text}
+    </span>`;
+
+  const row = (ico, label, value) => {
+    if (!value) return '';
+    return `<div class="flex items-center gap-2 text-xs text-slate-600">
+      <i data-lucide="${ico}" class="h-4 w-4 text-slate-500"></i>
+      <span class="font-semibold text-slate-700">${label}:</span>
+      <span class="truncate">${safeStr(value)}</span>
+    </div>`;
+  };
+
+  elGrid.innerHTML = items.map((it) => {
+    const d = it.raw || {};
+    const t = getTypeFlags(d);
+
+    const title = safeStr(it.title || "Evento");
+    const guildName = safeStr(it.guildName || "Guilda");
+    const desc = safeStr(it.description || "");
+
+    const link = safeStr(pick(d, ["link","destino","url","contactLink","infoLink"], "")).trim();
+
+    const location = safeStr(pick(d, ["location","local","place","map","cidade"], "")).trim();
+
+    const drops = pick(d, ["drops","quedas"], "");
+    const max = pick(d, ["max","maxPlayers","maxTeams","limite","qtd","teams","equipes"], "");
+    const modeTxt = t.isXVX ? (t.matchup || "XvX") : (t.mode || "BR");
+
+    const feeType = norm(pick(d, ["feeType","taxaTipo","inscricaoTipo"], ""));
+    const feeValueRaw = pick(d, ["feeValue","fee","taxa","inscricao","valorInscricao"], "");
+    const feeValueNum = Number(feeValueRaw);
+    const isPaid = (feeType === "paid") || (isFinite(feeValueNum) && feeValueNum > 0) || t.isPaid;
+    const feeText = isPaid ? (moneyBRL(feeValueNum) || `R$ ${safeStr(feeValueRaw)}`) : "Gratuito";
+
+    const prize = moneyBRL(pick(d, ["prizeTotal","premiacao","premio","prize"], ""));
+
+    const b64 = safeStr(pick(d, ["photoBase64","fotoBase64","imageBase64","bannerBase64","foto","imagem"], "")).trim();
+    const thumb = (() => {
+      if (b64) {
+        const src = b64.startsWith("data:") ? b64 : `data:image/jpeg;base64,${b64}`;
+        return `<img src="${src}" alt="Evento" class="h-14 w-14 rounded-2xl object-cover ring-1 ring-slate-200 bg-slate-100" loading="lazy" />`;
+      }
+      const ico = safeStr(pick(d, ["icon","icone","symbol"], "")).trim();
+      const useIco = ico ? ico : (isPaid ? "badge-dollar-sign" : "trophy");
+      return `<div class="h-14 w-14 rounded-2xl bg-emerald-600/10 ring-1 ring-emerald-500/20 grid place-items-center">
+        <i data-lucide="${useIco}" class="h-6 w-6 text-emerald-700"></i>
+      </div>`;
     })();
-    lucide.createIcons();
-  </script>
-  <script type="module" src="./rec.js"></script>
+
+    const statusRaw = pick(d, ["progress","progresso","status","andamento"], "");
+const statusShow = statusRaw ? statusPt(statusRaw) : "";
+
+const dateVal = pick(d, ["date","data","startDate","startsOn","day","scheduledDate","scheduledAtMs","scheduledAt","startMs","dateTime","datetime","when","dataHora","data_hora","startAt","startsAt"], "");
+const timeVal = pick(d, ["time","hora","horario","startTime","startsTime"], "");
+const whenShow = buildWhenText(dateVal, timeVal);
+const topPills = [
+  iconPill("users", guildName),
+  statusShow ? iconPill("activity", statusShow) : "",
+  whenShow ? iconPill("calendar", whenShow) : "",
+  prize ? iconPill("trophy", `Premiação ${prize}`) : ""
+].filter(Boolean).join("");
+
+    return `<article class="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
+      <div class="p-5">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-start gap-3 min-w-0">
+            ${thumb}
+            <div class="min-w-0">
+              <div class="truncate text-base font-black text-slate-900">${title}</div>
+              <div class="text-xs text-slate-500">Por <span class="font-semibold text-slate-700">${guildName}</span></div>
+            </div>
+          </div>
+          ${link ? `<a href="${link}" target="_blank" rel="noopener noreferrer"
+            class="shrink-0 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:bg-slate-800">
+            Ver <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>` : ``}
+        </div>
+
+        ${desc ? `<p class="mt-3 text-sm text-slate-600 leading-relaxed clamp2">${desc}</p>` : ``}
+
+        <div class="mt-3 flex flex-wrap gap-2 justify-start text-left">
+          ${topPills}
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 gap-2">
+          ${row(t.isXVX ? "swords" : "zap", "Modo", modeTxt.toUpperCase())}
+          ${row("badge-dollar-sign", "Inscrição", feeText)}
+          ${row("map-pin", "Local", location)}
+          ${!t.isXVX ? row("repeat", "Quedas", drops) : ``}
+          ${row("users-2", t.isXVX ? "Equipes" : "Participantes", max)}
+        </div>
+
+        ${!link ? `<div class="mt-3 text-xs text-slate-400">Sem link de informações</div>` : ``}
+      </div>
+    </article>`;
+  }).join('');
+
+  try { initIcons(); } catch (_) {}
+}
+
+function applyFilters() {
+  const q = norm(elQ?.value || "");
+  const f = norm(elFilter?.value || "all");
+  const filtered = allItems.filter(it => matchFilter(it.raw || {}, f) && matchQuery(it, q));
+  render(filtered);
+}
+
+elQ?.addEventListener('input', applyFilters);
+
+async function loadEventsFromGuildas() {
+  setStatus("Carregando eventos…");
+  elGrid.innerHTML = `<div class="col-span-full rounded-2xl border border-slate-200 bg-white p-5 text-slate-600">
+    Carregando…
+  </div>`;
+
+  const items = [];
+  try {
+    const gSnap = await getDocs(query(collection(db, "guildas"), limit(250)));
+    const guilds = gSnap.docs.map(d => ({ id: d.id, data: d.data() || {} }));
+
+    for (const g of guilds) {
+      const gid = g.id;
+      const gname = (g.data.name || g.data.nome || "").toString().trim() || "Guilda";
+      try {
+        const cSnap = await getDocs(query(collection(db, "guildas", gid, "campeonatos"), limit(200)));
+        for (const c of cSnap.docs) {
+          const data = c.data() || {};
+          const title = (data.title || data.titulo || data.name || data.nome || "Evento").toString().trim();
+          const description = (data.description || data.descricao || "").toString().trim();
+          const guildName = (data.guildName || data.guild || gname || "Guilda").toString().trim();
+          const createdAtMs = Number(data.createdAtMs ?? data.updatedAtMs ?? 0) || 0;
+
+          items.push({
+            id: c.id,
+            guildId: gid,
+            guildName,
+            title,
+            description,
+            dateText: createdAtMs ? new Date(createdAtMs).toLocaleString('pt-BR') : "",
+            raw: data
+          });
+        }
+      } catch (_) {}
+    }
+
+    items.sort((a,b) => (b.raw?.createdAtMs||0) - (a.raw?.createdAtMs||0));
+    allItems = items;
+    setStatus(items.length ? `${items.length} eventos encontrados` : "Nenhum evento encontrado ainda.");
+    applyFilters();
+  } catch (e) {
+    console.error(e);
+    setStatus("Não foi possível carregar os eventos. Verifique as regras/coleções.");
+    elGrid.innerHTML = `<div class="col-span-full rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
+      Erro ao carregar eventos. Abra o console para ver detalhes.
+    </div>`;
+  }
+}
+
+loadEventsFromGuildas();
+
+</script>
 </body>
 </html>
