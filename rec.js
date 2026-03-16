@@ -71,6 +71,7 @@ function tagChip(text, style = 'default') {
   return `<span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-bold ${styles[style] || styles.default}">${escapeHtml(text)}</span>`;
 }
 
+// ========= shared image helpers for management =========
 function dataUrlSizeBytes(dataUrl = '') {
   if (!dataUrl || !dataUrl.includes(',')) return 0;
   const base64 = dataUrl.split(',')[1] || '';
@@ -124,6 +125,7 @@ async function compressImageToBase64(file, maxBytes = 800 * 1024) {
   return { base64: output, bytes: finalSize };
 }
 
+// ========= management mode (camp.html) =========
 function bootManagementMode() {
   const els = {
     loadBtn: qs('btn-load-recruitment'), reloadBtn: qs('btn-reload'), newBtn: qs('btn-new-rec'),
@@ -404,6 +406,7 @@ function bootManagementMode() {
   })();
 }
 
+// ========= marketplace mode (eventos.html) =========
 function bootMarketplaceMode() {
   const els = {
     grid: qs('grid'), status: qs('status'), q: qs('q'), filter: qs('filter'), filterBtn: qs('filterBtn'), filterMenu: qs('filterMenu'), filterLabel: qs('filterLabel'),
@@ -419,7 +422,7 @@ function bootMarketplaceMode() {
     els.modalGuild.textContent = item.guildName || 'Guilda';
     els.helper.textContent = 'Preencha seus dados para enviar o pedido para essa guilda.';
     const modes = Array.isArray(item.roles) && item.roles.length ? item.roles : ['Rush', 'Fuzileiro', 'Full Gás', 'Curandeiro', 'Suporte'];
-    els.modesWrap.innerHTML = modes.map((mode) => `
+    els.modesWrap.innerHTML = modes.map((mode, idx) => `
       <label class="select-chip">
         <input type="checkbox" name="applicantRoles" value="${escapeHtml(mode)}">
         <span><i data-lucide="check-circle" class="h-4 w-4"></i>${escapeHtml(mode)}</span>
@@ -451,8 +454,8 @@ function bootMarketplaceMode() {
     }
     els.grid.innerHTML = items.map(item => {
       const photo = item.photoBase64
-        ? `<img src="${item.photoBase64}" alt="Foto da guilda" class="h-16 w-16 rounded-2xl object-cover ring-1 ring-slate-200 bg-slate-50 shrink-0">`
-        : `<div class="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-50 to-sky-50 ring-1 ring-slate-200 shrink-0"></div>`;
+        ? `<img src="${item.photoBase64}" alt="Foto da guilda" class="h-20 w-20 shrink-0 rounded-2xl border border-slate-200 object-cover bg-slate-50">`
+        : `<div class="h-20 w-20 shrink-0 rounded-2xl border border-slate-200 bg-gradient-to-br from-emerald-50 to-sky-50"></div>`;
       const roles = (item.roles || []).map(v => tagChip(v, 'role')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
       const types = (item.guildType || []).map(v => tagChip(v, 'type')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
       const focuses = (item.focus || []).map(v => tagChip(v, 'focus')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
@@ -471,8 +474,8 @@ function bootMarketplaceMode() {
               </div>
             </div>
           </div>
-          <div class="mt-4 space-y-4">
-            <div class="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600 min-h-[84px] whitespace-pre-wrap">${escapeHtml(item.description || 'Sem descrição.')}</div>
+          <div class="mt-4 space-y-3">
+            <div class="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600 min-h-[72px] whitespace-pre-wrap">${escapeHtml(item.description || 'Sem descrição.')}</div>
             <div class="space-y-3">
               <div><p class="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Modo de jogo</p><div class="flex flex-wrap gap-2">${roles}</div></div>
               <div><p class="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Tipo de guilda</p><div class="flex flex-wrap gap-2">${types}</div></div>
