@@ -1,8 +1,10 @@
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore,
+  collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   deleteDoc,
   serverTimestamp
@@ -527,6 +529,7 @@ export async function initRecruitmentMarketplace() {
 }
 
 if (els.view && els.keyInput && els.form) initRecruitmentManager();
+if (document.getElementById('grid') && document.getElementById('request-modal')) initRecruitmentMarketplace();
 
 window.addEventListener('beforeunload', () => {
   deleteApp(secondaryApp).catch(() => {});
