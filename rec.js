@@ -416,24 +416,6 @@ function bootMarketplaceMode() {
   let allItems = [], activeRecruitment = null;
 
   function setStatus(msg='') { if (els.status) els.status.textContent = msg; }
-  function isUidSearch(value) {
-    const clean = String(value || '').trim();
-    return !!clean && /^\d+$/.test(clean);
-  }
-  function syncUidSearchInUrl(rawValue, replace = true) {
-    const url = new URL(window.location.href);
-    const value = String(rawValue || '').trim();
-    if (isUidSearch(value)) url.searchParams.set('uid', value);
-    else url.searchParams.delete('uid');
-    const next = `${url.pathname}${url.search}${url.hash}`;
-    if (replace) window.history.replaceState({}, '', next);
-    else window.history.pushState({}, '', next);
-  }
-  function getInitialUidSearch() {
-    const url = new URL(window.location.href);
-    const uid = String(url.searchParams.get('uid') || '').trim();
-    return isUidSearch(uid) ? uid : '';
-  }
   function openReqModal(item) {
     activeRecruitment = item;
     els.form.reset();
@@ -449,6 +431,37 @@ function bootMarketplaceMode() {
     initIcons();
   }
   function closeReqModal() { els.modal.classList.add('hidden'); activeRecruitment = null; }
+  function syncMarketplaceUrl() {
+    try {
+      const url = new URL(window.location.href);
+      const query = String(els.q?.value || '').trim();
+      const filterValue = String(els.filter?.value || 'all').trim().toLowerCase();
+      if (query) url.searchParams.set('q', query);
+      else url.searchParams.delete('q');
+      if (filterValue && filterValue !== 'all') url.searchParams.set('filter', filterValue);
+      else url.searchParams.delete('filter');
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (next !== current) window.history.replaceState({}, '', next);
+    } catch (_) {}
+  }
+  function applyUrlState() {
+    try {
+      const url = new URL(window.location.href);
+      const q = (url.searchParams.get('q') || '').trim();
+      const filterValue = (url.searchParams.get('filter') || 'all').trim().toLowerCase();
+      if (els.q && q) els.q.value = q;
+      if (els.filter && filterValue) els.filter.value = filterValue;
+      if (els.filterLabel && filterValue) {
+        const selected = els.filterMenu?.querySelector(`[data-value="${CSS.escape(filterValue)}"]`);
+        if (selected) {
+          els.filterLabel.textContent = selected.textContent.trim();
+          els.filterMenu?.querySelectorAll('[data-value]').forEach(x => x.setAttribute('aria-selected', 'false'));
+          selected.setAttribute('aria-selected', 'true');
+        }
+      }
+    } catch (_) {}
+  }
   function itemMatchesFilter(item, filterValue) {
     const v = String(filterValue || 'all').toLowerCase();
     if (v === 'all') return true;
@@ -459,14 +472,9 @@ function bootMarketplaceMode() {
     return roles.includes(v) || contacts.includes(v) || types.includes(v) || focuses.includes(v);
   }
   function itemMatchesQuery(item, query) {
-    const raw = String(query || '').trim();
-    const q = raw.toLowerCase();
+    const q = String(query || '').trim().toLowerCase();
     if (!q) return true;
-    if (isUidSearch(raw)) {
-      const itemUid = String(item.id || item.ownerUid || '').trim();
-      return itemUid === raw || itemUid.includes(raw);
-    }
-    const hay = [item.guildName, item.description, item.id, item.ownerUid, ...(item.roles || []), ...(item.contacts || []), ...(item.guildType || []), ...(item.focus || [])].join(' ').toLowerCase();
+    const hay = [item.id, item.guildName, item.description, ...(item.roles || []), ...(item.contacts || []), ...(item.guildType || []), ...(item.focus || [])].join(' ').toLowerCase();
     return hay.includes(q);
   }
   function renderGrid(items) {
@@ -476,23 +484,29 @@ function bootMarketplaceMode() {
       return;
     }
     els.grid.innerHTML = items.map(item => {
-      const photo = item.photoBase64 ? `<img src="${item.photoBase64}" alt="Foto da guilda" class="h-52 w-full object-cover">` : `<div class="h-52 w-full bg-gradient-to-br from-emerald-50 to-sky-50"></div>`;
+      const photo = item.photoBase64
+        ? `<img src="${item.photoBase64}" alt="Foto da guilda" class="h-20 w-20 shrink-0 rounded-2xl border border-slate-200 object-cover bg-slate-50">`
+        : `<div class="h-20 w-20 shrink-0 rounded-2xl border border-slate-200 bg-gradient-to-br from-emerald-50 to-sky-50"></div>`;
       const roles = (item.roles || []).map(v => tagChip(v, 'role')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
       const types = (item.guildType || []).map(v => tagChip(v, 'type')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
       const focuses = (item.focus || []).map(v => tagChip(v, 'focus')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
       const contacts = (item.contacts || []).map(v => tagChip(v, 'contact')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
       return `
-        <article class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          ${photo}
-          <div class="p-5 space-y-4">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <h3 class="text-lg font-black text-slate-900">${escapeHtml(item.guildName || 'Sem nome')}</h3>
-                <p class="mt-1 text-xs text-slate-500">Publicado em ${escapeHtml(formatDateBR(item.dateMs || item.createdAt || Date.now()))}</p>
+        <article class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="flex items-start gap-3">
+            ${photo}
+            <div class="min-w-0 flex-1">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="truncate text-base font-black text-slate-900">${escapeHtml(item.guildName || 'Sem nome')}</h3>
+                  <p class="mt-1 text-xs text-slate-500">Publicado em ${escapeHtml(formatDateBR(item.dateMs || item.createdAt || Date.now()))}</p>
+                </div>
+                <span class="shrink-0 inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 ring-1 ring-emerald-200">ABERTO</span>
               </div>
-              <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 ring-1 ring-emerald-200">ABERTO</span>
             </div>
-            <div class="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600 min-h-[84px] whitespace-pre-wrap">${escapeHtml(item.description || 'Sem descrição.')}</div>
+          </div>
+          <div class="mt-4 space-y-3">
+            <div class="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600 min-h-[72px] whitespace-pre-wrap">${escapeHtml(item.description || 'Sem descrição.')}</div>
             <div class="space-y-3">
               <div><p class="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Modo de jogo</p><div class="flex flex-wrap gap-2">${roles}</div></div>
               <div><p class="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Tipo de guilda</p><div class="flex flex-wrap gap-2">${types}</div></div>
@@ -512,16 +526,9 @@ function bootMarketplaceMode() {
     initIcons();
   }
   function applyFilters() {
-    const queryValue = els.q?.value || '';
-    const filtered = allItems.filter(item => itemMatchesFilter(item, els.filter.value) && itemMatchesQuery(item, queryValue));
-    if (isUidSearch(queryValue)) {
-      const uid = String(queryValue).trim();
-      setStatus(filtered.length
-        ? `${filtered.length} recrutamento${filtered.length === 1 ? '' : 's'} encontrado${filtered.length === 1 ? '' : 's'} para o UID ${uid}.`
-        : `Nenhum recrutamento encontrado para o UID ${uid}.`);
-    } else {
-      setStatus(`${filtered.length} recrutamento${filtered.length === 1 ? '' : 's'} encontrado${filtered.length === 1 ? '' : 's'}.`);
-    }
+    const filtered = allItems.filter(item => itemMatchesFilter(item, els.filter.value) && itemMatchesQuery(item, els.q.value));
+    syncMarketplaceUrl();
+    setStatus(`${filtered.length} recrutamento${filtered.length === 1 ? '' : 's'} encontrado${filtered.length === 1 ? '' : 's'}.`);
     renderGrid(filtered);
   }
   async function loadMarketplace() {
@@ -578,10 +585,7 @@ function bootMarketplaceMode() {
       applyFilters();
       initIcons();
     });
-    els.q?.addEventListener('input', () => {
-      syncUidSearchInUrl(els.q.value, true);
-      applyFilters();
-    });
+    els.q?.addEventListener('input', applyFilters);
   }
   function bindModal() {
     document.querySelectorAll('[data-close-request]').forEach(el => el.addEventListener('click', closeReqModal));
@@ -590,12 +594,7 @@ function bootMarketplaceMode() {
     els.applicantWhatsapp?.addEventListener('input', () => { els.applicantWhatsapp.value = String(els.applicantWhatsapp.value || '').replace(/\D+/g, ''); });
   }
   (async function boot() {
-    bindFilters();
-    bindModal();
-    const initialUid = getInitialUidSearch();
-    if (initialUid && els.q) els.q.value = initialUid;
-    initIcons();
-    await loadMarketplace();
+    bindFilters(); bindModal(); applyUrlState(); initIcons(); await loadMarketplace();
   })();
 }
 
