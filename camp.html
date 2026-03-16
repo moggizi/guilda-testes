@@ -3,18 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Campeonato - Guild Manager</title>
+  <title>Recrutamento - Guild Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script>
-    tailwind.config = { theme: { extend: { colors: { emerald: { 50:'#ecfdf5', 100:'#d1fae5', 200:'#a7f3d0', 400:'#34d399', 500:'#10b981', 600:'#059669', 700:'#047857'} } } } }
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            emerald: {
+              50:'#ecfdf5',100:'#d1fae5',200:'#a7f3d0',400:'#34d399',500:'#10b981',600:'#059669',700:'#047857'
+            }
+          }
+        }
+      }
+    };
   </script>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body class="bg-gray-50/80">
-
   <div class="flex min-h-screen">
-    <!-- Sidebar -->
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
     <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:static">
       <div class="flex items-center justify-between p-5 border-b border-gray-100">
@@ -24,41 +32,15 @@
         </div>
       </div>
       <nav class="p-4 space-y-1">
-        <a href="dashboard.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-  <i data-lucide="house" class="w-5 h-5"></i> Dashboard
-</a>
-
-<a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-  <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
-</a>
-
-<a href="perfil-guilda.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-  <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Estatísticas
-</a>
-
-<a href="membros.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-  <i data-lucide="users" class="w-5 h-5"></i> Membros
-</a>
-
-<a href="lines.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-  <i data-lucide="layers" class="w-5 h-5"></i> Lines
-</a>
-
-<a href="ajustes.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-  <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
-</a>
-
-<a href="upgrade.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-  <i data-lucide="sparkles" class="w-5 h-5"></i> Upgrade
-</a>
-
-<a href="camp.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
-  <i data-lucide="trophy" class="w-5 h-5"></i> Campeonato
-</a>
-
-<a href="admin.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-  <i data-lucide="settings" class="w-5 h-5"></i> Admin
-</a>
+        <a href="dashboard.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"><i data-lucide="house" class="w-5 h-5"></i> Dashboard</a>
+        <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"><i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão</a>
+        <a href="perfil-guilda.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"><i data-lucide="bar-chart-3" class="w-5 h-5"></i> Estatísticas</a>
+        <a href="membros.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"><i data-lucide="users" class="w-5 h-5"></i> Membros</a>
+        <a href="lines.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"><i data-lucide="layers" class="w-5 h-5"></i> Lines</a>
+        <a href="ajustes.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"><i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes</a>
+        <a href="upgrade.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"><i data-lucide="sparkles" class="w-5 h-5"></i> Upgrade</a>
+        <a href="camp.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm"><i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento</a>
+        <a href="admin.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"><i data-lucide="settings" class="w-5 h-5"></i> Admin</a>
         <a id="nav-chefe" href="chefe.html" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"><i data-lucide="crown" class="w-5 h-5"></i> Chefe</a>
       </nav>
       <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100">
@@ -77,818 +59,153 @@
         <div class="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div class="flex items-center gap-3">
             <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500"><i data-lucide="menu" class="w-5 h-5"></i></button>
-            <h1 class="text-lg font-semibold text-gray-900">Campeonatos <span class="ml-2 inline-flex items-center rounded-full bg-purple-50 text-purple-700 ring-1 ring-purple-200 px-2 py-0.5 text-[10px] font-extrabold">PRO</span><span class="ml-2 inline-flex items-center rounded-full bg-gray-100 text-gray-600 ring-1 ring-gray-200 px-2 py-0.5 text-[10px] font-extrabold">BETA</span></h1>
+            <h1 class="text-lg font-semibold text-gray-900">Recrutamento <span class="ml-2 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-0.5 text-[10px] font-extrabold">NOVO</span></h1>
           </div>
-          <!-- Botão de Recarregar Adicionado -->
-          <button id="btn-reload" class="p-2 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
-             <i data-lucide="rotate-cw" class="w-5 h-5"></i>
-          </button>
+          <button id="btn-reload" class="p-2 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition"><i data-lucide="rotate-cw" class="w-5 h-5"></i></button>
         </div>
       </header>
 
       <div class="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
-        <div class="flex items-center justify-between">
-          <div><h2 class="text-2xl font-bold text-gray-900">Eventos</h2><p class="text-gray-500 text-sm mt-1">Gerencie os campeonatos da guilda</p></div>
-          <button id="btn-new-camp" onclick="openCampModal()" class="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95">
-            <i data-lucide="plus" class="w-4 h-4"></i> Novo Campeonato
+        <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-6">
+          <section class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-2xl font-bold text-gray-900">Painel de recrutamento</h2>
+                <p class="text-sm text-gray-500 mt-1">Use a chave da guilda para criar ou acessar um recrutamento único.</p>
+              </div>
+              <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><i data-lucide="users-round" class="w-6 h-6"></i></div>
+            </div>
+
+            <div class="mt-5 grid sm:grid-cols-[1fr_auto] gap-3">
+              <div>
+                <label for="guild-access-key-input" class="block text-sm font-medium text-gray-700 mb-1.5">Chave da guilda *</label>
+                <input id="guild-access-key-input" type="text" placeholder="Digite a chave da guilda" class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+              </div>
+              <div class="sm:pt-7">
+                <button id="btn-load-recruitment" class="w-full sm:w-auto px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95">
+                  Acessar recrutamento
+                </button>
+              </div>
+            </div>
+
+            <div id="key-status" class="mt-4 hidden rounded-xl border px-4 py-3 text-sm"></div>
+
+            <div class="mt-5 grid sm:grid-cols-3 gap-3">
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p class="text-[11px] text-gray-500 font-semibold">UID atual</p>
+                <p id="current-uid" class="mt-1 text-sm font-bold text-gray-900 break-all">-</p>
+              </div>
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p class="text-[11px] text-gray-500 font-semibold">Guilda atual</p>
+                <p id="current-guild-name" class="mt-1 text-sm font-bold text-gray-900 break-words">-</p>
+              </div>
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p class="text-[11px] text-gray-500 font-semibold">Chave aberta</p>
+                <p id="opened-key" class="mt-1 text-sm font-bold text-gray-900 break-all">Nenhuma</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-gray-50 text-gray-700 flex items-center justify-center"><i data-lucide="info" class="w-5 h-5"></i></div>
+              <div>
+                <p class="text-sm font-semibold text-gray-900">Como vai funcionar</p>
+                <ul class="mt-2 text-xs text-gray-600 space-y-1 list-disc pl-4">
+                  <li>A chave será validada na coleção <b>chave</b> do novo Firebase.</li>
+                  <li>Se a chave não existir, ela será criada automaticamente com o <b>UID atual</b>.</li>
+                  <li>O recrutamento será salvo em <b>rec/{uid}</b> e só pode existir <b>um</b> por UID.</li>
+                  <li>Ao existir um recrutamento, o botão de criar novo some.</li>
+                  <li>Funções exigem pelo menos <b>uma</b> opção marcada.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 class="text-xl font-bold text-gray-900">Recrutamento encontrado</h3>
+            <p class="text-sm text-gray-500 mt-1">Leitura da coleção <span class="font-semibold">rec</span> com base no UID vinculado à chave.</p>
+          </div>
+          <button id="btn-new-rec" class="hidden flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95">
+            <i data-lucide="plus" class="w-4 h-4"></i> Criar recrutamento
           </button>
         </div>
 
-        <div id="camps-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-           <!-- Placeholder Skeleton -->
-           <div class="col-span-1 md:col-span-2 bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center animate-pulse">
-               <p class="text-gray-400 text-sm">Carregando...</p>
-           </div>
+        <div id="recruitment-view" class="space-y-4">
+          <div class="bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center">
+            <p class="text-gray-500 font-medium">Abra uma chave da guilda para ver o recrutamento.</p>
+          </div>
         </div>
       </div>
     </main>
   </div>
 
-  <!-- Modal Camp (Mantido igual) -->
-  <div id="camp-modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
-    <div class="fixed inset-0 bg-black/40" onclick="closeCampModal()"></div>
-    <div class="relative bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto overscroll-contain animate-in" style="padding-bottom: env(safe-area-inset-bottom);">
+  <div id="rec-modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/40" data-close-rec></div>
+    <div class="relative bg-white w-full sm:max-w-xl sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto overscroll-contain animate-in" style="padding-bottom: env(safe-area-inset-bottom);">
       <div class="flex items-center justify-between p-5 border-b border-gray-100 bg-white rounded-t-2xl sticky top-0">
-        <h3 id="camp-modal-title" class="text-lg font-bold text-gray-900">Novo Campeonato</h3>
-        <button onclick="closeCampModal()" class="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+        <h3 id="rec-modal-title" class="text-lg font-bold text-gray-900">Novo recrutamento</h3>
+        <button type="button" data-close-rec class="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
-      <form id="camp-form" class="p-5 space-y-4">
-        <input type="hidden" id="camp-id">
+      <form id="rec-form" class="p-5 space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Nome *</label>
-          <input id="camp-name" type="text" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500" required>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Descrição</label>
-          <textarea id="camp-desc" rows="3" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="block text-sm font-medium text-gray-700 mb-1.5">Data</label><input id="camp-date" type="date" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"></div>
-          <div><label class="block text-sm font-medium text-gray-700 mb-1.5">Horário</label><input id="camp-time" type="time" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Nome da guilda *</label>
+          <input id="rec-guild-name" type="text" maxlength="60" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500" required>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Guilda (automático)</label>
-          <input id="camp-guildname" type="text" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-600" disabled>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Funções do recrutamento *</label>
+          <div class="grid sm:grid-cols-2 gap-2" id="roles-group">
+            <label class="select-chip"><input type="checkbox" name="roles" value="Rush"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Rush</span></label>
+            <label class="select-chip"><input type="checkbox" name="roles" value="Fuzileiro"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Fuzileiro</span></label>
+            <label class="select-chip"><input type="checkbox" name="roles" value="Full Gás"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Full Gás</span></label>
+            <label class="select-chip"><input type="checkbox" name="roles" value="Curandeiro"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Curandeiro</span></label>
+            <label class="select-chip"><input type="checkbox" name="roles" value="Suporte"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Suporte</span></label>
+          </div>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Formato *</label>
-          <select id="camp-format" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white" required>
-            <option value="br">Battle Royale</option>
-            <option value="xvx">XvX (1v1 até 4v4)</option>
-          </select>
-        </div>
-
-        <div id="br-fields" class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Modo (BR) *</label>
-            <select id="camp-mode" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
-              <option value="solo">SOLO</option>
-              <option value="duo">DUO</option>
-              <option value="squad">SQUAD</option>
-            </select>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Outras opções</label>
+          <div class="grid sm:grid-cols-2 gap-2" id="contact-group">
+            <label class="select-chip"><input type="checkbox" name="contacts" value="Discord"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Discord</span></label>
+            <label class="select-chip"><input type="checkbox" name="contacts" value="WhatsApp (grupo)"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>WhatsApp (grupo)</span></label>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Quedas *</label>
-            <select id="camp-drops" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white"></select>
-          </div>
-        </div>
-
-        <div id="xvx-fields" class="grid grid-cols-2 gap-3 hidden">
-          <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Confronto *</label>
-            <select id="camp-xvx" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
-              <option value="1v1">1v1</option>
-              <option value="2v2">2v2</option>
-              <option value="3v3">3v3</option>
-              <option value="4v4">4v4</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Inscrição *</label>
-            <select id="camp-feeType" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
-              <option value="free">Gratuito</option>
-              <option value="paid">Pago</option>
-            </select>
-          </div>
-          <div id="fee-value-wrap" class="hidden">
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Valor (R$)</label>
-            <input id="camp-feeValue" type="number" step="0.01" min="0" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ex: 5,00">
-          </div>
-        </div>
-
-                <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Premiação total (R$) (opcional)</label>
-          <input id="camp-prizeTotal" type="text" inputmode="decimal" autocomplete="off"
-                 class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                 placeholder="Ex: 1500,00">
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Link para informações (obrigatório) *</label>
-          <input id="camp-link" type="url"
-                 class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                 placeholder="WhatsApp, Instagram, grupo, etc" required>
+          <div class="flex items-center justify-between gap-3 mb-1.5">
+            <label class="block text-sm font-medium text-gray-700">Descrição</label>
+            <span id="rec-desc-count" class="text-xs text-gray-400">0/100</span>
+          </div>
+          <textarea id="rec-description" rows="4" maxlength="100" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ex: Falar sobre regras ou metas etc..."></textarea>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Foto (opcional)</label>
-            <input id="camp-photo" type="file" accept="image/*" class="w-full text-sm">
-            <p class="text-xs text-gray-500 mt-1">Você pode enviar até 2MB. Se necessário, a imagem será otimizada antes de salvar.</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Símbolo (se não usar foto)</label>
-            <select id="camp-icon" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
-              <option value="trophy">🏆 Troféu</option>
-              <option value="crown">👑 Coroa</option>
-              <option value="flame">🔥 Chama</option>
-              <option value="target">🎯 Alvo</option>
-              <option value="swords">⚔️ Espadas</option>
-              <option value="shield">🛡️ Escudo</option>
-            </select>
-          </div>
-        </div>
-
-        <div><label class="block text-sm font-medium text-gray-700 mb-1.5">Local</label><input id="camp-local" type="text" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"></div>
-        <div class="grid grid-cols-2 gap-3">
-          <div><label id="camp-max-label" class="block text-sm font-medium text-gray-700 mb-1.5">Máx. Participantes</label><select id="camp-max" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white"></select></div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
-            <select id="camp-status" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
-              <option value="upcoming">Próximo</option>
-              <option value="ongoing">Em andamento</option>
-              <option value="finished">Finalizado</option>
-            </select>
-          </div>
-        </div>
         <div class="flex gap-3 pt-2">
-          <button type="button" onclick="closeCampModal()" class="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button type="button" data-close-rec class="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
           <button type="submit" class="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg hover:shadow-xl">Salvar</button>
         </div>
       </form>
     </div>
   </div>
 
-  
-  <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, db } from './logic.js';
-    import {
-      collection, doc, setDoc, deleteDoc, getDocs, serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-    // ==========================================
-    // FIX WEBVIEW: Renderiza o menu e ícones instantaneamente!
-    // ==========================================
-    setupSidebar();
-    initIcons(); 
-
-    // Dropdown de quedas (fixo 1..20)
-    const dropsSel = document.getElementById('camp-drops');
-    for(let i=1;i<=20;i++){
-      const op=document.createElement('option');
-      op.value=String(i);
-      op.textContent=String(i);
-      dropsSel.appendChild(op);
+  <style>
+    .select-chip input { display:none; }
+    .select-chip span {
+      display:flex; align-items:center; gap:.5rem; width:100%;
+      border:1px solid rgb(229 231 235); border-radius: .9rem; padding:.85rem 1rem;
+      font-size:.875rem; font-weight:600; color:rgb(75 85 99); background:#fff;
+      transition: all .18s ease;
     }
-
-    
-    // Dropdown de limite (BR: 1..2000 participantes | XvX: 1..200 equipes)
-    const maxSel = document.getElementById('camp-max');
-    const maxLabel = document.getElementById('camp-max-label');
-
-    function fillMaxOptions(fmt){
-      if(!maxSel) return;
-      const isXvx = fmt === 'xvx';
-      const maxN = isXvx ? 200 : 2000;
-
-      if(maxLabel){
-        maxLabel.textContent = isXvx ? 'Qtd. Equipes' : 'Máx. Participantes';
-      }
-
-      // Rebuild options
-      maxSel.innerHTML = '';
-      for(let i=1;i<=maxN;i++){
-        const op=document.createElement('option');
-        op.value=String(i);
-        op.textContent=String(i);
-        maxSel.appendChild(op);
-      }
+    .select-chip span i { color:rgb(209 213 219); }
+    .select-chip input:checked + span {
+      border-color: rgb(16 185 129); background: rgb(236 253 245); color: rgb(4 120 87);
+      box-shadow: 0 0 0 1px rgba(16,185,129,.08) inset;
     }
+    .select-chip input:checked + span i { color: rgb(16 185 129); }
+  </style>
 
-// Helpers UI
-    function setDisabled(el, disabled){
-      if(!el) return;
-      el.disabled = !!disabled;
-      el.classList.toggle('opacity-50', !!disabled);
-      el.classList.toggle('cursor-not-allowed', !!disabled);
-    }
-
-    function updateModeUI(){
-      const fmt = (document.getElementById('camp-format')?.value || 'br');
-      const br = document.getElementById('br-fields');
-      const xvx = document.getElementById('xvx-fields');
-      const local = document.getElementById('camp-local');
-
-      // Atualiza label + opções do limite
-      const prev = document.getElementById('camp-max')?.value || '1';
-      fillMaxOptions(fmt);
-
-      // tenta manter o valor anterior (se possível)
-      const maxN = (fmt === 'xvx') ? 200 : 2000;
-      const keep = Math.min(Number(prev || 1), maxN) || 1;
-      const maxEl = document.getElementById('camp-max');
-      if(maxEl) maxEl.value = String(keep);
-
-      if(fmt === 'xvx'){
-        if(br) br.classList.add('hidden');
-        if(xvx) xvx.classList.remove('hidden');
-        // Local indisponível se for XvX
-        setDisabled(local, true);
-        if(local) local.value = '';
-      } else {
-        if(br) br.classList.remove('hidden');
-        if(xvx) xvx.classList.add('hidden');
-        setDisabled(local, false);
-      }
-    }
-
-    function updateFeeUI(){
-      const t = document.getElementById('camp-feeType').value;
-      const wrap = document.getElementById('fee-value-wrap');
-      if(t === 'paid'){
-        wrap.classList.remove('hidden');
-      } else {
-        wrap.classList.add('hidden');
-        document.getElementById('camp-feeValue').value = '';
-      }
-    }
-
-    document.getElementById('camp-format').addEventListener('change', updateModeUI);
-    document.getElementById('camp-feeType').addEventListener('change', updateFeeUI);
-
-    // Modal controls
-    window.openCampModal = () => {
-      document.getElementById('camp-form').reset();
-      document.getElementById('camp-id').value = '';
-      document.getElementById('camp-modal-title').innerText = 'Novo Campeonato';
-      document.getElementById('camp-modal').classList.remove('hidden');
-
-      updateModeUI();
-      updateFeeUI();
-      if(document.getElementById('camp-max')) document.getElementById('camp-max').value = '100';
-
-      try {
-        let ctx = getGuildContext();
-        if(!ctx) {
-          try { ctx = JSON.parse(localStorage.getItem('guildCtx_cache_v1')||'{}'); } catch(e){}
-        }
-        document.getElementById('camp-guildname').value = ctx?.guildName || ctx?.name || '—';
-      } catch(_) {
-        document.getElementById('camp-guildname').value = '—';
-      }
-
-      document.getElementById('camp-format').value = 'br';
-      updateModeUI();
-      document.getElementById('camp-feeType').value = 'free';
-      updateFeeUI();
-      initIcons();
-    };
-    window.closeCampModal = () => document.getElementById('camp-modal').classList.add('hidden');
-
-    // Estado
-    let guildId = null;
-    let guildName = null;
-    window.camps = [];
-
-    // Novo sistema de cache isolado por guilda com proteção WebView
-    function setCache(list){
-      if (!guildId) return;
-      try { 
-        localStorage.setItem(`hub_camps_${guildId}_v1`, JSON.stringify({ ts: Date.now(), items: list || [] })); 
-      } catch(e) {
-        console.warn("WebView bloqueou escrita no cache:", e);
-      }
-    }
-
-    // Carregamento principal (Cache + Firebase se necessário)
-    async function loadCampsData(force = false) {
-      if (!guildId) return;
-
-      const cacheKey = `hub_camps_${guildId}_v1`;
-      let cachedRaw = null;
-      
-      // Proteção WebView para leitura
-      try {
-        cachedRaw = localStorage.getItem(cacheKey);
-      } catch(e) {
-        console.warn("WebView bloqueou leitura no cache:", e);
-      }
-
-      // Se não for reload forçado, tenta pegar do cache (30 min de validade)
-      if (!force && cachedRaw) {
-        try {
-          const parsed = JSON.parse(cachedRaw);
-          if (Date.now() - parsed.ts < 30 * 60 * 1000) { 
-            window.camps = parsed.items;
-            renderCamps();
-            return; // PARA AQUI! Não busca do Firebase
-          }
-        } catch(e) {
-          console.error("Erro no cache de campeonatos:", e);
-        }
-      }
-
-      // Se chegou aqui, precisa buscar do Firebase
-      const listEl = document.getElementById('camps-list');
-      if (force) {
-         showToast('info', 'A atualizar campeonatos...');
-      } else {
-         listEl.innerHTML = `<div class="col-span-1 md:col-span-2 bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center animate-pulse"><p class="text-gray-400 text-sm">A carregar do servidor...</p></div>`;
-      }
-
-      try {
-        const snap = await getDocs(collection(db, 'guildas', guildId, 'campeonatos'));
-        const campsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        // Ordena: mais novos primeiro
-        campsList.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
-
-        window.camps = campsList;
-        setCache(campsList); // Salva no novo cache
-        
-        renderCamps();
-        if(force) showToast('success', 'Atualizado com sucesso!');
-      } catch (err) {
-        console.error(err);
-        if(force) {
-          showToast('error', 'Falha ao buscar campeonatos.');
-        } else {
-          listEl.innerHTML = `<div class="col-span-full py-10 text-center text-red-500">Erro ao carregar campeonatos. Verifique sua conexão.</div>`;
-        }
-      }
-    }
-
-
-    function moneyBRL(v){
-      const n = Number(v);
-      if(!isFinite(n) || n<=0) return null;
-      return n.toFixed(2);
-    }
-
-    function parseMoneyBRLInput(v){
-      if(v === null || v === undefined) return null;
-      let s = (v+'').trim();
-      if(!s) return null;
-      s = s.replace(/[^0-9,\.\-]/g, '');
-      if(!s) return null;
-
-      if(s.includes(',')){
-        s = s.replace(/\./g,'').replace(',', '.');
-      } else {
-        const parts = s.split('.');
-        if(parts.length > 2){
-          const dec = parts.pop();
-          s = parts.join('') + '.' + dec;
-        }
-      }
-
-      const n = Number(s);
-      if(!isFinite(n) || n <= 0) return null;
-      return Math.round(n * 100) / 100;
-    }
-
-    function formatMoneyPlainBR(n){
-      const num = Number(n);
-      if(!isFinite(num) || num <= 0) return '';
-      try{
-        return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
-      }catch(_){
-        return num.toFixed(2).replace('.', ',');
-      }
-    }
-
-    function safeText(s){ return (s ?? '').toString().trim(); }
-    function escapeHtml(str){
-      return (str ?? '').toString()
-        .replace(/&/g,'&amp;')
-        .replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;')
-        .replace(/"/g,'&quot;')
-        .replace(/\'/g,'&#39;');
-    }
-
-    async function fileToOptimizedDataUrl(file){
-      if(!file) return null;
-      if(file.size > 2 * 1024 * 1024){
-        throw new Error('A foto deve ter no máximo 2MB.');
-      }
-      if(!file.type.startsWith('image/')){
-        throw new Error('Arquivo inválido. Envie uma imagem.');
-      }
-
-      const dataUrl = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = () => reject(new Error('Falha ao ler imagem.'));
-        r.readAsDataURL(file);
-      });
-
-      const MAX_B64 = 900_000;
-
-      if(typeof dataUrl === 'string' && dataUrl.length <= MAX_B64){
-        return dataUrl;
-      }
-
-      const img = await new Promise((resolve, reject) => {
-        const i = new Image();
-        i.onload = () => resolve(i);
-        i.onerror = () => reject(new Error('Não foi possível carregar a imagem.'));
-        i.src = dataUrl;
-      });
-
-      const maxDim = 768;
-      let { width, height } = img;
-      const scale = Math.min(1, maxDim / Math.max(width, height));
-      width = Math.max(1, Math.round(width * scale));
-      height = Math.max(1, Math.round(height * scale));
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-
-      let q = 0.88;
-      let out = canvas.toDataURL('image/jpeg', q);
-      while(out.length > MAX_B64 && q > 0.4){
-        q -= 0.08;
-        out = canvas.toDataURL('image/jpeg', q);
-      }
-
-      if(out.length > MAX_B64){
-        throw new Error('A foto ficou grande demais para salvar no Firestore. Use uma imagem menor ou escolha um símbolo.');
-      }
-      return out;
-    }
-
-    function formatMeta(c){
-      const fmt = c.format === 'xvx' ? (c.xvx || 'XvX') : ((c.mode || 'BR').toUpperCase() + ' • ' + (c.drops ? (c.drops + ' quedas') : ''));
-      const fee = c.feeType === 'paid' ? ('R$ ' + (c.feeValue || '0,00')) : 'Gratuito';
-      return { fmt, fee };
-    }
-
-    function formatBRL(v){
-      if(v === null || v === undefined || v === '') return null;
-      let n = v;
-      if(typeof n === 'string'){
-        const s = n.trim();
-        if (s.includes(',')) {
-          n = s.replace(/\./g, '').replace(',', '.');
-        } else {
-          n = s.replace(',', '.');
-        }
-      }
-      n = Number(n);
-      if(!isFinite(n) || n <= 0) return null;
-      try{
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
-      }catch(e){
-        return 'R$ ' + n.toFixed(2).replace('.', ',');
-      }
-    }
-
-    function renderCamps(){
-      const el = document.getElementById('camps-list');
-      const list = window.camps || [];
-      if(list.length === 0){
-        el.innerHTML = `<div class="col-span-2 bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center">
-          <i data-lucide="trophy" class="w-12 h-12 text-gray-300 mx-auto mb-3"></i>
-          <p class="text-gray-500 font-medium">Nenhum campeonato criado ainda</p>
-        </div>`;
-        initIcons();
-        return;
-      }
-
-      el.innerHTML = list.map(c => {
-        const statusClass = c.status === 'upcoming' ? 'bg-blue-100 text-blue-700' : (c.status === 'ongoing' ?
-          'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600');
-
-        const { fmt, fee } = formatMeta(c);
-        const descRaw = (c.description || '').trim();
-        const descShort = descRaw.length > 75 ? (descRaw.slice(0, 75).trimEnd() + '…') : descRaw;
-        const maxLabelTxt = (c.format === 'xvx') ? 'equipes' : 'participantes';
-        const prizeTxt = formatBRL(c.prizeTotal);
-        const prizeRow = prizeTxt
-          ? `<div class="flex items-center gap-2"><i data-lucide="gift" class="w-4 h-4 text-emerald-500"></i> ${prizeTxt}</div>`
-          : '';
-
-        const iconHtml = c.photoBase64
-          ? `<img src="${c.photoBase64}" class="w-11 h-11 rounded-xl object-cover ring-1 ring-gray-200" alt="">`
-          : `<div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center ring-1 ring-emerald-100">
-              <i data-lucide="${c.icon || 'trophy'}" class="w-6 h-6 text-emerald-600"></i>
-            </div>`;
-
-        const linkBtn = c.link ? `<a href="${c.link}" target="_blank" rel="noopener noreferrer" class="text-sm text-emerald-600 hover:text-emerald-700 px-3 py-2">Ver infos</a>` : '';
-
-        return `
-          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div class="p-5">
-              <div class="flex items-start justify-between gap-3">
-                <div class="flex items-center gap-3">
-                  ${iconHtml}
-                  <div>
-                    <h4 class="font-bold text-gray-900">${c.name || 'Sem nome'}</h4>
-                    <p class="text-xs text-gray-500 mt-0.5">${c.guildName ? ('Por ' + c.guildName) : ''}</p>
-                    ${descShort ? `<p class=\"text-sm text-gray-600 mt-1.5\">${escapeHtml(descShort)}</p>` : ''}
-                  </div>
-                </div>
-                <span class="px-2.5 py-1 rounded-full text-xs font-semibold ${statusClass}">
-                  ${c.status === 'upcoming' ? 'Próximo' : (c.status === 'ongoing' ? 'Em andamento' : 'Finalizado')}
-                </span>
-              </div>
-
-              <div class="mt-4 space-y-2 text-sm text-gray-600">
-                <div class="flex items-center gap-2"><i data-lucide="swords" class="w-4 h-4 text-emerald-500"></i> ${fmt}</div>
-                <div class="flex items-center gap-2"><i data-lucide="wallet" class="w-4 h-4 text-emerald-500"></i> ${fee}</div>
-                ${prizeRow}
-                <div class="flex items-center gap-2"><i data-lucide="calendar" class="w-4 h-4 text-emerald-500"></i> ${c.date || 'Sem data'}</div>
-                <div class="flex items-center gap-2"><i data-lucide="clock" class="w-4 h-4 text-emerald-500"></i> ${c.time || 'Sem horário'}</div>
-                <div class="flex items-center gap-2"><i data-lucide="map-pin" class="w-4 h-4 text-emerald-500"></i> ${c.location || 'Sem local'}</div>
-                <div class="flex items-center gap-2"><i data-lucide="users" class="w-4 h-4 text-emerald-500"></i> ${c.max || '—'} ${maxLabelTxt}</div>
-              </div>
-
-              <div class="flex justify-end gap-2 pt-2 mt-4 border-t border-gray-100">
-                ${linkBtn}
-                <button onclick="editCamp('${c.id}')" class="text-sm text-gray-500 hover:text-emerald-600 px-3 py-2">Editar</button>
-                <button onclick="deleteCamp('${c.id}')" class="text-sm text-red-400 hover:text-red-500 px-3 py-2">Excluir</button>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
-      initIcons();
-    }
-
-    window.editCamp = (id) => {
-      const c = (window.camps || []).find(x => x.id === id);
-      if(!c) return;
-
-      document.getElementById('camp-id').value = c.id || '';
-      document.getElementById('camp-name').value = c.name || '';
-      document.getElementById('camp-desc').value = c.description || '';
-      document.getElementById('camp-date').value = c.date || '';
-      document.getElementById('camp-time').value = c.time || '';
-      document.getElementById('camp-local').value = c.location || '';
-      document.getElementById('camp-status').value = c.status || 'upcoming';
-
-      document.getElementById('camp-format').value = c.format || 'br';
-      updateModeUI();
-      document.getElementById('camp-max').value = String(c.max || '');
-      document.getElementById('camp-mode').value = c.mode || 'solo';
-      document.getElementById('camp-drops').value = String(c.drops || 1);
-      document.getElementById('camp-xvx').value = c.xvx || '1v1';
-      updateModeUI();
-
-      document.getElementById('camp-feeType').value = c.feeType || 'free';
-      updateFeeUI();
-      document.getElementById('camp-feeValue').value = c.feeValue || '';
-      document.getElementById('camp-prizeTotal').value = c.prizeTotal ? formatMoneyPlainBR(c.prizeTotal) : '';
-      document.getElementById('camp-link').value = c.link || '';
-      document.getElementById('camp-icon').value = c.icon || 'trophy';
-      document.getElementById('camp-photo').value = '';
-
-      document.getElementById('camp-guildname').value = c.guildName || guildName || '—';
-
-      document.getElementById('camp-modal-title').innerText = 'Editar Campeonato';
-      document.getElementById('camp-modal').classList.remove('hidden');
-      initIcons();
-    };
-
-    window.deleteCamp = async (id) => {
-      if(!confirm('Excluir campeonato?')) return;
-      try{
-        if(db && guildId){
-          await deleteDoc(doc(db, 'guildas', guildId, 'campeonatos', id));
-        }
-      }catch(e){
-        console.error(e);
-        showToast('error', 'Erro ao excluir no Firestore: ' + e.message);
-      }
-      window.camps = (window.camps || []).filter(x => x.id !== id);
-      setCache(window.camps);
-      renderCamps();
-    };
-
-    document.getElementById('camp-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      const id = safeText(document.getElementById('camp-id').value);
-      const fmt = safeText(document.getElementById('camp-format').value) || 'br';
-
-      const name = safeText(document.getElementById('camp-name').value);
-      const link = safeText(document.getElementById('camp-link').value);
-      if(!name) return showToast('error', 'Informe o nome do campeonato.');
-      if(!link) return showToast('error', 'O link para informações é obrigatório.');
-
-      let photoBase64 = null;
-      const file = document.getElementById('camp-photo').files?.[0] || null;
-      try{
-        if(file){
-          photoBase64 = await fileToOptimizedDataUrl(file);
-        }
-      }catch(err){
-        showToast('error', err.message);
-        return;
-      }
-
-      const feeType = safeText(document.getElementById('camp-feeType').value) || 'free';
-      const feeValue = feeType === 'paid' ? moneyBRL(document.getElementById('camp-feeValue').value) : null;
-      const prizeTotal = parseMoneyBRLInput(document.getElementById('camp-prizeTotal').value);
-
-      let mode = null, drops = null, xvx = null;
-      let location = safeText(document.getElementById('camp-local').value);
-
-      if(fmt === 'xvx'){
-        xvx = safeText(document.getElementById('camp-xvx').value) || '1v1';
-        mode = null;
-        drops = null;
-        location = '';
-      } else {
-        mode = safeText(document.getElementById('camp-mode').value) || 'solo';
-        drops = Number(document.getElementById('camp-drops').value || 1);
-        xvx = null;
-      }
-
-      const now = Date.now();
-      const payload = {
-        name,
-        description: safeText(document.getElementById('camp-desc').value),
-        date: safeText(document.getElementById('camp-date').value),
-        time: safeText(document.getElementById('camp-time').value),
-        location,
-        max: Number(document.getElementById('camp-max').value || 0),
-        status: safeText(document.getElementById('camp-status').value) || 'upcoming',
-
-        format: fmt,
-        mode,
-        drops,
-        xvx,
-
-        guildId: guildId || null,
-        guildName: guildName || safeText(document.getElementById('camp-guildname').value) || null,
-
-        feeType,
-        feeValue,
-        prizeTotal: prizeTotal || null,
-        link,
-
-        icon: safeText(document.getElementById('camp-icon').value) || 'trophy',
-        photoBase64: photoBase64 || null,
-
-        updatedAtMs: now,
-        updatedAt: serverTimestamp(),
-      };
-
-      try{
-        if(db && guildId){
-          if(id){
-            await setDoc(doc(db, 'guildas', guildId, 'campeonatos', id), payload, { merge: true });
-            payload.id = id;
-            window.camps = (window.camps || []).map(c => c.id === id ? ({...c, ...payload, id}) : c);
-          } else {
-            const ref = doc(collection(db, 'guildas', guildId, 'campeonatos'));
-            const toCreate = {
-              ...payload,
-              id: ref.id,
-              createdAtMs: now,
-              createdAt: serverTimestamp(),
-            };
-            await setDoc(ref, toCreate);
-            window.camps = [toCreate, ...(window.camps || [])];
-          }
-          setCache(window.camps);
-          showToast('success', 'Campeonato salvo no Firestore!');
-        } else {
-          const fallback = { ...payload, id: id || String(now), createdAtMs: payload.createdAtMs || now };
-          if(id){
-            window.camps = (window.camps || []).map(c => c.id === id ? fallback : c);
-          } else {
-            window.camps = [fallback, ...(window.camps || [])];
-          }
-          setCache(window.camps);
-          showToast('info', 'Firebase não disponível — salvo apenas localmente.');
-        }
-      }catch(err){
-        console.error(err);
-        showToast('error', 'Erro ao salvar no Firestore: ' + err.message);
-        return;
-      }
-
-      closeCampModal();
-      renderCamps();
-    });
-
-    // Evento de reload manual
-    document.getElementById('btn-reload').addEventListener('click', () => {
-       loadCampsData(true);
-    });
-
-    async function boot(){
-      const user = await checkAuth();
-      if(!user) return;
-      document.getElementById('btn-logout').onclick = logout;
-      
-      const prizeEl = document.getElementById('camp-prizeTotal');
-      if(prizeEl){
-        prizeEl.addEventListener('input', () => {
-          prizeEl.value = prizeEl.value.replace(/[^0-9,\.\-]/g,'');
-        });
-        prizeEl.addEventListener('blur', () => {
-          const n = parseMoneyBRLInput(prizeEl.value);
-          prizeEl.value = n ? formatMoneyPlainBR(n) : '';
-        });
-      }
-
-      try{
-        let ctx = getGuildContext();
-        if(!ctx) {
-          try { ctx = JSON.parse(localStorage.getItem('guildCtx_cache_v1')||'{}'); } catch(e){}
-        }
-        guildId = ctx?.guildId || ctx?.id || null;
-        guildName = ctx?.guildName || ctx?.name || null;
-      }catch(_){}
-
-      if(guildName){
-        const g = document.getElementById('camp-guildname');
-        if(g) g.value = guildName;
-      }
-
-      // Inicia puxando os dados do cache ou servidor se não existir
-      loadCampsData(false);
-    }
-
-    updateModeUI();
-    updateFeeUI();
-    boot();
-
-  </script>
-
-
-  <!-- OTK Footer -->
-<footer class="bg-white py-10 border-t border-slate-200">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        <div class="flex justify-center items-center gap-2 mb-10">
-            <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--footer w-10 h-10">
-            <span class="text-xl font-bold tracking-wider text-slate-900">GUILDA<span class="text-green-500">HUB</span></span>
-        </div>
-
-        <div class="flex flex-row justify-center items-start gap-4 sm:gap-12 md:gap-32 text-xs sm:text-sm mb-12">
-            
-            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
-                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
-                    <svg class="w-5 h-5 text-pink-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4s1.791-4 4-4 4 1.79 4 4-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
-                    <span>Instagram</span>
-                </span>
-                <a href="https://instagram.com/guildahub" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
-                <a href="https://instagram.com/ottakubrasil" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
-            </div>
-
-            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
-                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
-                    <svg class="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.23-1.15 4.41-2.91 5.74-1.71 1.32-3.95 1.77-6.09 1.47-2.07-.28-3.98-1.39-5.18-3.08-1.2-1.7-1.57-3.93-1.04-5.94.49-1.89 1.74-3.53 3.44-4.48 1.78-.99 3.94-1.12 5.84-.6v4.06c-1.27-.6-2.81-.5-3.96.26-1.13.73-1.76 2.05-1.63 3.4.14 1.28.98 2.45 2.16 2.96 1.14.51 2.5.42 3.56-.23 1.05-.63 1.71-1.76 1.75-2.98.05-3.53.02-7.07.02-10.61 0-2.31 0-4.63.02-6.94z"/></svg>
-                    <span>TikTok</span>
-                </span>
-                <a href="https://tiktok.com/@guildahub" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
-                <a href="https://tiktok.com/@ottakubrasil" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
-                <a href="https://tiktok.com/@kushinaff" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@kushinaff <span class="text-slate-400 block sm:inline text-[10px] sm:text-xs leading-none mt-1 sm:mt-0">(Parceiro)</span></a>
-            </div>
-
-            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
-                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
-                    <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
-                    <span>WhatsApp</span>
-                </span>
-                <a href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">Grupo do WhatsApp</a>
-            </div>
-        </div>
-
-        <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-slate-200 text-sm text-slate-500">
-            <p class="text-center md:text-left">
-                © 2026 Guilda HUB. Todos os direitos reservados.
-            </p>
-            <div class="flex gap-4">
-                <a href="#" class="hover:text-green-500 transition-colors">Termos</a>
-                <a href="#" class="hover:text-green-500 transition-colors">Privacidade</a>
-            </div>
-        </div>
-        
-    </div>
-</footer>
+  <script type="module" src="./rec.js"></script>
 </body>
 </html>
