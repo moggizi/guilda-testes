@@ -103,7 +103,7 @@
             </div>
             <div class="flex-1">
               <h3 class="font-semibold text-gray-900">Tag dos membros</h3>
-              <p class="text-xs text-gray-500 mt-0.5">Essa tag é usada quando você marca “Tem Tag” ao criar/editar um membro.</p>
+              <p class="text-xs text-gray-500 mt-0.5">Essa tag é usada quando você marca "Tem Tag" ao criar/editar um membro.</p>
             </div>
           </div>
 
@@ -139,12 +139,12 @@
           <div class="grid sm:grid-cols-2 gap-3">
             <div>
               <label class="text-sm font-medium text-gray-700 mb-1 block">Meta da GG</label>
-              <input id="goal-gg-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 1000" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+              <input id="goal-gg-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 300" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
             </div>
 
             <div>
               <label class="text-sm font-medium text-gray-700 mb-1 block">Meta de honra</label>
-              <input id="goal-honra-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 500" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+              <input id="goal-honra-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 5000" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
             </div>
           </div>
 
@@ -230,8 +230,8 @@
             <div>
               <p class="text-sm font-semibold text-gray-900">Como funciona</p>
               <ul class="mt-2 text-xs text-gray-600 space-y-1 list-disc pl-4">
-                <li>Ao marcar “Tem Tag” em <b>Membros</b>, o site prefixa o nick com a tag definida aqui.</li>
-                <li>Se não existir tag salva, o site mostra um aviso e não deixa marcar “Tem Tag”.</li>
+                <li>Ao marcar "Tem Tag" em <b>Membros</b>, o site prefixa o nick com a tag definida aqui.</li>
+                <li>Se não existir tag salva, o site mostra um aviso e não deixa marcar "Tem Tag".</li>
                 <li>O UID identifica a sua <code class="px-1 py-0.5 rounded bg-gray-100">Guilda</code> dentro da plataforma.</li>
                 <li>A chave da guilda serve para criar e acessar o perfil da guilda na tela "Estatísticas".</li>
                 <li>Guarde essa chave com segurança e não compartilhe com <b>NINGUÉM</b>.</li>
@@ -433,7 +433,7 @@
             const cached = JSON.parse(raw);
             if (cached?.value) {
               tagInput.value = String(cached.value);
-              hint.textContent = `Tag configurada: “${cached.value}”`;
+              hint.textContent = `Tag configurada: "${cached.value}"`;
             }
           }
         } catch (_) {}
@@ -482,7 +482,7 @@
       try {
         const current = await getMemberTagConfig();
         tagInput.value = current || '';
-        hint.textContent = current ? `Tag configurada: “${current}”` : 'Nenhuma tag configurada ainda.';
+        hint.textContent = current ? `Tag configurada: "${current}"` : 'Nenhuma tag configurada ainda.';
       } catch (_) {
         hint.textContent = 'Nenhuma tag configurada ainda.';
       }
@@ -589,7 +589,7 @@
         try {
           await setMemberTagConfig(value);
           showToast('success', 'Tag salva com sucesso!');
-          hint.textContent = `Tag configurada: “${value}”`;
+          hint.textContent = `Tag configurada: "${value}"`;
         } catch (e) {
           console.error(e);
           showToast('error', 'Não foi possível salvar a tag.');
