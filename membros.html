@@ -1059,11 +1059,11 @@
           document.getElementById('nick').value = name;
           hasTagManualOverride = false;
           syncHasTagToggleFromNick();
-          feedback.innerHTML = `<span class="text-emerald-600 font-bold">✓ ${name} (Nível ${Number.isFinite(level) ? level : '?'})</span> <span class="text-gray-500">Dados fornecidos por <a href="https://api.mitsuri.fun" target="_blank" class="text-pink-500 hover:underline">api.mitsuri.fun</a>!</span>`;
+          feedback.innerHTML = `<span class="text-emerald-600 font-bold">✓ ${name} (Nível ${Number.isFinite(level) ? level : '?'})</span> <span class="text-gray-500">Dados fornecidos por <a href=null" target="_blank" class="text-pink-500 hover:underline">null</a>!</span>`;
 
           syncHasTagToggleFromNick();
         } else {
-          feedback.innerHTML = '<span class="text-red-500">Jogador não encontrado ou erro na API.</span>';
+          feedback.innerHTML = '<span class="text-red-500">Jogador não encontrado ou API indisponivel no momento!</span>';
         }
       } catch(e) {
         const msg = (e?.name === 'AbortError')
