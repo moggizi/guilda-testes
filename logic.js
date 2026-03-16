@@ -622,67 +622,95 @@ export async function setMemberTagConfig(tag) {
   return true;
 }
 
-const GUILD_GOALS_CACHE_PREFIX = 'guildGoals_';
-
-function getGuildGoalsCacheKey(guildId) {
-  return `${GUILD_GOALS_CACHE_PREFIX}${(guildId || '').toString().trim()}`;
-}
-
-function readGuildGoalsCache(guildId) {
-  const gid = (guildId || '').toString().trim();
-  if (!gid) return { honra: null, gg: null };
+export async function getGuildGoalsConfig() {
+  let guildId = null;
   try {
-    const raw = localStorage.getItem(getGuildGoalsCacheKey(gid));
-    if (!raw) return { honra: null, gg: null };
-    const cached = JSON.parse(raw) || {};
-    return {
-      honra: (cached.honra != null && isFinite(Number(cached.honra))) ? Number(cached.honra) : null,
-      gg: (cached.gg != null && isFinite(Number(cached.gg))) ? Number(cached.gg) : null
-    };
+    guildId = requireGuildId();
   } catch (_) {
-    return { honra: null, gg: null };
+    return { metaGg: null, metaHonra: null };
+  }
+
+  try {
+    const raw = localStorage.getItem(`guildGoals_${guildId}`);
+    if (raw) {
+      const cached = JSON.parse(raw) || {};
+      return {
+        metaGg: (cached.metaGg != null && cached.metaGg !== '') ? Number(cached.metaGg) : null,
+        metaHonra: (cached.metaHonra != null && cached.metaHonra !== '') ? Number(cached.metaHonra) : null
+      };
+    }
+  } catch (_) {}
+
+  try {
+    const snap = await getDoc(doc(db, "configGuilda", guildId));
+    if (!snap.exists()) return { metaGg: null, metaHonra: null };
+    const data = snap.data() || {};
+    const metaGg = (data.metaGg != null && data.metaGg !== '') ? Number(data.metaGg) : null;
+    const metaHonra = (data.metaHonra != null && data.metaHonra !== '') ? Number(data.metaHonra) : null;
+    try {
+      localStorage.setItem(`guildGoals_${guildId}`, JSON.stringify({ metaGg, metaHonra, ts: Date.now() }));
+    } catch (_) {}
+    return { metaGg: isFinite(metaGg) ? metaGg : null, metaHonra: isFinite(metaHonra) ? metaHonra : null };
+  } catch (_) {
+    return { metaGg: null, metaHonra: null };
   }
 }
 
-function writeGuildGoalsCache(guildId, goals) {
-  const gid = (guildId || '').toString().trim();
-  if (!gid) return;
+export async function setGuildGoalsConfig(metaGg, metaHonra) {
+  const guildId = requireGuildId();
+
+  const cleanMetaGg = (metaGg == null || metaGg === '') ? null : Number(metaGg);
+  const cleanMetaHonra = (metaHonra == null || metaHonra === '') ? null : Number(metaHonra);
+
+  if (cleanMetaGg != null && (!isFinite(cleanMetaGg) || cleanMetaGg < 0)) throw new Error("Meta da GG inválida.");
+  if (cleanMetaHonra != null && (!isFinite(cleanMetaHonra) || cleanMetaHonra < 0)) throw new Error("Meta de honra inválida.");
+
+  await setDoc(
+    doc(db, "configGuilda", guildId),
+    {
+      metaGg: cleanMetaGg,
+      metaHonra: cleanMetaHonra,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+
   try {
-    localStorage.setItem(getGuildGoalsCacheKey(gid), JSON.stringify({
-      honra: (goals?.honra != null && isFinite(Number(goals.honra))) ? Number(goals.honra) : null,
-      gg: (goals?.gg != null && isFinite(Number(goals.gg))) ? Number(goals.gg) : null,
+    localStorage.setItem(`guildGoals_${guildId}`, JSON.stringify({ metaGg: cleanMetaGg, metaHonra: cleanMetaHonra, ts: Date.now() }));
+  } catch (_) {}
+
+  return true;
+}
+
+export async function setGuildNameConfig(name) {
+  const guildId = requireGuildId();
+  const clean = (name || '').toString().trim();
+  if (!clean) throw new Error("Nome da guilda inválido.");
+
+  await setDoc(
+    doc(db, "guildas", guildId),
+    { name: clean, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
+
+  try {
+    const key = `guildInfo_${guildId}`;
+    const raw = localStorage.getItem(key);
+    const cached = raw ? (JSON.parse(raw) || {}) : {};
+    localStorage.setItem(key, JSON.stringify({
+      guildId,
+      name: clean,
+      createdAtMs: (cached.createdAtMs != null ? Number(cached.createdAtMs) : null),
       ts: Date.now()
     }));
   } catch (_) {}
-}
-
-function updateGuildNameCaches(guildId, name) {
-  const gid = (guildId || '').toString().trim();
-  const clean = (name || '').toString().trim();
-  if (!gid) return;
 
   try {
-    const key = `guildInfo_${gid}`;
-    let payload = { guildId: gid, name: clean || null, createdAtMs: null, ts: Date.now() };
-    const raw = localStorage.getItem(key);
-    if (raw) {
-      const cached = JSON.parse(raw) || {};
-      payload = {
-        guildId: gid,
-        name: clean || cached.name || null,
-        createdAtMs: (cached.createdAtMs != null ? Number(cached.createdAtMs) : null),
-        ts: Date.now()
-      };
-    }
-    localStorage.setItem(key, JSON.stringify(payload));
-  } catch (_) {}
-
-  try {
-    if (__guildCtx && __guildCtx.guildId === gid) {
-      __guildCtx.guildName = clean || null;
+    if (__guildCtx && __guildCtx.guildId === guildId) {
+      __guildCtx.guildName = clean;
       localStorage.setItem(__GUILDCTX_LS_KEY, JSON.stringify({
         guildId: __guildCtx.guildId,
-        guildName: __guildCtx.guildName,
+        guildName: clean,
         role: __guildCtx.role,
         vipTier: __guildCtx.vipTier,
         vipExpiresAtMs: __guildCtx.vipExpiresAtMs,
@@ -692,59 +720,58 @@ function updateGuildNameCaches(guildId, name) {
       }));
     }
   } catch (_) {}
-}
 
-export async function getGuildGoalsConfig() {
-  let guildId = null;
-  try {
-    guildId = requireGuildId();
-  } catch (_) {
-    return { honra: null, gg: null };
-  }
-
-  const cached = readGuildGoalsCache(guildId);
-  if (cached.honra != null || cached.gg != null) return cached;
-
-  try {
-    const snap = await getDoc(doc(db, 'configGuilda', guildId));
-    if (!snap.exists()) return { honra: null, gg: null };
-    const data = snap.data() || {};
-    const goals = {
-      honra: (data.metaHonra != null && isFinite(Number(data.metaHonra))) ? Number(data.metaHonra) : null,
-      gg: (data.metaGg != null && isFinite(Number(data.metaGg))) ? Number(data.metaGg) : null
-    };
-    writeGuildGoalsCache(guildId, goals);
-    return goals;
-  } catch (_) {
-    return cached;
-  }
-}
-
-export async function setGuildGoalsConfig({ honra = null, gg = null } = {}) {
-  const guildId = requireGuildId();
-  const payload = { updatedAt: serverTimestamp() };
-  payload.metaHonra = (honra != null && `${honra}`.toString().trim() !== '' && isFinite(Number(honra))) ? Number(honra) : null;
-  payload.metaGg = (gg != null && `${gg}`.toString().trim() !== '' && isFinite(Number(gg))) ? Number(gg) : null;
-  await setDoc(doc(db, 'configGuilda', guildId), payload, { merge: true });
-  writeGuildGoalsCache(guildId, { honra: payload.metaHonra, gg: payload.metaGg });
   return true;
 }
 
-export async function setGuildNameConfig(name) {
-  const clean = (name || '').toString().trim();
-  if (!clean) throw new Error('Nome da guilda inválido.');
-
-  const guildId = requireGuildId();
-  await setDoc(doc(db, 'guildas', guildId), { name: clean, updatedAt: serverTimestamp() }, { merge: true });
-  updateGuildNameCaches(guildId, clean);
-  return true;
-}
 
 const GUILD_ACCESS_KEY_PREFIX = 'guildAccessKey_';
+const HUB_PERFIS_CACHE_PREFIX = 'guildProfileExists_';
+const hubPerfisFirebaseConfig = {
+  apiKey: "AIzaSyASInYDbSFxfgbF7yjXDM4THipLYdZwjXs",
+  authDomain: "hub-perfis.firebaseapp.com",
+  projectId: "hub-perfis",
+  storageBucket: "hub-perfis.firebasestorage.app",
+  messagingSenderId: "231971973267",
+  appId: "1:231971973267:web:8b67cca5cfbe7b3f934566",
+  measurementId: "G-0N7WY0984C"
+};
 
 function makeGuildAccessKey() {
   const random = Math.floor(100000000 + Math.random() * 900000000);
   return `ghub-${random}`;
+}
+
+function getGuildProfileCacheKey(guildId) {
+  return `${HUB_PERFIS_CACHE_PREFIX}${(guildId || '').toString().trim()}`;
+}
+
+function readGuildInfoFromLocalCache(guildId) {
+  const gid = (guildId || '').toString().trim();
+  if (!gid) return { guildId: null, name: null, createdAtMs: null, tag: '' };
+
+  let name = null;
+  let createdAtMs = null;
+  let tag = '';
+
+  try {
+    const rawInfo = localStorage.getItem(`guildInfo_${gid}`);
+    if (rawInfo) {
+      const cached = JSON.parse(rawInfo) || {};
+      name = cached.name ? String(cached.name) : null;
+      createdAtMs = (cached.createdAtMs != null ? Number(cached.createdAtMs) : null);
+    }
+  } catch (_) {}
+
+  try {
+    const rawTag = localStorage.getItem(`tagMembros_${gid}`);
+    if (rawTag) {
+      const cached = JSON.parse(rawTag) || {};
+      tag = cached.value ? String(cached.value) : '';
+    }
+  } catch (_) {}
+
+  return { guildId: gid, name, createdAtMs, tag };
 }
 
 export async function getGuildAccessKeyConfig() {
@@ -796,6 +823,89 @@ export async function generateGuildAccessKey() {
   );
   try { localStorage.setItem(cacheKey, JSON.stringify({ value, ts: Date.now() })); } catch (_) {}
   return value;
+}
+
+export function getCachedGuildProfileState(guildId) {
+  const gid = (guildId || getGuildContext()?.guildId || '').toString().trim();
+  if (!gid) return null;
+  try {
+    const raw = localStorage.getItem(getGuildProfileCacheKey(gid));
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (!cached || cached.exists == null) return null;
+    return !!cached.exists;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeCachedGuildProfileState(guildId, exists) {
+  const gid = (guildId || '').toString().trim();
+  if (!gid) return;
+  try {
+    localStorage.setItem(getGuildProfileCacheKey(gid), JSON.stringify({ exists: !!exists, ts: Date.now() }));
+  } catch (_) {}
+}
+
+export async function getGuildProfileExists() {
+  const guildId = requireGuildId();
+  const accessKey = await getGuildAccessKeyConfig();
+  if (!accessKey) {
+    writeCachedGuildProfileState(guildId, false);
+    return false;
+  }
+
+  const secondaryName = `hub_perfis_exists_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const secondaryApp = initializeApp(hubPerfisFirebaseConfig, secondaryName);
+  const secondaryDb = getFirestore(secondaryApp);
+
+  try {
+    const snap = await getDoc(doc(secondaryDb, 'perfil', guildId));
+    const exists = !!snap.exists();
+    writeCachedGuildProfileState(guildId, exists);
+    return exists;
+  } catch (_) {
+    const cached = getCachedGuildProfileState(guildId);
+    return cached === true;
+  } finally {
+    try { await deleteApp(secondaryApp); } catch (_) {}
+  }
+}
+
+export async function createGuildProfile() {
+  const guildId = requireGuildId();
+  const accessKey = await getGuildAccessKeyConfig();
+  if (!accessKey) throw new Error('Gere a chave da guilda antes de criar o perfil.');
+
+  const info = readGuildInfoFromLocalCache(guildId);
+  const guildName = (info.name || getGuildContext()?.guildName || '').toString().trim();
+  if (!guildName) throw new Error('Nome da guilda não encontrado no cache.');
+
+  const payload = {
+    nomeGuilda: guildName,
+    dataCriacao: (info.createdAtMs != null && isFinite(Number(info.createdAtMs))) ? Number(info.createdAtMs) : null,
+    tag: (info.tag || '').toString().trim()
+  };
+
+  const secondaryName = `hub_perfis_create_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const secondaryApp = initializeApp(hubPerfisFirebaseConfig, secondaryName);
+  const secondaryDb = getFirestore(secondaryApp);
+
+  try {
+    const profileRef = doc(secondaryDb, 'perfil', guildId);
+    const existingProfile = await getDoc(profileRef);
+    if (existingProfile.exists()) {
+      writeCachedGuildProfileState(guildId, true);
+      return { alreadyExists: true };
+    }
+
+    await setDoc(doc(secondaryDb, 'chave', accessKey), { uid: guildId }, { merge: true });
+    await setDoc(profileRef, payload, { merge: true });
+    writeCachedGuildProfileState(guildId, true);
+    return { alreadyExists: false };
+  } finally {
+    try { await deleteApp(secondaryApp); } catch (_) {}
+  }
 }
 
 export function showToast(type = "info", message = "") {
@@ -1269,7 +1379,7 @@ export async function logout() {
       localStorage.removeItem("campsList");
       for (let i = localStorage.length - 1; i >= 0; i--) {
         const k = localStorage.key(i) || "";
-        if (k.startsWith("securityConfig_") || k.startsWith("tagMembros_") || k.startsWith("guildAccessKey_")) {
+        if (k.startsWith("securityConfig_") || k.startsWith("tagMembros_")) {
           localStorage.removeItem(k);
         }
       }
