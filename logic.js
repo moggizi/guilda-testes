@@ -627,7 +627,7 @@ export async function getGuildGoalsConfig() {
   try {
     guildId = requireGuildId();
   } catch (_) {
-    return { metaGg: null, metaHonra: null };
+    return { metaGG: null, metaHonra: null };
   }
 
   try {
@@ -635,63 +635,47 @@ export async function getGuildGoalsConfig() {
     if (raw) {
       const cached = JSON.parse(raw) || {};
       return {
-        metaGg: (cached.metaGg != null && cached.metaGg !== '') ? Number(cached.metaGg) : null,
-        metaHonra: (cached.metaHonra != null && cached.metaHonra !== '') ? Number(cached.metaHonra) : null
+        metaGG: (cached.metaGG != null && Number.isFinite(Number(cached.metaGG))) ? Number(cached.metaGG) : null,
+        metaHonra: (cached.metaHonra != null && Number.isFinite(Number(cached.metaHonra))) ? Number(cached.metaHonra) : null
       };
     }
   } catch (_) {}
 
   try {
     const snap = await getDoc(doc(db, "configGuilda", guildId));
-    if (!snap.exists()) return { metaGg: null, metaHonra: null };
+    if (!snap.exists()) return { metaGG: null, metaHonra: null };
     const data = snap.data() || {};
-    const metaGg = (data.metaGg != null && data.metaGg !== '') ? Number(data.metaGg) : null;
-    const metaHonra = (data.metaHonra != null && data.metaHonra !== '') ? Number(data.metaHonra) : null;
-    try {
-      localStorage.setItem(`guildGoals_${guildId}`, JSON.stringify({ metaGg, metaHonra, ts: Date.now() }));
-    } catch (_) {}
-    return { metaGg: isFinite(metaGg) ? metaGg : null, metaHonra: isFinite(metaHonra) ? metaHonra : null };
+    const metaGG = (data.metaGG != null && Number.isFinite(Number(data.metaGG))) ? Number(data.metaGG) : null;
+    const metaHonra = (data.metaHonra != null && Number.isFinite(Number(data.metaHonra))) ? Number(data.metaHonra) : null;
+    try { localStorage.setItem(`guildGoals_${guildId}`, JSON.stringify({ metaGG, metaHonra, ts: Date.now() })); } catch (_) {}
+    return { metaGG, metaHonra };
   } catch (_) {
-    return { metaGg: null, metaHonra: null };
+    return { metaGG: null, metaHonra: null };
   }
 }
 
-export async function setGuildGoalsConfig(metaGg, metaHonra) {
+export async function setGuildGoalsConfig({ metaGG = null, metaHonra = null } = {}) {
   const guildId = requireGuildId();
+  const payload = {
+    metaGG: (metaGG != null && Number.isFinite(Number(metaGG))) ? Math.max(0, Math.floor(Number(metaGG))) : null,
+    metaHonra: (metaHonra != null && Number.isFinite(Number(metaHonra))) ? Math.max(0, Math.floor(Number(metaHonra))) : null,
+    updatedAt: serverTimestamp()
+  };
 
-  const cleanMetaGg = (metaGg == null || metaGg === '') ? null : Number(metaGg);
-  const cleanMetaHonra = (metaHonra == null || metaHonra === '') ? null : Number(metaHonra);
-
-  if (cleanMetaGg != null && (!isFinite(cleanMetaGg) || cleanMetaGg < 0)) throw new Error("Meta da GG inválida.");
-  if (cleanMetaHonra != null && (!isFinite(cleanMetaHonra) || cleanMetaHonra < 0)) throw new Error("Meta de honra inválida.");
-
-  await setDoc(
-    doc(db, "configGuilda", guildId),
-    {
-      metaGg: cleanMetaGg,
-      metaHonra: cleanMetaHonra,
-      updatedAt: serverTimestamp()
-    },
-    { merge: true }
-  );
-
-  try {
-    localStorage.setItem(`guildGoals_${guildId}`, JSON.stringify({ metaGg: cleanMetaGg, metaHonra: cleanMetaHonra, ts: Date.now() }));
-  } catch (_) {}
-
+  await setDoc(doc(db, "configGuilda", guildId), payload, { merge: true });
+  try { localStorage.setItem(`guildGoals_${guildId}`, JSON.stringify({ metaGG: payload.metaGG, metaHonra: payload.metaHonra, ts: Date.now() })); } catch (_) {}
   return true;
 }
 
 export async function setGuildNameConfig(name) {
   const guildId = requireGuildId();
   const clean = (name || '').toString().trim();
-  if (!clean) throw new Error("Nome da guilda inválido.");
+  if (!clean) throw new Error('Nome da guilda inválido.');
 
-  await setDoc(
-    doc(db, "guildas", guildId),
-    { name: clean, updatedAt: serverTimestamp() },
-    { merge: true }
-  );
+  await setDoc(doc(db, "guildas", guildId), {
+    name: clean,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
 
   try {
     const key = `guildInfo_${guildId}`;

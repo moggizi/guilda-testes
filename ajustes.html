@@ -120,12 +120,41 @@
             </div>
 
             <div id="readonly-note" class="hidden rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-xs">
-              Você está como <b>Admin</b>. Você pode visualizar, mas apenas <b>Líder</b> pode alterar as configurações desta tela.
+              Você está como <b>Admin</b>. Você pode visualizar, mas apenas <b>Líder</b> pode alterar a tag.
             </div>
           </div>
         </div>
 
-        
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <i data-lucide="target" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+              <h3 class="font-semibold text-gray-900">Metas</h3>
+              <p class="text-xs text-gray-500 mt-0.5">Defina as metas da GG e da Honra semanal.</p>
+            </div>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-sm font-medium text-gray-700 mb-1 block">Meta da GG</label>
+              <input id="goal-gg-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 1000" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+            </div>
+
+            <div>
+              <label class="text-sm font-medium text-gray-700 mb-1 block">Meta de honra</label>
+              <input id="goal-honra-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 500" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button id="btn-save-goals" class="px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95">
+              Salvar
+            </button>
+            <p id="goals-hint" class="text-xs text-gray-500"></p>
+          </div>
+        </div>
 
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
   <div class="flex items-start gap-3">
@@ -177,7 +206,7 @@
       <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
         <p class="text-[11px] text-gray-500 font-semibold">Nome da guilda</p>
         <div class="mt-1 flex items-center gap-3">
-          <input id="guild-name-input" type="text" placeholder="Nome da guilda" class="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm font-semibold text-gray-900" />
+          <input id="guild-name-input" type="text" placeholder="Nome da guilda" class="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm font-medium text-gray-900" />
           <button id="btn-save-guild-name" class="px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95">
             Salvar
           </button>
@@ -229,11 +258,11 @@
     const guildNameInput = document.getElementById('guild-name-input');
     const btnSaveGuildName = document.getElementById('btn-save-guild-name');
     const guildNameHint = document.getElementById('guild-name-hint');
-    const metaGgInput = document.getElementById('meta-gg-input');
-    const metaHonraInput = document.getElementById('meta-honra-input');
-    const btnSaveMetas = document.getElementById('btn-save-metas');
-    const metasHint = document.getElementById('metas-hint');
     const guildCreatedEl = document.getElementById('guild-created');
+    const goalGgInput = document.getElementById('goal-gg-input');
+    const goalHonraInput = document.getElementById('goal-honra-input');
+    const btnSaveGoals = document.getElementById('btn-save-goals');
+    const goalsHint = document.getElementById('goals-hint');
     const guildAccessKeyEl = document.getElementById('guild-access-key');
     const guildAccessKeyHintEl = document.getElementById('guild-access-key-hint');
     const guildAccessKeyAdminPill = document.getElementById('guild-access-key-admin-pill');
@@ -312,35 +341,54 @@
       }
     }
 
-    function toggleReadonlyState(inputEl, buttonEl, isReadonly) {
-      if (inputEl) {
-        inputEl.disabled = isReadonly;
-        if (isReadonly) inputEl.classList.add('bg-gray-50');
-        else inputEl.classList.remove('bg-gray-50');
-      }
-      if (buttonEl) {
-        buttonEl.disabled = isReadonly;
-        if (isReadonly) buttonEl.classList.add('opacity-50', 'cursor-not-allowed');
-        else buttonEl.classList.remove('opacity-50', 'cursor-not-allowed');
-      }
-    }
-
     function setReadonly(isReadonly, showAdminNote = false) {
-      toggleReadonlyState(tagInput, btnSave, isReadonly);
-      toggleReadonlyState(guildNameInput, btnSaveGuildName, isReadonly);
-      toggleReadonlyState(metaGgInput, btnSaveMetas, isReadonly);
-      if (metaHonraInput) {
-        metaHonraInput.disabled = isReadonly;
-        if (isReadonly) metaHonraInput.classList.add('bg-gray-50');
-        else metaHonraInput.classList.remove('bg-gray-50');
-      }
-
+      tagInput.disabled = isReadonly;
+      btnSave.disabled = isReadonly;
       if (isReadonly) {
+        tagInput.classList.add('bg-gray-50');
+        btnSave.classList.add('opacity-50', 'cursor-not-allowed');
         if (showAdminNote) readOnlyNote.classList.remove('hidden');
         else readOnlyNote.classList.add('hidden');
       } else {
+        tagInput.classList.remove('bg-gray-50');
+        btnSave.classList.remove('opacity-50', 'cursor-not-allowed');
         readOnlyNote.classList.add('hidden');
       }
+    }
+
+    function setGoalsReadonly(isReadonly) {
+      [goalGgInput, goalHonraInput].forEach((el) => {
+        if (!el) return;
+        el.disabled = isReadonly;
+        if (isReadonly) el.classList.add('bg-gray-50');
+        else el.classList.remove('bg-gray-50');
+      });
+      if (btnSaveGoals) {
+        btnSaveGoals.disabled = isReadonly;
+        if (isReadonly) btnSaveGoals.classList.add('opacity-50', 'cursor-not-allowed');
+        else btnSaveGoals.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    function setGuildNameReadonly(isReadonly) {
+      if (guildNameInput) {
+        guildNameInput.disabled = isReadonly;
+        if (isReadonly) guildNameInput.classList.add('bg-gray-50');
+        else guildNameInput.classList.remove('bg-gray-50');
+      }
+      if (btnSaveGuildName) {
+        btnSaveGuildName.disabled = isReadonly;
+        if (isReadonly) btnSaveGuildName.classList.add('opacity-50', 'cursor-not-allowed');
+        else btnSaveGuildName.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    function toNumberOrNull(value) {
+      const raw = (value ?? '').toString().trim();
+      if (!raw) return null;
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0) return null;
+      return Math.floor(n);
     }
 
     btnCopyGuildUid?.addEventListener('click', async () => {
@@ -354,22 +402,33 @@
       if (ctx) {
         const isLeader = ctx.role === 'Líder';
         const isAdmin = ctx.role === 'Admin';
-        const gid = ctx.guildId;
         setReadonly(!isLeader, isAdmin);
+        setGoalsReadonly(!isLeader);
+        setGuildNameReadonly(!isLeader);
 
-        if (guildUidEl) guildUidEl.textContent = gid || '';
+        if (guildUidEl) guildUidEl.textContent = ctx.guildId || '';
 
         try {
-          const rawInfo = localStorage.getItem(`guildInfo_${gid}`);
+          const rawInfo = localStorage.getItem(`guildInfo_${ctx.guildId}`);
           if (rawInfo) {
-            const c = JSON.parse(rawInfo);
-            if (guildNameInput && c?.name) guildNameInput.value = String(c.name);\n            if (guildNameHint && c?.name) guildNameHint.textContent = `Nome atual: ${c.name}`;
+            const c = JSON.parse(rawInfo) || {};
+            if (guildNameInput) guildNameInput.value = c?.name ? String(c.name) : (ctx.guildName || '');
+            if (guildNameHint) guildNameHint.textContent = c?.name ? `Nome atual: ${String(c.name)}` : (ctx.guildName ? `Nome atual: ${ctx.guildName}` : 'Nenhum nome encontrado.');
             if (guildCreatedEl && c?.createdAtMs) guildCreatedEl.textContent = fmtDate(c.createdAtMs);
           }
         } catch (_) {}
 
         try {
-          const raw = localStorage.getItem(`tagMembros_${gid}`);
+          const rawGoals = localStorage.getItem(`guildGoals_${ctx.guildId}`);
+          if (rawGoals) {
+            const cachedGoals = JSON.parse(rawGoals) || {};
+            if (goalGgInput) goalGgInput.value = cachedGoals?.metaGG != null ? String(cachedGoals.metaGG) : '';
+            if (goalHonraInput) goalHonraInput.value = cachedGoals?.metaHonra != null ? String(cachedGoals.metaHonra) : '';
+          }
+        } catch (_) {}
+
+        try {
+          const raw = localStorage.getItem(`tagMembros_${ctx.guildId}`);
           if (raw) {
             const cached = JSON.parse(raw);
             if (cached?.value) {
@@ -380,24 +439,12 @@
         } catch (_) {}
 
         try {
-          const rawGoals = localStorage.getItem(`guildGoals_${gid}`);
-          if (rawGoals) {
-            const cachedGoals = JSON.parse(rawGoals) || {};
-            if (metaGgInput && cachedGoals.metaGg != null) metaGgInput.value = String(cachedGoals.metaGg);
-            if (metaHonraInput && cachedGoals.metaHonra != null) metaHonraInput.value = String(cachedGoals.metaHonra);
-            if (metasHint && (cachedGoals.metaGg != null || cachedGoals.metaHonra != null)) {
-              metasHint.textContent = `Metas atuais: GG ${cachedGoals.metaGg ?? 0} • Honra ${cachedGoals.metaHonra ?? 0}`;
-            }
-          }
-        } catch (_) {}
-
-        try {
-          const rawKey = localStorage.getItem(`guildAccessKey_${gid}`);
+          const rawKey = localStorage.getItem(`guildAccessKey_${ctx.guildId}`);
           if (rawKey) {
             const cachedKey = JSON.parse(rawKey);
             const value = cachedKey?.value ? String(cachedKey.value) : '';
             applyGuildKeyVisibility(value, isAdmin);
-            syncGuildKeyButtons(value, isLeader, isAdmin, getCachedGuildProfileState(gid));
+            syncGuildKeyButtons(value, isLeader, isAdmin, getCachedGuildProfileState(ctx.guildId));
           } else {
             applyGuildKeyVisibility('', isAdmin);
             syncGuildKeyButtons('', isLeader, isAdmin, null);
@@ -408,11 +455,15 @@
         }
       } else {
         setReadonly(true, false);
+        setGoalsReadonly(true);
+        setGuildNameReadonly(true);
         applyGuildKeyVisibility('', false);
         syncGuildKeyButtons('', false, false, null);
       }
     } catch (_) {
       setReadonly(true, false);
+      setGoalsReadonly(true);
+      setGuildNameReadonly(true);
       applyGuildKeyVisibility('', false);
       syncGuildKeyButtons('', false, false, null);
     }
@@ -425,30 +476,47 @@
       const isLeader = ctx?.role === 'Líder';
       const isAdmin = ctx?.role === 'Admin';
       setReadonly(!isLeader, isAdmin);
+      setGoalsReadonly(!isLeader);
+      setGuildNameReadonly(!isLeader);
 
-      const current = await getMemberTagConfig();
-      const currentGoals = await getGuildGoalsConfig();
-      let currentGuildKey = await getGuildAccessKeyConfig();
+      try {
+        const current = await getMemberTagConfig();
+        tagInput.value = current || '';
+        hint.textContent = current ? `Tag configurada: “${current}”` : 'Nenhuma tag configurada ainda.';
+      } catch (_) {
+        hint.textContent = 'Nenhuma tag configurada ainda.';
+      }
+
+      try {
+        const goals = await getGuildGoalsConfig();
+        if (goalGgInput) goalGgInput.value = goals?.metaGG != null ? String(goals.metaGG) : '';
+        if (goalHonraInput) goalHonraInput.value = goals?.metaHonra != null ? String(goals.metaHonra) : '';
+        goalsHint.textContent = (goals?.metaGG != null || goals?.metaHonra != null)
+          ? `Metas atuais: GG ${goals?.metaGG ?? 0} • Honra ${goals?.metaHonra ?? 0}`
+          : 'Nenhuma meta configurada ainda.';
+      } catch (_) {
+        goalsHint.textContent = 'Nenhuma meta configurada ainda.';
+      }
+
+      let currentGuildKey = '';
       let guildProfileExists = null;
 
       try {
         const info = await getGuildInfoCached(ctx?.guildId);
         if (guildUidEl && info?.guildId) guildUidEl.textContent = info.guildId;
-        if (guildNameInput) guildNameInput.value = info?.name || (ctx?.guildName || '');\n        if (guildNameHint) guildNameHint.textContent = (info?.name || ctx?.guildName) ? `Nome atual: ${info?.name || ctx?.guildName}` : 'Nenhum nome configurado.';
+        if (guildNameInput) guildNameInput.value = info?.name || (ctx?.guildName || '');
+        if (guildNameHint) guildNameHint.textContent = info?.name ? `Nome atual: ${info.name}` : ((ctx?.guildName) ? `Nome atual: ${ctx.guildName}` : 'Nenhum nome encontrado.');
         if (guildCreatedEl) guildCreatedEl.textContent = fmtDate(info?.createdAtMs);
       } catch (_) {
-        if (guildNameInput) guildNameInput.value = (ctx?.guildName || '');\n        if (guildNameHint) guildNameHint.textContent = ctx?.guildName ? `Nome atual: ${ctx.guildName}` : 'Nenhum nome configurado.';
+        if (guildUidEl) guildUidEl.textContent = ctx?.guildId || '-';
+        if (guildNameInput) guildNameInput.value = ctx?.guildName || '';
+        if (guildNameHint) guildNameHint.textContent = ctx?.guildName ? `Nome atual: ${ctx.guildName}` : 'Nenhum nome encontrado.';
       }
 
-      tagInput.value = current || '';
-      hint.textContent = current ? `Tag configurada: “${current}”` : 'Nenhuma tag configurada ainda.';
-
-      if (metaGgInput) metaGgInput.value = currentGoals?.metaGg != null ? String(currentGoals.metaGg) : '';
-      if (metaHonraInput) metaHonraInput.value = currentGoals?.metaHonra != null ? String(currentGoals.metaHonra) : '';
-      if (metasHint) {
-        metasHint.textContent = (currentGoals?.metaGg != null || currentGoals?.metaHonra != null)
-          ? `Metas atuais: GG ${currentGoals?.metaGg ?? 0} • Honra ${currentGoals?.metaHonra ?? 0}`
-          : 'Nenhuma meta configurada ainda.';
+      try {
+        currentGuildKey = await getGuildAccessKeyConfig();
+      } catch (_) {
+        currentGuildKey = '';
       }
 
       if (currentGuildKey) {
@@ -463,8 +531,8 @@
       syncGuildKeyButtons(currentGuildKey || '', isLeader, isAdmin, guildProfileExists);
 
       btnCopyGuildKey?.addEventListener('click', async () => {
-        const realValue = currentGuildKey || (guildAccessKeyEl?.textContent || '').trim();
-        if (!realValue || realValue === 'Nenhuma chave gerada') return;
+        const realValue = (currentGuildKey || '').trim();
+        if (!realValue || realValue === 'Nenhuma chave gerada' || isAdmin) return;
         try {
           await navigator.clipboard.writeText(realValue);
           showToast('success', 'Chave copiada!');
@@ -510,39 +578,6 @@
         }
       });
 
-      btnSaveGuildName?.addEventListener('click', async () => {
-        if (!isLeader) return;
-        const value = (guildNameInput?.value || '').trim();
-        if (!value) {
-          showToast('error', 'Digite o nome da guilda antes de salvar.');
-          return;
-        }
-
-        try {
-          await setGuildNameConfig(value);
-          if (guildNameHint) guildNameHint.textContent = `Nome atual: ${value}`;
-          showToast('success', 'Nome da guilda salvo com sucesso!');
-        } catch (e) {
-          console.error(e);
-          showToast('error', 'Não foi possível salvar o nome da guilda.');
-        }
-      });
-
-      btnSaveMetas?.addEventListener('click', async () => {
-        if (!isLeader) return;
-        const metaGg = (metaGgInput?.value || '').trim();
-        const metaHonra = (metaHonraInput?.value || '').trim();
-
-        try {
-          await setGuildGoalsConfig(metaGg === '' ? null : Number(metaGg), metaHonra === '' ? null : Number(metaHonra));
-          metasHint.textContent = `Metas atuais: GG ${metaGg === '' ? 0 : metaGg} • Honra ${metaHonra === '' ? 0 : metaHonra}`;
-          showToast('success', 'Metas salvas com sucesso!');
-        } catch (e) {
-          console.error(e);
-          showToast('error', 'Não foi possível salvar as metas.');
-        }
-      });
-
       btnSave.addEventListener('click', async () => {
         if (!isLeader) return;
         const value = (tagInput.value || '').trim();
@@ -558,6 +593,39 @@
         } catch (e) {
           console.error(e);
           showToast('error', 'Não foi possível salvar a tag.');
+        }
+      });
+
+      btnSaveGoals?.addEventListener('click', async () => {
+        if (!isLeader) return;
+        const metaGG = toNumberOrNull(goalGgInput?.value);
+        const metaHonra = toNumberOrNull(goalHonraInput?.value);
+
+        try {
+          await setGuildGoalsConfig({ metaGG, metaHonra });
+          goalsHint.textContent = `Metas atuais: GG ${metaGG ?? 0} • Honra ${metaHonra ?? 0}`;
+          showToast('success', 'Metas salvas com sucesso!');
+        } catch (e) {
+          console.error(e);
+          showToast('error', 'Não foi possível salvar as metas.');
+        }
+      });
+
+      btnSaveGuildName?.addEventListener('click', async () => {
+        if (!isLeader) return;
+        const value = (guildNameInput?.value || '').trim();
+        if (!value) {
+          showToast('error', 'Digite o nome da guilda antes de salvar.');
+          return;
+        }
+
+        try {
+          await setGuildNameConfig(value);
+          guildNameHint.textContent = `Nome atual: ${value}`;
+          showToast('success', 'Nome da guilda salvo com sucesso!');
+        } catch (e) {
+          console.error(e);
+          showToast('error', 'Não foi possível salvar o nome da guilda.');
         }
       });
     });
