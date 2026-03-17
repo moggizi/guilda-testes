@@ -18,11 +18,11 @@
       "destination": "/membros.html"
     },
     {
-      "source": "/campeonato",
+      "source": "/rec",
       "destination": "/camp.html"
     },
     {
-      "source": "/camp",
+      "source": "/recrutar",
       "destination": "/camp.html"
     },
     {
@@ -50,7 +50,7 @@
       "destination": "/chefe.html"
     },
     {
-      "source": "/eventos",
+      "source": "/recrutamento",
       "destination": "/eventos.html"
     },
     {
