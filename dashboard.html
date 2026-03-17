@@ -3,27 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard - Guild Manager</title>
+  <title>Admin - Guilda HUB</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script type="module">
+    import { getGuildContext } from './logic.js';
+    // Proteção instantânea com cache: se for admin, expulsa na hora
+    try {
+      const ctx = getGuildContext();
+      if (ctx && ctx.role === 'Admin') {
+        window.location.replace('dashboard.html');
+      }
+    } catch (_) {}
+  </script>
   <script>
     tailwind.config = { theme: { extend: { colors: { emerald: { 50:'#ecfdf5', 100:'#d1fae5', 200:'#a7f3d0', 400:'#34d399', 500:'#10b981', 600:'#059669', 700:'#047857'} } } } }
   </script>
   <link rel="stylesheet" href="./style.css" />
-
-<style>
-  /* Tutorial modal: evita corte em telas pequenas / iPhone */
-  #tutorial-modal .tiktok-embed {
-    margin: 0 auto !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-    width: 100% !important;
-  }
-  #tutorial-modal iframe {
-    max-width: 100% !important;
-  }
-</style>
-  
 </head>
 <body class="bg-gray-50/80">
 
@@ -38,53 +34,53 @@
           <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
           <div>
             <h1 class="font-bold text-gray-900 text-lg leading-tight">Guilda e eventos</h1>
-            <p id="vip-label" class="text-xs text-gray-400">Guilda: <span class="font-bold">carregando...</span></p>
+            <p class="text-xs text-gray-400">Painel</p>
           </div>
         </div>
       </div>
 
       <nav class="p-4 space-y-1">
-        <a href="dashboard.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
-          <i data-lucide="house" class="w-5 h-5"></i> Dashboard
-        </a>
-        <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
-        </a>
-        <a href="perfil-guilda.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Estatísticas
-        </a>
-        <a href="membros.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="users" class="w-5 h-5"></i> Membros
-        </a>
-        <a href="lines.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="layers" class="w-5 h-5"></i> Lines
-        </a>
-        <a href="ajustes.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
-        </a>
-        <a href="upgrade.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="sparkles" class="w-5 h-5"></i> Upgrade
-        </a>
-        <a href="camp.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
-        </a>
-        <a href="admin.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="settings" class="w-5 h-5"></i> Admin
-        </a>
+        <a href="dashboard.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+  <i data-lucide="house" class="w-5 h-5"></i> Dashboard
+</a>
+
+<a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+  <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
+</a>
+
+<a href="perfil-guilda.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+  <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Estatísticas
+</a>
+
+<a href="membros.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+  <i data-lucide="users" class="w-5 h-5"></i> Membros
+</a>
+
+<a href="lines.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+  <i data-lucide="layers" class="w-5 h-5"></i> Lines
+</a>
+
+<a href="ajustes.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+  <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
+</a>
+
+<a href="upgrade.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+  <i data-lucide="sparkles" class="w-5 h-5"></i> Upgrade
+</a>
+
+<a href="camp.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+  <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
+</a>
+
+<a href="admin.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
+  <i data-lucide="settings" class="w-5 h-5"></i> Admin
+</a>
         <a id="nav-chefe" href="chefe.html" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
           <i data-lucide="crown" class="w-5 h-5"></i> Chefe
         </a>
       </nav>
 
       <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100">
-
-      <div class="mb-3">
-        <button id="btn-tutorial" type="button"
-          class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100 transition-colors">
-          <i data-lucide="play-circle" class="w-4 h-4"></i>
-          Tutorial
-        </button>
-      </div>
         <div class="flex items-center justify-between px-3 py-2">
           <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm">A</div>
@@ -107,415 +103,361 @@
           <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500">
             <i data-lucide="menu" class="w-5 h-5"></i>
           </button>
-          <h1 class="text-lg font-semibold text-gray-900 leading-none">Dashboard</h1> 
-          
-          <a href="perfil-guilda.html" id="current-plan-pill" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-sm font-semibold border border-emerald-100 whitespace-nowrap ml-auto hover:bg-emerald-100 transition-colors">
-            <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
-            <span>Ver estatísticas</span>
-          </a>
+          <div class="min-w-0">
+            <h1 class="text-lg font-semibold text-gray-900">Configurações de Acesso</h1>
+            <p class="text-xs text-gray-400 mt-0.5">Somente Líder pode gerenciar permissões.</p>
+          </div>
         </div>
       </header>
 
       <div class="p-4 sm:p-6 max-w-5xl mx-auto space-y-8">
-        <div>
-          <h2 class="text-2xl font-bold text-gray-900">Visão Geral</h2>
-          <p class="text-gray-500 text-sm mt-1">Resumo da guilda em tempo real</p>
-        </div>
-         
-        <!-- Cards de Estatísticas -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="stats-container">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           
-          <!-- Card Total -->
-          <div class="bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-start justify-between mb-3">
-              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-200">
-                <i data-lucide="users" class="w-5 h-5 text-white"></i>
-              </div>
+          <!-- Card Admin -->
+          <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold text-gray-900 flex items-center gap-2">
+                <i data-lucide="crown" class="w-5 h-5 text-yellow-500"></i>
+                Administradores <span class="ml-2 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-0.5 text-[10px] font-extrabold">PLUS</span>
+              </h3>
+              <button id="btn-add-admin" class="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg font-bold hover:bg-emerald-200">Adicionar</button>
             </div>
-            <div>
-              <p class="text-2xl sm:text-3xl font-bold text-gray-900" id="stat-total">0</p>
-              <p class="text-xs sm:text-sm text-gray-500 mt-1">Total de Membros</p>
+            <p class="text-xs text-gray-400 mb-4">Acesso ao Dashboard e administração de membros.</p>
+            <ul id="list-admins" class="space-y-2">
+                <li class="text-sm text-gray-300 italic animate-pulse">Carregando lista...</li>
+            </ul>
+          </div>
+
+          <!-- Card Líder -->
+          <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold text-gray-900 flex items-center gap-2">
+                <i data-lucide="medal" class="w-5 h-5 text-blue-500"></i>
+                Líderes <span class="ml-2 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-0.5 text-[10px] font-extrabold">PLUS</span>
+              </h3>
+              <button id="btn-add-leader" class="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg font-bold hover:bg-emerald-200">Adicionar</button>
+            </div>
+            <p class="text-xs text-gray-400 mb-4">Acesso total ao sistema.</p>
+            <ul id="list-leaders" class="space-y-2">
+                <li class="text-sm text-gray-300 italic animate-pulse">Carregando lista...</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Card Acesso Jogador -->
+        <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm mt-8">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-gray-900 flex items-center gap-2">
+              <i data-lucide="gamepad-2" class="w-5 h-5 text-emerald-600"></i>
+              Acesso do Jogador <span class="ml-2 inline-flex items-center rounded-full bg-purple-50 text-purple-700 ring-1 ring-purple-200 px-2 py-0.5 text-[10px] font-extrabold">PRO</span><span class="ml-2 inline-flex items-center rounded-full bg-gray-100 text-gray-600 ring-1 ring-gray-200 px-2 py-0.5 text-[10px] font-extrabold">BETA</span>
+            </h3>
+          </div>
+
+          <p class="text-xs text-gray-400 mb-4">
+            Cria um <b>acesso de Jogador</b> com o e-mail que você definir. Quem entrar com esse usuário verá apenas a tela do Jogador
+            (Dashboard + busca por ID), sem qualquer permissão de edição.
+          </p>
+
+          <div id="player-create-box" class="space-y-3">
+            <div class="text-xs text-gray-500">E-mail do Jogador (definido por você)</div>
+            <div class="space-y-2">
+              <input id="player-email" type="email" placeholder="ex: jogador.minhaguilda@gmail.com" disabled
+                class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 cursor-not-allowed opacity-70" />
+              <div class="flex items-center justify-between gap-3 text-xs text-gray-400">
+                <span>Sugestão rápida:</span>
+                <button id="btn-fill-player-email" disabled class="text-xs bg-gray-100 border border-gray-200 text-gray-400 px-3 py-1 rounded-lg font-bold cursor-not-allowed opacity-70">Usar sugestão</button>
+              </div>
+              <code id="player-email-preview" class="block text-xs text-gray-700 break-all bg-gray-50 border border-gray-200 rounded-xl p-3">jogador.{guildId}@guildahub.app</code>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Senha do Jogador</label>
+                <input id="player-pass" type="password" minlength="6" placeholder="Mínimo 6 caracteres" disabled
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 cursor-not-allowed opacity-70" />
+              </div>
+              <div class="flex items-end">
+                <button id="btn-create-player-disabled-beta" class="w-full px-4 py-2 rounded-xl bg-gray-400 text-white font-bold cursor-not-allowed opacity-70" disabled title="Em desenvolvimento">
+                  Recurso em desenvolvimento
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- Card Guerra -->
-          <div class="bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-start justify-between mb-3">
-              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-200">
-                <i data-lucide="swords" class="w-5 h-5 text-white"></i>
-              </div>
+          <div id="player-manage-box" class="hidden space-y-3">
+            <div class="text-xs text-gray-500">E-mail atual do Jogador</div>
+            <div class="flex items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <code id="player-email-active" class="text-xs text-gray-800 break-all"></code>
+              <button id="btn-copy-player-email-2" class="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1 rounded-lg font-bold hover:bg-gray-50">Copiar</button>
             </div>
-            <div>
-              <p class="text-2xl sm:text-3xl font-bold text-gray-900" id="stat-war">0</p>
-              <p class="text-xs sm:text-sm text-gray-500 mt-1">Guerra de Guilda</p>
-              <p class="text-xs text-gray-400 mt-0.5" id="stat-war-sub">de -</p>
-            </div>
-          </div>
 
-          <!-- Card Meta -->
-          <div class="bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-start justify-between mb-3">
-              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-200">
-                <i data-lucide="target" class="w-5 h-5 text-white"></i>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Senha do Jogador (para apagar conta)</label>
+                <input id="player-pass-del" type="password" minlength="6" placeholder="Senha do Jogador"
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
               </div>
-            </div>
-            <div>
-              <p class="text-2xl sm:text-3xl font-bold text-gray-900" id="stat-meta">0</p>
-              <p class="text-xs sm:text-sm text-gray-500 mt-1">Meta Semanal</p>
-              <p class="text-xs text-gray-400 mt-0.5" id="stat-meta-sub">de -</p>
-            </div>
-          </div>
-
-          <!-- Card Tag -->
-          <div class="bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div class="flex items-start justify-between mb-3">
-              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-200">
-                <i data-lucide="tag" class="w-5 h-5 text-white"></i>
+              <div class="flex items-end gap-2">
+                <button id="btn-revoke-player" class="w-1/2 px-4 py-2 rounded-xl bg-gray-100 text-gray-900 font-bold hover:bg-gray-200">
+                  Revogar
+                </button>
+                <button id="btn-delete-player" class="w-1/2 px-4 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700">
+                  Deletar conta
+                </button>
               </div>
-            </div>
-            <div>
-              <p class="text-2xl sm:text-3xl font-bold text-gray-900" id="stat-tag">0</p>
-              <p class="text-xs sm:text-sm text-gray-500 mt-1">Com Tag</p>
-              <p class="text-xs text-gray-400 mt-0.5" id="stat-tag-sub">de -</p>
             </div>
           </div>
         </div>
 
-        <!-- Alertas e Gráficos -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-          <!-- Atenção -->
-          <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-            <div class="flex items-center gap-2 mb-4">
-              <i data-lucide="triangle-alert" class="w-5 h-5 text-amber-500"></i>
-              <h3 class="font-semibold text-gray-900">Atenção</h3>
-            </div>
-            <div class="space-y-3" id="attention-container">
-              <!-- Placeholder Skeleton -->
-              <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl animate-pulse"><div class="h-4 bg-gray-200 rounded w-1/2"></div><div class="h-4 bg-gray-200 rounded w-8"></div></div>
-            </div>
-          </div>
-
-          <!-- Resumo -->
-          <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-            <div class="flex items-center gap-2 mb-4">
-              <i data-lucide="trending-up" class="w-5 h-5 text-emerald-500"></i>
-              <h3 class="font-semibold text-gray-900">Resumo</h3>
-            </div>
-            <div class="space-y-3" id="summary-container">
-               <!-- Placeholder Skeleton -->
-              <div class="w-full h-8 bg-gray-100 rounded-lg animate-pulse"></div>
-            </div>
-          </div>
-        </div>
       </div>
     </main>
   </div>
 
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, db, consumeLoginToasts, showWelcomeLoginModal, getGuildContext, applyVipUiAndGates, getVipTier } from './logic.js';
-    import { collection, getDocs, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { checkAuth, setupSidebar, initIcons, showToast, logout, auth, db, getGuildContext, ensureUserAccount, createPlayer_DISABLED_BETAAccess, revokePlayerAccess, deletePlayerAccount } from "./logic.js";
+    import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    function normalizeTier(raw){
-      const s = (raw || 'free').toString().toLowerCase().trim();
-      if (s.includes('buss') || s.includes('business')) return 'business';
-      if (s.includes('pro')) return 'pro';
-      if (s.includes('plus')) return 'plus';
-      return 'free';
-    }
-
-    const GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
-
-    function getMembersCacheKey(guildId){
-      return `membersList_${guildId}`;
-    }
-
-    function safeParseJSON(raw, fallback){
-      try { return JSON.parse(raw); } catch { return fallback; }
-    }
-
-    function normalizeMembers(list){
-      const arr = Array.isArray(list) ? list.slice() : [];
-      arr.sort((a,b)=> String(a.nick||'').localeCompare(String(b.nick||'')));
-      return arr;
-    }
-
-    function calcStats(members){
-      const total = members.length;
-      const hasTag = members.filter(m => !!m.hasTag).length;
-      const guildWar = members.filter(m => !!m.guildWar).length;
-      const weeklyMeta = members.filter(m => !!m.weeklyMeta).length;
-      return { total, hasTag, guildWar, weeklyMeta };
-    }
-
-    function renderFromMembersCache(){
-      const ctx = getGuildContext();
-      if(!ctx?.guildId) {
-        // Se ainda não tiver ID em cache (WebView lento no boot), garante que a tela
-        // tenha os números zerados com os ícones, para não parecer travada
-        updateUI({ total: 0, guildWar: 0, weeklyMeta: 0, hasTag: 0 });
-        return;
-      }
-
-      const key = getMembersCacheKey(ctx.guildId);
-      const raw = localStorage.getItem(key);
-      const members = normalizeMembers(safeParseJSON(raw || '[]', []));
-      const stats = calcStats(members);
-      updateUI(stats);
-    }
-
-    // ==========================================
-    // FIX WEBVIEW: Renderiza tudo no topo AGORA MESMO
-    // ==========================================
     setupSidebar();
-    initIcons(); // Carrega ícones instantaneamente e impede botões de ficarem invisíveis
-    renderFromMembersCache();
+    initIcons();
 
-    // Mantém o dashboard sempre refletindo o cache mais recente
-    window.addEventListener('storage', (e) => {
-      const ctx = getGuildContext();
-      if(!ctx?.guildId) return;
-      if (e.key === getMembersCacheKey(ctx.guildId)) {
-        renderFromMembersCache();
-      }
-      if (e.key === GUILDCTX_LS_KEY) {
-        try {
-          const cached = safeParseJSON(e.newValue || '{}', {});
-          const tier = normalizeTier(cached?.vipTier || getVipTier());
-                              applyVipUiAndGates(cached?.vipTier || getVipTier());
-        } catch {}
-      }
+    function tierRank(t){
+      const s = (t||'free').toString().toLowerCase();
+      if (s==='pro' || s==='business') return 2;
+      if (s==='plus') return 1;
+      return 0;
+    }
+
+    function applyVipUI(tier){
+      const vipLabel = document.getElementById('vip-label');
+      if (vipLabel) vipLabel.innerHTML = `Guilda: <span class="font-bold text-gray-800 uppercase">${tier}</span>`;
+
+      const needPlus = tierRank(tier) >= 1;
+      ['btn-add-admin','btn-add-leader'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b && (!needPlus || permissoesAtivas === false)) {
+          b.disabled = true;
+          b.classList.add('opacity-50','cursor-not-allowed');
+          b.title = 'Recurso PLUS';
+        }
+      });
+    }
+
+    document.getElementById('player-email')?.addEventListener('input', (e) => {
+      const v = (e.target?.value || '').trim().toLowerCase();
+      const p = document.getElementById('player-email-preview');
+      if (p) p.textContent = v || getPlayerEmailForGuild();
     });
+    
+    let securityData = { admins: [], leaders: [] };
+    let permissoesAtivas = true;
+    let unsubCfg = null;
+    let hasLoadedFromCache = false;
 
-    // Auth
+    const guildCacheKey = () => {
+      const ctx = getGuildContext();
+      return `securityConfig_${ctx?.guildId || "unknown"}`;
+    };
+
+    let currentEmail = '';
+    try {
+      const ctx = getGuildContext();
+      currentEmail = String(ctx?.email || '').toLowerCase().trim();
+    } catch (_) {}
+
+    // --- CARREGAMENTO INSTANTÂNEO DO CACHE ---
+    try {
+      const cachedSec = localStorage.getItem(guildCacheKey());
+      if (cachedSec) {
+        securityData = JSON.parse(cachedSec) || securityData;
+        permissoesAtivas = (securityData.permissoesAtivas !== false);
+        renderPlayerAccess(securityData.playerEmail);
+        renderList('admins', securityData.admins || []);
+        renderList('leaders', securityData.leaders || []);
+        hasLoadedFromCache = true;
+      }
+    } catch (_) {}
+
+    document.getElementById('btn-logout')?.addEventListener('click', logout);
+
     checkAuth().then(async (user) => {
       if(!user) return;
-      document.getElementById('btn-logout').onclick = logout;
-      showWelcomeLoginModal();
-      consumeLoginToasts();
-
-      const ctx = getGuildContext();
-      if(!ctx?.guildId) return;
-
       try {
-        const tier = normalizeTier(getVipTier());
-                        applyVipUiAndGates(ctx?.vipTier || getVipTier());
-      } catch {}
+        const ctx0 = getGuildContext();
+        applyVipUI(ctx0?.vipTier || 'free');
+        currentEmail = String(user?.email || '').toLowerCase().trim();
+      } catch (_) {}
+      
+      // Sempre acompanha em tempo real (igual o plano)
+      startRealtime();
 
-      fetchMembersAndUpdateCache(ctx.guildId);
-      startVipRealtime(ctx.guildId);
+      // Só carrega do Firebase se não achou cache (fallback)
+      if (!hasLoadedFromCache) {
+        await load();
+      }
     });
 
-    // Busca de tempo real com proteções contra WebView
-    async function fetchMembersAndUpdateCache(guildId){
-      const key = getMembersCacheKey(guildId);
+    async function load() {
       try {
-        const snap = await getDocs(collection(db, "guildas", guildId, "membros"));
-        const members = [];
-        snap.forEach(d => members.push({ id: d.id, ...d.data() }));
-        const normalized = normalizeMembers(members);
+        const snap = await getDoc(doc(db, "configGuilda", getGuildContext().guildId));
+        const newData = snap.exists() ? (snap.data() || {}) : {};
+        newData.admins = Array.isArray(newData.admins) ? newData.admins : [];
+        newData.leaders = Array.isArray(newData.leaders) ? newData.leaders : [];
+        newData.playerEmail = (newData.playerEmail || "").toString().toLowerCase().trim() || null;
         
-        // FIX WEBVIEW: Tenta jogar no cache, mas se o Android bloquear, ele não trava a tela!
-        try {
-          localStorage.setItem(key, JSON.stringify(normalized));
-        } catch (storageErr) {
-          console.warn("Aviso: WebView bloqueou o cachê, seguindo com o render...", storageErr);
-        }
-        
-        // Atualiza a dashboard instantaneamente com os números reais
-        const stats = calcStats(normalized);
-        updateUI(stats);
+        renderPlayerAccess(newData.playerEmail);
+        securityData = newData;
+        localStorage.setItem(guildCacheKey(), JSON.stringify(newData));
+        renderList('admins', securityData.admins);
+        renderList('leaders', securityData.leaders);
       } catch (e) {
-        console.warn("Falha ao atualizar membros em tempo real:", e);
+        showToast('error', 'Erro ao carregar configurações.');
       }
     }
 
-    function toMs(v){
-      try {
-        if (!v) return null;
-        if (typeof v === 'number') return v;
-        if (typeof v === 'string') {
-          const n = Number(v);
-          if (isFinite(n)) return n;
-          const t = Date.parse(v);
-          return isNaN(t) ? null : t;
-        }
-        if (typeof v === 'object') {
-          if (typeof v.toMillis === 'function') return v.toMillis();
-          if (typeof v.seconds === 'number') return v.seconds * 1000;
-        }
-      } catch {}
-      return null;
-    }
 
-    function updateGuildCtxCache(patch){
-      const prev = safeParseJSON(localStorage.getItem(GUILDCTX_LS_KEY) || '{}', {});
-      const next = { ...prev, ...patch, ts: Date.now() };
-      // FIX WEBVIEW: Impede que erro de Storage quebre a leitura do plano VIP
-      try {
-        localStorage.setItem(GUILDCTX_LS_KEY, JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    }
+function startRealtime() {
+  try {
+    if (unsubCfg) return; // já rodando
+    const gid = getGuildContext()?.guildId;
+    if (!gid) return;
 
-    function startVipRealtime(guildId){
-      const ref1 = doc(db, 'configGuilda', guildId);
-      const unsub1 = onSnapshot(ref1, (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data() || {};
-        const vipTier = normalizeTier(data.vipTier ?? data.vip ?? data.planoVip ?? data.planoVIP ?? data.vipLevel ?? data.vipPlano ?? data.vipName ?? data.plano ?? data.plan ?? data.tier);
-        const vipExpiresAtMs = toMs(data.vipExpiresAt ?? data.vipExpiresAtMs ?? data.expiresAt ?? data.expireAt ?? data.expiraEm ?? data.expire ?? data.expiration);
-        const cached = updateGuildCtxCache({ vipTier, vipExpiresAtMs });
-                        applyVipUiAndGates(cached.vipTier);
-      }, () => {});
+    unsubCfg = onSnapshot(doc(db, "configGuilda", gid), (snap) => {
+      if (!snap.exists()) return;
 
-      const ref2 = doc(db, 'guildas', guildId);
-      const unsub2 = onSnapshot(ref2, (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data() || {};
-        const vipTier = normalizeTier(data.vipTier ?? data.vip ?? data.planoVip ?? data.planoVIP ?? data.vipLevel ?? data.vipPlano ?? data.vipName ?? data.plano ?? data.plan ?? data.tier);
-        if (!vipTier) return;
-        const cached = updateGuildCtxCache({ vipTier });
-                        applyVipUiAndGates(cached.vipTier);
-      }, () => {});
+      const data = snap.data() || {};
+      const newData = {
+        ...data,
+        admins: Array.isArray(data.admins) ? data.admins : [],
+        leaders: Array.isArray(data.leaders) ? data.leaders : [],
+        playerEmail: (data.playerEmail || "").toString().toLowerCase().trim() || null,
+        permissoesAtivas: (data.permissoesAtivas !== false)
+      };
 
-      window.__vipUnsub = () => { try{unsub1();}catch{} try{unsub2();}catch{} };
-    }
+      permissoesAtivas = newData.permissoesAtivas;
+      securityData = newData;
 
-    function updateUI(data) {
-      const { total, guildWar, weeklyMeta, hasTag } = data;
+      renderPlayerAccess(newData.playerEmail);
+      renderList('admins', newData.admins || []);
+      renderList('leaders', newData.leaders || []);
 
-      document.getElementById('stat-total').innerText = total;
+      try { localStorage.setItem(guildCacheKey(), JSON.stringify(newData)); } catch (_) {}
+    }, (err) => {
+      // não quebra a tela
+    });
+  } catch (_) {}
+}
 
-      document.getElementById('stat-war').innerText = guildWar;
-      document.getElementById('stat-war-sub').innerText = `de ${total}`;
 
-      document.getElementById('stat-meta').innerText = weeklyMeta;
-      document.getElementById('stat-meta-sub').innerText = `de ${total}`;
-
-      document.getElementById('stat-tag').innerText = hasTag;
-      document.getElementById('stat-tag-sub').innerText = `de ${total}`;
-
-      const noWar = total - guildWar;
-      const noMeta = total - weeklyMeta;
-      const noTag = total - hasTag;
-
-      document.getElementById('attention-container').innerHTML = `
-        <div class="flex items-center justify-between p-3 bg-red-50 rounded-xl">
-          <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-red-500"></div><span class="text-sm text-red-700">Sem Guerra de Guilda</span></div>
-          <span class="text-sm font-bold text-red-700">${noWar}</span>
-        </div>
-        <div class="flex items-center justify-between p-3 bg-orange-50 rounded-xl">
-          <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-orange-500"></div><span class="text-sm text-orange-700">Meta Semanal Pendente</span></div>
-          <span class="text-sm font-bold text-orange-700">${noMeta}</span>
-        </div>
-        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-          <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-gray-400"></div><span class="text-sm text-gray-600">Sem Tag</span></div>
-          <span class="text-sm font-bold text-gray-600">${noTag}</span>
-        </div>
-      `;
-
-      const renderBar = (label, val, color) => `
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <span class="text-sm text-gray-600">${label}</span>
-            <span class="text-sm font-semibold text-gray-900">${total > 0 ? Math.round((val/total)*100) : 0}%</span>
-          </div>
-          <div class="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
-            <div class="h-full bg-gradient-to-r ${color} rounded-full transition-all duration-1000" style="width: ${total > 0 ? (val/total)*100 : 0}%"></div>
-          </div>
-        </div>
-      `;
-
-      document.getElementById('summary-container').innerHTML =
-        renderBar("Participação na Guerra", guildWar, "from-emerald-400 to-green-500") +
-        renderBar("Meta Semanal Cumprida", weeklyMeta, "from-violet-400 to-purple-500") +
-        renderBar("Membros com Tag", hasTag, "from-amber-400 to-orange-500");
-
+    function renderList(type, list) {
+      const ul = document.getElementById(`list-${type}`);
+      ul.innerHTML = "";
+      if (!list || list.length === 0) {
+        ul.innerHTML = "<li class='text-sm text-gray-300 italic'>Nenhum usuário</li>";
+        return;
+      }
+      const masterLeader = (type === 'leaders') ? String(list[0] || '').toLowerCase().trim() : '';
+      list.forEach((email) => {
+        const clean = String(email || '').toLowerCase().trim();
+        const isMaster = type === 'leaders' && clean === masterLeader;
+        const isSelf = clean === currentEmail;
+        const li = document.createElement('li');
+        li.className = "flex justify-between items-center bg-gray-50 p-3 rounded-xl text-sm border animate-in";
+        li.innerHTML = `
+          <span class="truncate pr-2 flex items-center gap-2">
+            <span class="truncate">${email}</span>
+            ${isMaster ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">Líder Master</span>` : ''}
+            ${(!isMaster && isSelf) ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold">Você</span>` : ''}
+            ${(!permissoesAtivas && !isMaster) ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 ring-1 ring-rose-200 font-extrabold">Sem acesso</span>` : ''}
+          </span>
+          <button class="btn-remove text-red-400 hover:text-red-600 ${isMaster ? 'opacity-40 cursor-not-allowed' : ''}" data-type="${type}" data-email="${email}" ${isMaster ? 'disabled' : ''}>
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+        `;
+        ul.appendChild(li);
+      });
+      ul.querySelectorAll('.btn-remove').forEach(btn => {
+        btn.onclick = () => removeAccess(btn.dataset.type, btn.dataset.email);
+      });
       initIcons();
     }
-  
 
-    // Tutorial (bottom sheet)
-    (function setupTutorialModal(){
-      const btn = document.getElementById('btn-tutorial');
-      const overlay = document.getElementById('tutorial-overlay');
-      const modal = document.getElementById('tutorial-modal');
-      const closeBtn = document.getElementById('tutorial-close');
+    function getPlayerEmailForGuild() {
+      return `jogador.${getGuildContext()?.guildId || 'id'}@guildahub.app`.toLowerCase();
+    }
 
-      if(!btn || !overlay || !modal || !closeBtn) return;
-
-      let embedLoaded = false;
-
-      function loadTikTokEmbed(){
-        if(embedLoaded) return;
-        embedLoaded = true;
-
-        const s = document.createElement('script');
-        s.async = true;
-        s.src = 'https://www.tiktok.com/embed.js';
-        document.body.appendChild(s);
+    function renderPlayerAccess(email) {
+      if (email) {
+        document.getElementById('player-create-box').classList.add('hidden');
+        document.getElementById('player-manage-box').classList.remove('hidden');
+        document.getElementById('player-email-active').textContent = email;
+      } else {
+        document.getElementById('player-manage-box').classList.add('hidden');
+        document.getElementById('player-create-box').classList.remove('hidden');
+        document.getElementById('player-email-preview').textContent = getPlayerEmailForGuild();
       }
+    }
 
-      function open(){
-        loadTikTokEmbed();
-        overlay.classList.remove('hidden');
-        modal.classList.remove('hidden');
-        modal.setAttribute('aria-hidden', 'false');
-        requestAnimationFrame(() => modal.classList.remove('translate-y-full'));
-        document.documentElement.classList.add('overflow-hidden');
-      }
+    // Botões desativados de jogador não farão nada
+    document.getElementById('btn-create-player-disabled-beta')?.addEventListener('click', async () => {
+      showToast('info', 'Em breve! Este recurso ainda está em desenvolvimento.');
+    });
 
-      function close(){
-        modal.classList.add('translate-y-full');
-        modal.setAttribute('aria-hidden', 'true');
-        document.documentElement.classList.remove('overflow-hidden');
-        setTimeout(() => {
-          modal.classList.add('hidden');
-          overlay.classList.add('hidden');
-        }, 260);
-      }
+    document.getElementById('btn-add-admin')?.addEventListener('click', () => addAccess('admins'));
+    document.getElementById('btn-add-leader')?.addEventListener('click', () => addAccess('leaders'));
 
-      btn.addEventListener('click', open);
-      overlay.addEventListener('click', close);
-      closeBtn.addEventListener('click', close);
+    async function addAccess(type) {
+      try {
+        const email = prompt("Digite o e-mail do usuário:");
+        if (!email) return;
+        const cleanEmail = email.toLowerCase().trim();
+        if (!cleanEmail.includes('@')) return showToast('error', 'E-mail inválido.');
 
-      document.addEventListener('keydown', (e) => {
-        if(e.key === 'Escape' && !modal.classList.contains('hidden')) close();
-      });
-    })();
-</script>
+        if (securityData[type].includes(cleanEmail)) return showToast('info', 'E-mail já está na lista.');
 
-  <!-- Welcome Modal -->
-  <div id="welcome-overlay" class="welcome-modal-backdrop hidden"></div>
+        let resUid = null;
+        let created = false;
+        try {
+          const pass = prompt('Se a conta não existir, defina uma senha (mín. 6) para criar.\nSe já existir, deixe em branco:');
+          if (pass && pass.length >= 6) {
+            const res = await ensureUserAccount(cleanEmail, pass, { guildId: getGuildContext().guildId, role: (type === 'leaders' ? 'Líder' : 'Admin') });
+            created = res.created;
+            resUid = res.uid;
+          }
+        } catch (e) { console.warn(e); }
 
-  <section id="welcome-modal" class="welcome-modal hidden" aria-hidden="true" role="dialog" aria-labelledby="welcome-title">
-    <div class="welcome-modal__card">
-      <button id="welcome-close" type="button" class="welcome-modal__close" aria-label="Fechar mensagem" title="Fechar">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
 
-      <div class="welcome-modal__badge">
-        <i data-lucide="sparkles" class="w-4 h-4"></i>
-        <span>Guilda Hub</span>
-      </div>
+        securityData[type].push(cleanEmail);
+        renderList(type, securityData[type]);
+        await saveSecurity();
+        showToast('success', created ? 'Conta criada e acesso liberado.' : 'Acesso liberado.');
+      } catch (e) { showToast('error', 'Erro ao adicionar.'); load(); }
+    }
 
-      <h2 id="welcome-title" class="welcome-modal__title"><strong>Olá! Bem-vindo(a)!</strong></h2>
+    async function removeAccess(type, email) {
+      if (type === 'leaders' && securityData.leaders[0] === email) return showToast('info', 'O Líder Master não pode ser removido.');
+      if (!confirm(`Remover acesso de ${email}?`)) return;
+      securityData[type] = securityData[type].filter(e => e !== email);
+      renderList(type, securityData[type]);
+      await saveSecurity();
+      showToast('success', 'Acesso removido.');
+    }
 
-      <div class="welcome-modal__content">
-        <p>• Que bom ter você por aqui no Guilda Hub!</p>
-        <p>• Nossa plataforma ainda está em fase de desenvolvimento e qualquer feedback, ideia de nova funcionalidade ou sugestão de melhoria é super bem-vinda. Queremos construir esse espaço com a sua ajuda! Para mandar sua sugestão, é só entrar no nosso grupo do WhatsApp.</p>
-      </div>
+    async function saveSecurity() {
+      // Salva no cache instantaneamente
+      localStorage.setItem(guildCacheKey(), JSON.stringify(securityData));
+      
+      // Salva no Firebase
+      await setDoc(doc(db, 'configGuilda', getGuildContext().guildId), {
+        admins: securityData.admins || [],
+        leaders: securityData.leaders || [],
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
 
-      <a id="welcome-group-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="welcome-modal__cta">
-        <i data-lucide="message-circle" class="w-4 h-4"></i>
-        Entrar no grupo
-      </a>
-    </div>
-  </section>
-
+  </script>
 
   <!-- OTK Footer -->
-<footer class="bg-white py-10 border-t border-slate-200">
+  <footer class="bg-white py-10 border-t border-slate-200">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <div class="flex justify-center items-center gap-2 mb-10">
@@ -565,57 +507,6 @@
         
     </div>
 </footer>
-
-
-  <!-- Tutorial Modal (bottom sheet) -->
-  <div id="tutorial-overlay" class="fixed inset-0 bg-black/40 z-[60] hidden"></div>
-
-  <section id="tutorial-modal"
-    class="fixed inset-x-0 bottom-0 z-[70] hidden translate-y-full transition-transform duration-300 max-h-[90vh]"
-    aria-hidden="true">
-    <div class="mx-auto w-full max-w-2xl px-3 pb-4">
-      <div class="bg-white rounded-t-3xl shadow-2xl border border-gray-100 overflow-hidden max-h-[85vh] flex flex-col">
-        <div class="px-5 pt-4 pb-3 border-b border-gray-100">
-          <div class="mx-auto h-1.5 w-14 rounded-full bg-gray-200"></div>
-
-          <div class="mt-4 flex items-start justify-between gap-3">
-            <div>
-              <h2 class="text-base sm:text-lg font-bold text-gray-900 leading-tight">Como usar o site</h2>
-              <p class="text-xs sm:text-sm text-gray-500 mt-1">Assista o vídeo e depois volta aqui pra testar 🙂</p>
-            </div>
-            <button id="tutorial-close" type="button"
-              class="p-2 rounded-xl hover:bg-gray-100 text-gray-500"
-              aria-label="Fechar tutorial" title="Fechar">
-              <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
-          </div>
-        </div>
-
-        <div class="px-4 sm:px-5 py-4 flex-1 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
-          <div class="rounded-2xl border border-gray-100 bg-gray-50 overflow-hidden max-h-[60vh] sm:max-h-[62vh]">
-            <div class="p-3 sm:p-4">
-              <!--
-                ✅ COMO COLOCAR O LINK DO TIKTOK AQUI:
-                1) Troque o valor de "data-video-id" pelo ID do vídeo (fica no link do TikTok).
-                   Exemplo: https://www.tiktok.com/@usuario/video/7421234567890123456  -> ID = 7421234567890123456
-                2) Troque também o "cite" pelo link do vídeo.
-              -->
-              <blockquote class="tiktok-embed"
-                cite="https://www.tiktok.com/@kushinaff/video/7612362295930408212"
-                data-video-id="7612362295930408212"
-                style="max-width: 100%; min-width: 260px;">
-                <section></section>
-              </blockquote>
-            </div>
-          </div>
-
-          <p class="text-xs text-gray-400 mt-3 text-center">
-            Dica: se o vídeo não carregar, verifica se o bloqueador de conteúdo do navegador está ativo.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
 
 </body>
 </html>
