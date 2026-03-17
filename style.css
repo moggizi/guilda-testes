@@ -242,3 +242,24 @@ border-top-color:rgba(255,255,255,0);display:inline-block;animation:spin .9s lin
   .welcome-modal__card { padding: 22px 18px; border-radius: 24px; }
   .welcome-modal__title { padding-right: 34px; }
 }
+@media (min-width: 1024px) {
+  #sidebar {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  #sidebar > nav {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  #sidebar > div:last-child {
+    position: static !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    margin-top: auto;
+    background: #fff;
+  }
+}
