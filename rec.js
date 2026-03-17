@@ -487,9 +487,18 @@ function bootMarketplaceMode() {
   const params = new URLSearchParams(window.location.search);
 
   function ensureMarketplaceRequestModal() {
-    if (els.modal && els.form && els.applicantId && els.applicantNick && els.applicantWhatsapp) return;
-    const existing = document.getElementById('request-modal-dynamic');
-    if (!existing) {
+    let dynamicModal = document.getElementById('request-modal-dynamic');
+
+    const staticModal = document.getElementById('request-modal');
+    const staticForm = document.getElementById('request-form');
+    const staticModes = document.getElementById('request-modes');
+    const staticId = document.getElementById('applicant-id');
+    const staticNick = document.getElementById('applicant-nick');
+    const staticWhatsapp = document.getElementById('applicant-whatsapp');
+
+    const staticModalIsComplete = !!(staticModal && staticForm && staticModes && staticId && staticNick && staticWhatsapp);
+
+    if (!staticModalIsComplete && !dynamicModal) {
       const wrap = document.createElement('div');
       wrap.innerHTML = `
         <div id="request-modal-dynamic" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/60 px-4 py-6">
@@ -534,24 +543,62 @@ function bootMarketplaceMode() {
           </div>
         </div>`;
       document.body.appendChild(wrap.firstElementChild);
+      dynamicModal = document.getElementById('request-modal-dynamic');
     }
-    els.modal = document.getElementById('request-modal') || document.getElementById('request-modal-dynamic');
-    els.modalGuild = document.getElementById('request-modal-guild') || document.getElementById('request-modal-guild-dynamic');
-    els.helper = document.getElementById('request-helper') || document.getElementById('request-helper-dynamic');
-    els.form = document.getElementById('request-form') || document.getElementById('request-form-dynamic');
-    els.applicantId = document.getElementById('applicant-id') || document.getElementById('applicant-id-dynamic');
-    els.applicantNick = document.getElementById('applicant-nick') || document.getElementById('applicant-nick-dynamic');
-    els.applicantWhatsapp = document.getElementById('applicant-whatsapp') || document.getElementById('applicant-whatsapp-dynamic');
-    if (!els.form.dataset.marketplaceBound) {
+
+    els.modal = staticModalIsComplete ? staticModal : dynamicModal;
+    els.modalGuild = staticModalIsComplete
+      ? (document.getElementById('request-modal-guild') || document.getElementById('request-modal-guild-dynamic'))
+      : document.getElementById('request-modal-guild-dynamic');
+    els.helper = staticModalIsComplete
+      ? (document.getElementById('request-helper') || document.getElementById('request-helper-dynamic'))
+      : document.getElementById('request-helper-dynamic');
+    els.form = staticModalIsComplete ? staticForm : document.getElementById('request-form-dynamic');
+    els.applicantId = staticModalIsComplete ? staticId : document.getElementById('applicant-id-dynamic');
+    els.applicantNick = staticModalIsComplete ? staticNick : document.getElementById('applicant-nick-dynamic');
+    els.applicantWhatsapp = staticModalIsComplete ? staticWhatsapp : document.getElementById('applicant-whatsapp-dynamic');
+
+    const modesWrap = staticModalIsComplete ? staticModes : document.getElementById('request-modes-dynamic');
+    if (modesWrap && !modesWrap.id) modesWrap.id = 'request-modes-dynamic';
+
+    if (els.form && !els.form.dataset.marketplaceBound) {
       els.form.dataset.marketplaceBound = '1';
       els.form.addEventListener('submit', submitMarketplaceRequest);
-      document.querySelectorAll('[data-close-marketplace-request]').forEach((btn) => btn.addEventListener('click', closeMarketplaceRequestModal));
     }
+
+    if (els.modal && !els.modal.dataset.marketplaceBound) {
+      els.modal.dataset.marketplaceBound = '1';
+      els.modal.addEventListener('click', (event) => {
+        if (event.target === els.modal) closeMarketplaceRequestModal();
+      });
+    }
+
+    document.querySelectorAll('[data-close-marketplace-request]').forEach((btn) => {
+      if (btn.dataset.marketplaceBound) return;
+      btn.dataset.marketplaceBound = '1';
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeMarketplaceRequestModal();
+      });
+    });
+
     initIcons();
   }
 
   function renderMarketplaceModes(item) {
-    const wrap = document.getElementById('request-modes') || document.getElementById('request-modes-dynamic');
+    let wrap = document.getElementById('request-modes') || document.getElementById('request-modes-dynamic');
+    if (!wrap && els.form) {
+      const block = document.createElement('div');
+      block.innerHTML = `
+        <p class="mb-2 block text-sm font-bold text-slate-700">Modo de jogo</p>
+        <div id="request-modes-dynamic" class="grid gap-2 sm:grid-cols-2"></div>
+      `;
+      const actions = els.form.querySelector('.flex.items-center.justify-end.gap-3.pt-2');
+      if (actions) els.form.insertBefore(block, actions);
+      else els.form.appendChild(block);
+      wrap = document.getElementById('request-modes-dynamic');
+    }
     if (!wrap) return;
     const roles = Array.isArray(item?.roles) ? item.roles.filter(Boolean) : [];
     wrap.innerHTML = roles.length ? roles.map((role, idx) => `
