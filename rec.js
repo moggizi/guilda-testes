@@ -133,6 +133,37 @@ function bootManagementMode() {
 
   const ctxGuildId = () => String(getGuildContext()?.guildId || '').trim();
   const ctxGuildName = () => String(getGuildContext()?.guildName || '').trim();
+  const getNormalizedVipTier = () => {
+    const raw = String(getGuildContext()?.vipTier || 'free').toLowerCase().trim();
+    if (!raw) return 'free';
+    if (raw.includes('business') || raw.includes('buss')) return 'business';
+    if (raw.includes('pro')) return 'pro';
+    if (raw.includes('plus')) return 'plus';
+    return 'free';
+  };
+  const canOpenRecruitment = () => {
+    const tier = getNormalizedVipTier();
+    return tier === 'pro' || tier === 'business';
+  };
+  function applyRecruitmentVipGate() {
+    const allowed = canOpenRecruitment();
+    const disabledText = 'O recrutamento está disponível apenas para os planos Pro ou Business.';
+    [els.loadBtn, els.reloadBtn, els.newBtn].forEach((btn) => {
+      if (!btn) return;
+      btn.disabled = !allowed;
+      btn.classList.toggle('opacity-50', !allowed);
+      btn.classList.toggle('cursor-not-allowed', !allowed);
+      if (!allowed) btn.setAttribute('title', disabledText);
+      else btn.removeAttribute('title');
+    });
+    if (els.keyInput) {
+      els.keyInput.disabled = !allowed;
+      els.keyInput.classList.toggle('opacity-60', !allowed);
+      if (!allowed) els.keyInput.setAttribute('title', disabledText);
+      else els.keyInput.removeAttribute('title');
+    }
+    return allowed;
+  }
 
   function setStatus(message, type='info') {
     const map = { info:'hidden', success:'border-emerald-200 bg-emerald-50 text-emerald-700', error:'border-red-200 bg-red-50 text-red-700', warn:'border-amber-200 bg-amber-50 text-amber-700' };
@@ -162,11 +193,18 @@ function bootManagementMode() {
   }
   function updateCreateButtonVisibility() {
     if (!els.newBtn) return;
-    els.newBtn.classList.toggle('hidden', !linkedUid || !!currentRecruitment);
+    const allowed = canOpenRecruitment();
+    els.newBtn.classList.toggle('hidden', !allowed || !linkedUid || !!currentRecruitment);
+    els.newBtn.disabled = !allowed;
   }
   function closeModal(){ els.modal?.classList.add('hidden'); }
   function openModal(mode='create') {
     if (!els.form || !els.modal) return;
+    if (!canOpenRecruitment()) {
+      setStatus('O recrutamento está disponível apenas para os planos Pro ou Business.','warn');
+      showToast('error', 'Libere o plano Pro ou Business para criar recrutamento.');
+      return;
+    }
     els.form.reset();
     if (els.descCount) els.descCount.textContent = '0/100';
     if (els.modalTitle) els.modalTitle.textContent = mode === 'edit' ? 'Editar recrutamento' : 'Novo recrutamento';
@@ -217,6 +255,9 @@ function bootManagementMode() {
   async function acceptRequest(item) {
     const guildId = ctxGuildId() || String(linkedUid || '').trim();
     if (!guildId || !item?.id) throw new Error('Guilda ou pedido inválido.');
+    const requestPlayMode = Array.isArray(item.roles)
+      ? item.roles.map(v => String(v || '').trim()).filter(Boolean)
+      : [];
     const payload = {
       visibleId: String(item.id || '').trim(),
       nick: String(item.nick || item.nickname || item.name || item.nome || '').trim() || 'Sem nick',
@@ -226,8 +267,9 @@ function bootManagementMode() {
       weeklyMeta: false,
       weeklyMetaValue: 0,
       hasTag: false,
-      mode: Array.isArray(item.roles) ? item.roles : [],
-      role: Array.isArray(item.roles) ? (item.roles[0] || '') : '',
+      playMode: requestPlayMode,
+      mode: requestPlayMode,
+      role: requestPlayMode[0] || '',
       status: 'ativo',
       source: 'recrutamento',
       createdAt: serverTimestamp(),
@@ -303,6 +345,11 @@ function bootManagementMode() {
     renderRequests();
   }
   async function resolveKeyAndLoad(forceMessage=true) {
+    if (!canOpenRecruitment()) {
+      setStatus('O recrutamento está disponível apenas para os planos Pro ou Business.','warn');
+      showToast('error', 'Libere o plano Pro ou Business para usar o recrutamento.');
+      return;
+    }
     const key = String(els.keyInput?.value || '').trim();
     if (!key) { setStatus('Digite a chave da guilda para continuar.','warn'); return; }
     const guildId = ctxGuildId();
@@ -341,6 +388,7 @@ function bootManagementMode() {
   }
   async function saveRecruitment(event) {
     event.preventDefault();
+    if (!canOpenRecruitment()) { showToast('error','Apenas Pro ou Business podem salvar recrutamento.'); return; }
     if (!linkedUid) { showToast('error','Abra uma chave antes de salvar.'); return; }
     const guildName = String(els.guildName?.value || '').trim();
     const roles = getCheckedValues('roles');
@@ -414,6 +462,10 @@ function bootManagementMode() {
     if (els.currentUid) els.currentUid.textContent = String(ctx.guildId || '-');
     if (els.currentGuildName) els.currentGuildName.textContent = String(ctx.guildName || '-');
     if (els.openedKey) els.openedKey.textContent = 'Nenhuma';
+    const vipAllowed = applyRecruitmentVipGate();
+    if (!vipAllowed) {
+      setStatus('Seu plano atual não libera o recrutamento. Para abrir essa área, use Pro ou Business.','warn');
+    }
     resetPhotoState(); renderRecruitment(); initIcons();
   })();
 }
