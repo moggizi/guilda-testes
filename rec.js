@@ -501,22 +501,22 @@ function bootMarketplaceMode() {
     if (!staticModalIsComplete && !dynamicModal) {
       const wrap = document.createElement('div');
       wrap.innerHTML = `
-        <div id="request-modal-dynamic" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/60 px-4 py-6">
-          <div class="w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
-            <div class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
-              <div>
-                <h3 class="text-lg font-black text-slate-900">Enviar pedido</h3>
-                <p id="request-helper-dynamic" class="mt-1 text-sm text-slate-500">Preencha seus dados para enviar a solicitação.</p>
+        <div id="request-modal-dynamic" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/60 px-4 py-5">
+          <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div class="min-w-0">
+                <p class="text-[11px] font-extrabold uppercase tracking-[0.14em] text-emerald-600">Pedido de recrutamento</p>
+                <h3 class="mt-1 text-lg font-black text-slate-900">Enviar pedido</h3>
+                <div id="request-modal-guild-dynamic" class="mt-2 inline-flex max-w-full items-center rounded-full bg-slate-100 px-3 py-1.5 text-sm font-bold text-slate-700">
+                  <span class="truncate">-</span>
+                </div>
+                <p id="request-helper-dynamic" class="mt-2 text-xs text-slate-500">Preencha seus dados para enviar a solicitação.</p>
               </div>
-              <button type="button" data-close-marketplace-request class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50">
-                <i data-lucide="x" class="h-5 w-5"></i>
+              <button type="button" data-close-marketplace-request class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50">
+                <i data-lucide="x" class="h-4 w-4"></i>
               </button>
             </div>
-            <form id="request-form-dynamic" class="space-y-4 px-5 py-5">
-              <div>
-                <label class="mb-2 block text-sm font-bold text-slate-700">Guilda</label>
-                <div id="request-modal-guild-dynamic" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">-</div>
-              </div>
+            <form id="request-form-dynamic" class="space-y-3.5 px-5 py-4">
               <div class="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label for="applicant-id-dynamic" class="mb-2 block text-sm font-bold text-slate-700">ID</label>
@@ -533,7 +533,7 @@ function bootMarketplaceMode() {
               </div>
               <div>
                 <p class="mb-2 block text-sm font-bold text-slate-700">Modo de jogo</p>
-                <div id="request-modes-dynamic" class="grid gap-2 sm:grid-cols-2"></div>
+                <div id="request-modes-dynamic" class="grid grid-cols-2 gap-2"></div>
               </div>
               <div class="flex items-center justify-end gap-3 pt-2">
                 <button type="button" data-close-marketplace-request class="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
@@ -592,7 +592,7 @@ function bootMarketplaceMode() {
       const block = document.createElement('div');
       block.innerHTML = `
         <p class="mb-2 block text-sm font-bold text-slate-700">Modo de jogo</p>
-        <div id="request-modes-dynamic" class="grid gap-2 sm:grid-cols-2"></div>
+        <div id="request-modes-dynamic" class="grid grid-cols-2 gap-2"></div>
       `;
       const actions = els.form.querySelector('.flex.items-center.justify-end.gap-3.pt-2');
       if (actions) els.form.insertBefore(block, actions);
@@ -602,7 +602,7 @@ function bootMarketplaceMode() {
     if (!wrap) return;
     const roles = Array.isArray(item?.roles) ? item.roles.filter(Boolean) : [];
     wrap.innerHTML = roles.length ? roles.map((role, idx) => `
-      <label class="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
+      <label class="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer min-w-0">
         <input type="checkbox" name="marketplace-roles" value="${escapeHtml(role)}" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" ${idx === 0 ? 'checked' : ''}>
         <span>${escapeHtml(role)}</span>
       </label>`).join('') : '<div class="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-400">Esse recrutamento não informou modos de jogo.</div>';
