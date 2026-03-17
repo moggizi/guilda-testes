@@ -92,7 +92,7 @@
 
             <div class="mt-5 grid sm:grid-cols-3 gap-3">
               <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <p class="text-[11px] text-gray-500 font-semibold">Seu UID</p>
+                <p class="text-[11px] text-gray-500 font-semibold">UID da guilda</p>
                 <p id="current-uid" class="mt-1 text-sm font-bold text-gray-900 break-all">-</p>
               </div>
               <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
@@ -233,6 +233,44 @@
           <button type="submit" class="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg hover:shadow-xl">Salvar</button>
         </div>
       </form>
+    </div>
+  </div>
+
+
+  <div id="request-detail-modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/40" data-close-request-detail></div>
+    <div class="relative bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto overscroll-contain animate-in" style="padding-bottom: env(safe-area-inset-bottom);">
+      <div class="flex items-center justify-between p-5 border-b border-gray-100 bg-white rounded-t-2xl sticky top-0">
+        <div>
+          <h3 id="request-detail-name" class="text-lg font-bold text-gray-900">Pedido</h3>
+          <p class="text-xs text-gray-500 mt-1">ID: <span id="request-detail-id">-</span></p>
+        </div>
+        <button type="button" data-close-request-detail class="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <p class="text-xs font-semibold text-gray-500 mb-1">Status</p>
+            <span id="request-detail-status" class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-extrabold bg-amber-50 text-amber-700 ring-amber-200">PENDENTE</span>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-gray-500 mb-1">Data do pedido</p>
+            <p id="request-detail-date" class="text-sm font-semibold text-gray-900">-</p>
+          </div>
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-gray-500 mb-2">Modo de jogo</p>
+          <div id="request-detail-modes" class="flex flex-wrap gap-2"></div>
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-gray-500 mb-2">WhatsApp</p>
+          <div id="request-detail-whatsapp" class="text-sm text-gray-700 break-all">-</div>
+        </div>
+        <div class="grid grid-cols-2 gap-3 pt-2">
+          <button id="btn-request-reject" type="button" class="py-2.5 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-600 hover:bg-red-100">Recusar</button>
+          <button id="btn-request-accept" type="button" class="py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-sm font-medium text-white shadow-lg hover:shadow-xl">Aceitar</button>
+        </div>
+      </div>
     </div>
   </div>
 
