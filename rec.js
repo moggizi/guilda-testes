@@ -118,7 +118,7 @@ async function compressImageToBase64(file, maxBytes = 800 * 1024) {
 
 function bootManagementMode() {
   const els = {
-    loadBtn: qs('btn-load-recruitment'), reloadBtn: qs('btn-reload'), newBtn: qs('btn-new-rec'),
+    loadBtn: qs('btn-load-recruitment'), reloadBtn: qs('btn-reload'), newBtn: qs('btn-new-rec'), copyBtn: qs('btn-copy-rec-link'),
     keyInput: qs('guild-access-key-input'), keyStatus: qs('key-status'), currentUid: qs('current-uid'),
     currentGuildName: qs('current-guild-name'), openedKey: qs('opened-key'), view: qs('recruitment-view'),
     modal: qs('rec-modal'), modalTitle: qs('rec-modal-title'), form: qs('rec-form'), guildName: qs('rec-guild-name'),
@@ -196,6 +196,40 @@ function bootManagementMode() {
     const allowed = canOpenRecruitment();
     els.newBtn.classList.toggle('hidden', !allowed || !linkedUid || !!currentRecruitment);
     els.newBtn.disabled = !allowed;
+    updateCopyLinkVisibility();
+  }
+  function getRecruitmentShareLink() {
+    const uid = String(currentRecruitment?.id || linkedUid || '').trim();
+    if (!uid) return '';
+    return `https://guildahub.online/eventos?q=${encodeURIComponent(uid)}`;
+  }
+  function updateCopyLinkVisibility() {
+    if (!els.copyBtn) return;
+    const hasRecruitment = !!String(currentRecruitment?.id || linkedUid || '').trim() && !!currentRecruitment;
+    els.copyBtn.classList.toggle('hidden', !hasRecruitment);
+  }
+  async function copyRecruitmentLink() {
+    const link = getRecruitmentShareLink();
+    if (!link) {
+      showToast('error', 'Abra ou crie um recrutamento antes de copiar o link.');
+      return;
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const input = document.createElement('input');
+        input.value = link;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+      }
+      showToast('success', 'Link do recrutamento copiado!');
+    } catch (err) {
+      console.error(err);
+      showToast('error', 'Não foi possível copiar o link.');
+    }
   }
   function closeModal(){ els.modal?.classList.add('hidden'); }
   function openModal(mode='create') {
@@ -430,6 +464,7 @@ function bootManagementMode() {
     document.querySelectorAll('[data-close-rec]').forEach(el => el.addEventListener('click', closeModal));
     document.querySelectorAll('[data-close-request-detail]').forEach(el => el.addEventListener('click', closeRequestModal));
     els.newBtn?.addEventListener('click', () => openModal('create'));
+    els.copyBtn?.addEventListener('click', copyRecruitmentLink);
     els.loadBtn?.addEventListener('click', () => resolveKeyAndLoad(true));
     els.reloadBtn?.addEventListener('click', () => resolveKeyAndLoad(false));
     els.form?.addEventListener('submit', saveRecruitment);
@@ -471,7 +506,7 @@ function bootManagementMode() {
     if (!vipAllowed) {
       setStatus('Seu plano atual não libera o recrutamento. Para abrir essa área, use Pro ou Business.','warn');
     }
-    resetPhotoState(); renderRecruitment(); initIcons();
+    resetPhotoState(); renderRecruitment(); updateCopyLinkVisibility(); initIcons();
   })();
 }
 
