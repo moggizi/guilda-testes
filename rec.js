@@ -9,8 +9,7 @@ import {
   collection,
   getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, auth } from './logic.js';
+import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, auth, db } from './logic.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA6CETOXLO6yp4Gm1JY7fwiWlWo0pKqzqw",
@@ -22,45 +21,32 @@ const firebaseConfig = {
   measurementId: "G-N182HK85CQ"
 };
 
-const secondaryName = `hub_recruta_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-const secondaryApp = initializeApp(firebaseConfig, secondaryName);
+const secondaryApp = initializeApp(firebaseConfig, `hub_recruta_${Date.now()}_${Math.random().toString(36).slice(2,8)}`);
 const recDb = getFirestore(secondaryApp);
-
 setupSidebar();
 initIcons();
 
-function qs(id) { return document.getElementById(id); }
-function normalizeTimestamp(value) {
+const qs = (id) => document.getElementById(id);
+const normalizeTimestamp = (value) => {
   if (!value) return null;
   if (value instanceof Date) return value;
   if (typeof value?.toDate === 'function') return value.toDate();
   if (typeof value?.seconds === 'number') return new Date(value.seconds * 1000);
   const dt = new Date(value);
   return Number.isNaN(dt.getTime()) ? null : dt;
-}
-function formatDateBR(value) {
-  try {
-    const d = normalizeTimestamp(value) || new Date(value);
-    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '-';
-    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  } catch (_) { return '-'; }
-}
-function escapeHtml(str) {
-  return String(str ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-function getCheckedValues(name) {
-  return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(el => el.value);
-}
-function setCheckedValues(name, values = []) {
+};
+const formatDateBR = (value) => {
+  const d = normalizeTimestamp(value) || new Date(value || Date.now());
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+};
+const escapeHtml = (str) => String(str ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
+const getCheckedValues = (name) => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(el => el.value);
+const setCheckedValues = (name, values=[]) => {
   const wanted = new Set(values || []);
   document.querySelectorAll(`input[name="${name}"]`).forEach(el => { el.checked = wanted.has(el.value); });
-}
-function tagChip(text, style = 'default') {
+};
+function tagChip(text, style='default') {
   const styles = {
     role: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
     contact: 'bg-gray-100 text-gray-700 ring-gray-200',
@@ -70,9 +56,17 @@ function tagChip(text, style = 'default') {
   };
   return `<span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-bold ${styles[style] || styles.default}">${escapeHtml(text)}</span>`;
 }
+const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
+const formatWhatsappHref = (v) => normalizeDigits(v) ? `https://wa.me/${normalizeDigits(v)}` : '';
+const formatWhatsappLabel = (v) => normalizeDigits(v) || '-';
+function getRequestStatusMeta(status) {
+  const s = String(status || 'pendente').toLowerCase();
+  if (s === 'accepted' || s === 'aceito') return { label: 'ACEITO', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' };
+  if (s === 'rejected' || s === 'recusado') return { label: 'RECUSADO', className: 'bg-red-50 text-red-700 ring-red-200' };
+  return { label: 'PENDENTE', className: 'bg-amber-50 text-amber-700 ring-amber-200' };
+}
 
-// ========= shared image helpers for management =========
-function dataUrlSizeBytes(dataUrl = '') {
+function dataUrlSizeBytes(dataUrl='') {
   if (!dataUrl || !dataUrl.includes(',')) return 0;
   const base64 = dataUrl.split(',')[1] || '';
   const padding = (base64.match(/=*$/)?.[0]?.length) || 0;
@@ -102,14 +96,13 @@ async function compressImageToBase64(file, maxBytes = 800 * 1024) {
     height = Math.max(1, Math.round(height * scale));
   }
   const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d', { alpha: false });
+  const ctx = canvas.getContext('2d', { alpha:false });
   if (!ctx) throw new Error('Canvas indisponível.');
-
   let quality = 0.88, output = '', attempts = 0, currentWidth = width, currentHeight = height;
   while (attempts < 12) {
     canvas.width = currentWidth; canvas.height = currentHeight;
-    ctx.clearRect(0, 0, currentWidth, currentHeight);
-    ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
+    ctx.clearRect(0,0,currentWidth,currentHeight);
+    ctx.drawImage(img,0,0,currentWidth,currentHeight);
     output = canvas.toDataURL('image/jpeg', quality);
     const size = dataUrlSizeBytes(output);
     if (size <= maxBytes) return { base64: output, bytes: size };
@@ -120,12 +113,9 @@ async function compressImageToBase64(file, maxBytes = 800 * 1024) {
     }
     attempts += 1;
   }
-  const finalSize = dataUrlSizeBytes(output);
-  if (finalSize > maxBytes) throw new Error('Não foi possível comprimir a imagem abaixo de 800 KB.');
-  return { base64: output, bytes: finalSize };
+  throw new Error('Não foi possível comprimir a imagem abaixo de 800 KB.');
 }
 
-// ========= management mode (camp.html) =========
 function bootManagementMode() {
   const els = {
     loadBtn: qs('btn-load-recruitment'), reloadBtn: qs('btn-reload'), newBtn: qs('btn-new-rec'),
@@ -134,15 +124,49 @@ function bootManagementMode() {
     modal: qs('rec-modal'), modalTitle: qs('rec-modal-title'), form: qs('rec-form'), guildName: qs('rec-guild-name'),
     desc: qs('rec-description'), descCount: qs('rec-desc-count'), photoInput: qs('rec-photo'),
     photoPreviewWrap: qs('rec-photo-preview-wrap'), photoPreview: qs('rec-photo-preview'), photoStatus: qs('rec-photo-status'),
-    requestsSection: qs('requests-section'), requestsView: qs('requests-view'), requestsBadge: qs('requests-badge')
+    requestsSection: qs('requests-section'), requestsView: qs('requests-view'), requestsBadge: qs('requests-badge'),
+    requestModal: qs('request-detail-modal'), requestModalName: qs('request-detail-name'), requestModalId: qs('request-detail-id'),
+    requestModalStatus: qs('request-detail-status'), requestModalDate: qs('request-detail-date'), requestModalModes: qs('request-detail-modes'),
+    requestModalWhatsapp: qs('request-detail-whatsapp'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject')
   };
+  let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [], activeRequest = null;
 
-  let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [];
+  const ctxGuildId = () => String(getGuildContext()?.guildId || '').trim();
+  const ctxGuildName = () => String(getGuildContext()?.guildName || '').trim();
+  const getNormalizedVipTier = () => {
+    const raw = String(getGuildContext()?.vipTier || 'free').toLowerCase().trim();
+    if (!raw) return 'free';
+    if (raw.includes('business') || raw.includes('buss')) return 'business';
+    if (raw.includes('pro')) return 'pro';
+    if (raw.includes('plus')) return 'plus';
+    return 'free';
+  };
+  const canOpenRecruitment = () => {
+    const tier = getNormalizedVipTier();
+    return tier === 'pro' || tier === 'business';
+  };
+  function applyRecruitmentVipGate() {
+    const allowed = canOpenRecruitment();
+    const disabledText = 'O recrutamento está disponível apenas para os planos Pro ou Business.';
+    [els.loadBtn, els.reloadBtn, els.newBtn].forEach((btn) => {
+      if (!btn) return;
+      btn.disabled = !allowed;
+      btn.classList.toggle('opacity-50', !allowed);
+      btn.classList.toggle('cursor-not-allowed', !allowed);
+      if (!allowed) btn.setAttribute('title', disabledText);
+      else btn.removeAttribute('title');
+    });
+    if (els.keyInput) {
+      els.keyInput.disabled = !allowed;
+      els.keyInput.classList.toggle('opacity-60', !allowed);
+      if (!allowed) els.keyInput.setAttribute('title', disabledText);
+      else els.keyInput.removeAttribute('title');
+    }
+    return allowed;
+  }
 
-  function setStatus(message, type = 'info') {
-    const map = {
-      info: 'hidden', success: 'border-emerald-200 bg-emerald-50 text-emerald-700', error: 'border-red-200 bg-red-50 text-red-700', warn: 'border-amber-200 bg-amber-50 text-amber-700'
-    };
+  function setStatus(message, type='info') {
+    const map = { info:'hidden', success:'border-emerald-200 bg-emerald-50 text-emerald-700', error:'border-red-200 bg-red-50 text-red-700', warn:'border-amber-200 bg-amber-50 text-amber-700' };
     if (!els.keyStatus) return;
     if (!message) {
       els.keyStatus.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
@@ -159,52 +183,103 @@ function bootManagementMode() {
     if (els.photoPreviewWrap) els.photoPreviewWrap.classList.add('hidden');
     if (els.photoStatus) els.photoStatus.textContent = 'Nenhuma foto selecionada.';
   }
-  function setPhotoPreview(base64 = '', bytes = 0) {
+  function setPhotoPreview(base64='', bytes=0) {
     currentPhotoBase64 = base64 || ''; currentPhotoBytes = Number(bytes) || 0;
-    if (currentPhotoBase64) {
+    if (currentPhotoBase64 && els.photoPreview && els.photoPreviewWrap) {
       els.photoPreview.src = currentPhotoBase64;
       els.photoPreviewWrap.classList.remove('hidden');
-      const kb = Math.max(1, Math.round(currentPhotoBytes / 1024));
-      els.photoStatus.textContent = `Foto pronta para salvar (${kb} KB).`;
+      if (els.photoStatus) els.photoStatus.textContent = `Foto pronta para salvar (${Math.max(1, Math.round(currentPhotoBytes/1024))} KB).`;
     } else resetPhotoState();
   }
-  function openModal(mode = 'create') {
-    if (!els.form) return;
+  function updateCreateButtonVisibility() {
+    if (!els.newBtn) return;
+    const allowed = canOpenRecruitment();
+    els.newBtn.classList.toggle('hidden', !allowed || !linkedUid || !!currentRecruitment);
+    els.newBtn.disabled = !allowed;
+  }
+  function closeModal(){ els.modal?.classList.add('hidden'); }
+  function openModal(mode='create') {
+    if (!els.form || !els.modal) return;
+    if (!canOpenRecruitment()) {
+      setStatus('O recrutamento está disponível apenas para os planos Pro ou Business.','warn');
+      showToast('error', 'Libere o plano Pro ou Business para criar recrutamento.');
+      return;
+    }
     els.form.reset();
-    els.descCount.textContent = '0/100';
-    els.modalTitle.textContent = mode === 'edit' ? 'Editar recrutamento' : 'Novo recrutamento';
-    const ctx = getGuildContext() || {};
-    els.guildName.value = currentRecruitment?.guildName || ctx.guildName || '';
+    if (els.descCount) els.descCount.textContent = '0/100';
+    if (els.modalTitle) els.modalTitle.textContent = mode === 'edit' ? 'Editar recrutamento' : 'Novo recrutamento';
+    if (els.guildName) els.guildName.value = currentRecruitment?.guildName || ctxGuildName() || '';
     resetPhotoState();
     if (mode === 'edit' && currentRecruitment) {
-      els.guildName.value = currentRecruitment.guildName || ctx.guildName || '';
       setCheckedValues('roles', currentRecruitment.roles || []);
       setCheckedValues('contacts', currentRecruitment.contacts || []);
       setCheckedValues('guildType', currentRecruitment.guildType || []);
       setCheckedValues('focus', currentRecruitment.focus || []);
-      els.desc.value = currentRecruitment.description || '';
-      els.descCount.textContent = `${els.desc.value.length}/100`;
+      if (els.desc) {
+        els.desc.value = currentRecruitment.description || '';
+        if (els.descCount) els.descCount.textContent = `${els.desc.value.length}/100`;
+      }
       if (currentRecruitment.photoBase64) setPhotoPreview(currentRecruitment.photoBase64, currentRecruitment.photoBytes || dataUrlSizeBytes(currentRecruitment.photoBase64));
-    } else {
-      setCheckedValues('roles', []); setCheckedValues('contacts', []); setCheckedValues('guildType', []); setCheckedValues('focus', []);
     }
-    els.modal?.classList.remove('hidden'); initIcons();
+    els.modal.classList.remove('hidden');
+    initIcons();
   }
-  function closeModal() { els.modal.classList.add('hidden'); }
-  function updateCreateButtonVisibility() {
-    if (!els.newBtn) return;
-    if (!linkedUid || currentRecruitment) els.newBtn.classList.add('hidden');
-    else els.newBtn.classList.remove('hidden');
+  function closeRequestModal() { activeRequest = null; els.requestModal?.classList.add('hidden'); }
+  function openRequestModal(item) {
+    if (!item || !els.requestModal) return;
+    activeRequest = item;
+    const meta = getRequestStatusMeta(item.status || 'pendente');
+    if (els.requestModalName) els.requestModalName.textContent = item.nick || item.nickname || item.name || item.nome || 'Sem nome';
+    if (els.requestModalId) els.requestModalId.textContent = item.id || '-';
+    if (els.requestModalStatus) {
+      els.requestModalStatus.textContent = meta.label;
+      els.requestModalStatus.className = `inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-extrabold ${meta.className}`;
+    }
+    if (els.requestModalDate) els.requestModalDate.textContent = formatDateBR(item.createdAt || item.dateMs || item.date || Date.now());
+    if (els.requestModalModes) {
+      const roles = Array.isArray(item.roles) && item.roles.length ? item.roles.map(v => tagChip(v,'role')).join(' ') : '<span class="text-xs text-gray-400">Modo não informado</span>';
+      els.requestModalModes.innerHTML = roles;
+    }
+    if (els.requestModalWhatsapp) {
+      const href = formatWhatsappHref(item.whatsapp || item.phone || '');
+      const label = formatWhatsappLabel(item.whatsapp || item.phone || '');
+      els.requestModalWhatsapp.innerHTML = href ? `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 font-semibold hover:underline break-all">${escapeHtml(label)}</a>` : '<span class="text-gray-400">Não informado</span>';
+    }
+    els.requestModal.classList.remove('hidden');
+    initIcons();
   }
-  async function updateRequestStatus(requestId, status) {
+  async function removeRequest(requestId) {
     if (!linkedUid || !requestId) return;
-    try {
-      await setDoc(doc(recDb, 'rec', linkedUid, 'pedidos', requestId), { status, reviewedAt: serverTimestamp(), reviewedBy: auth.currentUser?.uid || linkedUid }, { merge: true });
-      await loadRequests();
-      showToast('success', status === 'accepted' ? 'Pedido aceito!' : 'Pedido recusado!');
-    } catch (err) {
-      console.error(err); showToast('error', 'Não foi possível atualizar o pedido.');
-    }
+    await deleteDoc(doc(recDb, 'rec', linkedUid, 'pedidos', requestId));
+  }
+  async function acceptRequest(item) {
+    const guildId = ctxGuildId() || String(linkedUid || '').trim();
+    if (!guildId || !item?.id) throw new Error('Guilda ou pedido inválido.');
+    const requestPlayMode = Array.isArray(item.roles)
+      ? item.roles.map(v => String(v || '').trim()).filter(Boolean)
+      : [];
+    const payload = {
+      visibleId: String(item.id || '').trim(),
+      nick: String(item.nick || item.nickname || item.name || item.nome || '').trim() || 'Sem nick',
+      whatsapp: String(item.whatsapp || item.phone || '').trim(),
+      guildWar: false,
+      guildWarMeta: 0,
+      weeklyMeta: false,
+      weeklyMetaValue: 0,
+      hasTag: false,
+      playMode: requestPlayMode,
+      mode: requestPlayMode,
+      role: requestPlayMode[0] || '',
+      status: 'ativo',
+      source: 'recrutamento',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+    await setDoc(doc(db, 'guildas', guildId, 'membros', String(item.id)), payload, { merge: true });
+    await removeRequest(String(item.id));
+  }
+  async function rejectRequest(item) {
+    await removeRequest(String(item?.id || ''));
   }
   function renderRequests() {
     if (!els.requestsSection || !els.requestsView || !els.requestsBadge) return;
@@ -222,78 +297,38 @@ function bootManagementMode() {
     }
     els.requestsView.innerHTML = currentRequests.map((pedido) => {
       const name = pedido.nick || pedido.nickname || pedido.name || pedido.nome || 'Sem nome';
-      const roles = Array.isArray(pedido.roles) && pedido.roles.length ? pedido.roles.map(v => tagChip(v, 'role')).join(' ') : '<span class="text-xs text-gray-400">Modo não informado</span>';
-      const status = (pedido.status || 'pendente').toString();
-      const statusClass = status === 'accepted' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : status === 'rejected' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-amber-50 text-amber-700 ring-amber-200';
-      const contact = pedido.whatsapp || pedido.phone || pedido.discord || pedido.contact || '';
-      return `
-        <div class="rounded-2xl border border-gray-200 p-4">
-          <div class="flex flex-col gap-4">
-            <div class="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <h5 class="text-base font-bold text-gray-900 break-words">${escapeHtml(name)}</h5>
-                <p class="text-xs text-gray-500 mt-1">ID: ${escapeHtml(pedido.id || '-')} • Enviado em ${escapeHtml(formatDateBR(pedido.createdAt || pedido.dateMs || pedido.date || Date.now()))}</p>
-              </div>
-              <span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-extrabold ${statusClass}">${status === 'accepted' ? 'ACEITO' : status === 'rejected' ? 'RECUSADO' : 'PENDENTE'}</span>
-            </div>
-            <div><p class="text-xs font-semibold text-gray-500 mb-2">Modo de jogo</p><div class="flex flex-wrap gap-2">${roles}</div></div>
-            ${contact ? `<p class="text-sm text-gray-600 break-all"><b>WhatsApp:</b> ${escapeHtml(contact)}</p>` : ''}
-            <div class="mt-1 flex gap-2 flex-wrap">
-              <button data-request-action="accepted" data-request-id="${escapeHtml(pedido.id || '')}" class="px-3 py-2 rounded-xl text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 ${status === 'accepted' ? 'opacity-60' : ''}">Aceitar pedido</button>
-              <button data-request-action="rejected" data-request-id="${escapeHtml(pedido.id || '')}" class="px-3 py-2 rounded-xl text-sm font-medium bg-red-50 text-red-600 hover:bg-red-100 ${status === 'rejected' ? 'opacity-60' : ''}">Recusar</button>
-            </div>
+      const meta = getRequestStatusMeta(pedido.status || 'pendente');
+      return `<button type="button" data-open-request="${escapeHtml(pedido.id || '')}" class="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left hover:border-emerald-200 hover:bg-emerald-50/30 transition">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h5 class="text-sm font-bold text-gray-900 break-words">${escapeHtml(name)}</h5>
+            <p class="mt-1 text-xs text-gray-500">ID: ${escapeHtml(pedido.id || '-')}</p>
           </div>
-        </div>`;
+          <span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-extrabold ${meta.className}">${meta.label}</span>
+        </div>
+      </button>`;
     }).join('');
-    document.querySelectorAll('[data-request-action]').forEach((btn) => btn.addEventListener('click', async () => updateRequestStatus(btn.getAttribute('data-request-id') || '', btn.getAttribute('data-request-action') || 'accepted')));
+    document.querySelectorAll('[data-open-request]').forEach((btn) => btn.addEventListener('click', () => {
+      const item = currentRequests.find(x => String(x.id) === String(btn.getAttribute('data-open-request') || ''));
+      if (item) openRequestModal(item);
+    }));
   }
   function renderRecruitment() {
     if (!linkedUid) {
-      els.view.innerHTML = `<div class="bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center"><p class="text-gray-500 font-medium">Abra uma chave da guilda para visualizar seu recrutamento.</p></div>`;
+      if (els.view) els.view.innerHTML = '<div class="bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center"><p class="text-gray-500 font-medium">Abra uma chave da guilda para visualizar seu recrutamento.</p></div>';
       updateCreateButtonVisibility(); renderRequests(); initIcons(); return;
     }
     if (!currentRecruitment) {
-      els.view.innerHTML = `
-        <div class="bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center">
-          <div class="w-14 h-14 rounded-2xl bg-gray-50 text-gray-500 flex items-center justify-center mx-auto mb-3"><i data-lucide="search-x" class="w-7 h-7"></i></div>
-          <p class="text-gray-800 font-semibold">Nenhum recrutamento publicado ainda</p>
-          <p class="text-gray-500 text-sm mt-1">Essa chave ainda não tem um anúncio ativo. Toque em <b>Criar recrutamento</b> para publicar o primeiro.</p>
-        </div>`;
+      if (els.view) els.view.innerHTML = '<div class="bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center"><div class="w-14 h-14 rounded-2xl bg-gray-50 text-gray-500 flex items-center justify-center mx-auto mb-3"><i data-lucide="search-x" class="w-7 h-7"></i></div><p class="text-gray-800 font-semibold">Nenhum recrutamento publicado ainda</p><p class="text-gray-500 text-sm mt-1">Essa chave ainda não tem um anúncio ativo. Toque em <b>Criar recrutamento</b> para publicar o primeiro.</p></div>';
       updateCreateButtonVisibility(); renderRequests(); initIcons(); return;
     }
-    const data = currentRecruitment;
-    const roles = Array.isArray(data.roles) && data.roles.length ? data.roles.map(v => tagChip(v, 'role')).join(' ') : '<span class="text-sm text-gray-400">Nenhuma</span>';
-    const contacts = Array.isArray(data.contacts) && data.contacts.length ? data.contacts.map(v => tagChip(v, 'contact')).join(' ') : '<span class="text-sm text-gray-400">Nenhuma</span>';
-    const guildTypes = Array.isArray(data.guildType) && data.guildType.length ? data.guildType.map(v => tagChip(v, 'type')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
-    const focuses = Array.isArray(data.focus) && data.focus.length ? data.focus.map(v => tagChip(v, 'focus')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
-    const photo = data.photoBase64 ? `<img src="${data.photoBase64}" alt="Foto do recrutamento" class="w-full h-64 object-cover rounded-2xl border border-gray-200 bg-gray-50">` : '';
-    els.view.innerHTML = `
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div class="p-5 border-b border-gray-100 flex items-start justify-between gap-4">
-          <div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <h4 class="text-xl font-bold text-gray-900">${escapeHtml(data.guildName || 'Sem nome')}</h4>
-              <span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2.5 py-1 text-[11px] font-extrabold">ATIVO</span>
-            </div>
-            <p class="text-sm text-gray-500 mt-1">Chave usada: <span class="font-semibold break-all">${escapeHtml(openedKey)}</span></p>
-            <p class="text-sm text-gray-500 mt-1">Publicado em: ${escapeHtml(formatDateBR(data.dateMs || data.createdAt || Date.now()))}</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <button id="btn-edit-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100">Editar</button>
-            <button id="btn-delete-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50">Excluir</button>
-          </div>
-        </div>
-        <div class="p-5 space-y-5">
-          ${photo}
-          <div class="grid md:grid-cols-2 gap-5">
-            <div><p class="text-xs font-semibold text-gray-500 mb-2">Funções</p><div class="flex flex-wrap gap-2">${roles}</div></div>
-            <div><p class="text-xs font-semibold text-gray-500 mb-2">Mais opções</p><div class="flex flex-wrap gap-2">${contacts}</div></div>
-            <div><p class="text-xs font-semibold text-gray-500 mb-2">Tipo da guilda</p><div class="flex flex-wrap gap-2">${guildTypes}</div></div>
-            <div><p class="text-xs font-semibold text-gray-500 mb-2">Foco</p><div class="flex flex-wrap gap-2">${focuses}</div></div>
-          </div>
-          <div><p class="text-xs font-semibold text-gray-500 mb-2">Descrição</p><div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700 min-h-[84px] whitespace-pre-wrap">${escapeHtml(data.description || 'Sem descrição.')}</div></div>
-        </div>
-      </div>`;
+    const d = currentRecruitment;
+    const roles = Array.isArray(d.roles) && d.roles.length ? d.roles.map(v => tagChip(v,'role')).join(' ') : '<span class="text-sm text-gray-400">Nenhuma</span>';
+    const contacts = Array.isArray(d.contacts) && d.contacts.length ? d.contacts.map(v => tagChip(v,'contact')).join(' ') : '<span class="text-sm text-gray-400">Nenhuma</span>';
+    const types = Array.isArray(d.guildType) && d.guildType.length ? d.guildType.map(v => tagChip(v,'type')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
+    const focuses = Array.isArray(d.focus) && d.focus.length ? d.focus.map(v => tagChip(v,'focus')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
+    const photo = d.photoBase64 ? `<img src="${d.photoBase64}" alt="Foto do recrutamento" class="w-full h-64 object-cover rounded-2xl border border-gray-200 bg-gray-50">` : '';
+    if (els.view) els.view.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div class="p-5 border-b border-gray-100 flex items-start justify-between gap-4"><div><div class="flex items-center gap-2 flex-wrap"><h4 class="text-xl font-bold text-gray-900">${escapeHtml(d.guildName || 'Sem nome')}</h4><span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2.5 py-1 text-[11px] font-extrabold">ATIVO</span></div><p class="text-sm text-gray-500 mt-1">Chave usada: <span class="font-semibold break-all">${escapeHtml(openedKey)}</span></p><p class="text-sm text-gray-500 mt-1">Publicado em: ${escapeHtml(formatDateBR(d.dateMs || d.createdAt || Date.now()))}</p></div><div class="flex items-center gap-2"><button id="btn-edit-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100">Editar</button><button id="btn-delete-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50">Excluir</button></div></div><div class="p-5 space-y-5">${photo}<div class="grid md:grid-cols-2 gap-5"><div><p class="text-xs font-semibold text-gray-500 mb-2">Funções</p><div class="flex flex-wrap gap-2">${roles}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Mais opções</p><div class="flex flex-wrap gap-2">${contacts}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Foco</p><div class="flex flex-wrap gap-2">${focuses}</div></div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Descrição</p><div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700 min-h-[84px] whitespace-pre-wrap">${escapeHtml(d.description || 'Sem descrição.')}</div></div></div></div>`;
     updateCreateButtonVisibility(); renderRequests();
     qs('btn-edit-rec')?.addEventListener('click', () => openModal('edit'));
     qs('btn-delete-rec')?.addEventListener('click', deleteRecruitment);
@@ -304,316 +339,354 @@ function bootManagementMode() {
     if (!linkedUid || !currentRecruitment) { renderRequests(); return; }
     try {
       const snap = await getDocs(collection(recDb, 'rec', linkedUid, 'pedidos'));
-      currentRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      currentRequests.sort((a, b) => (normalizeTimestamp(b.createdAt || b.dateMs || b.date)?.getTime?.() || 0) - (normalizeTimestamp(a.createdAt || a.dateMs || a.date)?.getTime?.() || 0));
-    } catch (err) { console.error(err); currentRequests = []; }
+      currentRequests = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+      currentRequests.sort((a,b) => (normalizeTimestamp(b.createdAt || b.dateMs || b.date)?.getTime?.() || 0) - (normalizeTimestamp(a.createdAt || a.dateMs || a.date)?.getTime?.() || 0));
+    } catch (err) { console.error(err); }
     renderRequests();
   }
-  async function resolveKeyAndLoad(forceMessage = true) {
-    const key = (els.keyInput.value || '').trim();
-    if (!key) { setStatus('Digite a chave da guilda para continuar.', 'warn'); return; }
-    const currentUid = auth.currentUser?.uid || '';
-    if (!currentUid) { showToast('error', 'Sessão inválida. Faça login novamente.'); return; }
+  async function resolveKeyAndLoad(forceMessage=true) {
+    if (!canOpenRecruitment()) {
+      setStatus('O recrutamento está disponível apenas para os planos Pro ou Business.','warn');
+      showToast('error', 'Libere o plano Pro ou Business para usar o recrutamento.');
+      return;
+    }
+    const key = String(els.keyInput?.value || '').trim();
+    if (!key) { setStatus('Digite a chave da guilda para continuar.','warn'); return; }
+    const guildId = ctxGuildId();
+    if (!guildId) { showToast('error', 'Guilda não encontrada na sessão.'); return; }
     try {
-      els.loadBtn.disabled = true;
+      if (els.loadBtn) els.loadBtn.disabled = true;
       const keyRef = doc(recDb, 'chave', key);
       let keySnap = await getDoc(keyRef);
       if (!keySnap.exists()) {
-        await setDoc(keyRef, { uid: currentUid, createdAt: serverTimestamp() }, { merge: true });
+        await setDoc(keyRef, { uid: guildId, ownerAccountUid: auth.currentUser?.uid || null, guildName: ctxGuildName() || null, createdAt: serverTimestamp() }, { merge:true });
         keySnap = await getDoc(keyRef);
-        setStatus('Essa chave foi vinculada à sua conta e já está pronta para uso.', 'success');
+        setStatus('Essa chave foi vinculada à sua guilda e já está pronta para uso.','success');
       }
       const keyData = keySnap.data() || {};
-      linkedUid = (keyData.uid || '').toString().trim();
+      linkedUid = String(keyData.uid || '').trim();
+      const currentGuildId = guildId;
+      if (currentGuildId && linkedUid !== currentGuildId) {
+        linkedUid = currentGuildId;
+        await setDoc(keyRef, { uid: currentGuildId, guildName: ctxGuildName() || null, updatedAt: serverTimestamp() }, { merge:true });
+      }
       openedKey = key;
       if (els.openedKey) els.openedKey.textContent = key;
-      if (!linkedUid) { currentRecruitment = null; setStatus('Encontramos a chave, mas ela está sem uma conta vinculada.', 'error'); renderRecruitment(); return; }
+      if (!linkedUid) {
+        currentRecruitment = null;
+        setStatus('Encontramos a chave, mas ela está sem uma guilda vinculada.','error');
+        renderRecruitment();
+        return;
+      }
       const recSnap = await getDoc(doc(recDb, 'rec', linkedUid));
       currentRecruitment = recSnap.exists() ? ({ id: recSnap.id, ...recSnap.data() }) : null;
-      if (forceMessage) {
-        if (currentRecruitment) setStatus('Pronto! Seu recrutamento foi encontrado e carregado.', 'success');
-        else setStatus('Tudo certo com a chave. Agora você já pode criar o recrutamento dessa guilda.', 'warn');
-      }
+      if (forceMessage) setStatus(currentRecruitment ? 'Pronto! Seu recrutamento foi encontrado e carregado.' : 'Tudo certo com a chave. Agora você já pode criar o recrutamento dessa guilda.','success');
       renderRecruitment();
       await loadRequests();
     } catch (err) {
-      console.error(err); setStatus('Não foi possível abrir essa chave agora.', 'error'); showToast('error', 'Erro ao carregar recrutamento.');
-    } finally { els.loadBtn.disabled = false; }
+      console.error(err);
+      setStatus('Não foi possível abrir essa chave agora.','error');
+      showToast('error', 'Erro ao carregar recrutamento.');
+    } finally {
+      if (els.loadBtn) els.loadBtn.disabled = false;
+    }
   }
   async function saveRecruitment(event) {
     event.preventDefault();
-    if (!linkedUid) { showToast('error', 'Abra uma chave antes de salvar.'); return; }
-    const guildName = (els.guildName.value || '').trim();
+    if (!canOpenRecruitment()) { showToast('error','Apenas Pro ou Business podem salvar recrutamento.'); return; }
+    if (!linkedUid) { showToast('error','Abra uma chave antes de salvar.'); return; }
+    const guildName = String(els.guildName?.value || '').trim();
     const roles = getCheckedValues('roles');
     const contacts = getCheckedValues('contacts');
     const guildType = getCheckedValues('guildType');
     const focus = getCheckedValues('focus');
-    const description = (els.desc.value || '').trim().slice(0, 100);
-    if (!guildName) { showToast('error', 'O nome da guilda é obrigatório.'); return; }
-    if (!roles.length) { showToast('error', 'Marque pelo menos uma função.'); return; }
-    if (!currentPhotoBase64 && !currentRecruitment?.photoBase64) { showToast('error', 'Envie uma foto para o recrutamento.'); return; }
+    const description = String(els.desc?.value || '').trim().slice(0,100);
+    if (!guildName) { showToast('error','O nome da guilda é obrigatório.'); return; }
+    if (!roles.length) { showToast('error','Marque pelo menos uma função.'); return; }
+    if (!currentPhotoBase64 && !currentRecruitment?.photoBase64) { showToast('error','Envie uma foto para o recrutamento.'); return; }
     try {
       const payload = {
         guildName, dateMs: currentRecruitment?.dateMs || Date.now(), roles, contacts, guildType, focus, description,
-        key: openedKey, ownerUid: linkedUid, photoBase64: currentPhotoBase64 || currentRecruitment?.photoBase64 || '',
+        key: openedKey, ownerUid: ctxGuildId() || linkedUid, photoBase64: currentPhotoBase64 || currentRecruitment?.photoBase64 || '',
         photoBytes: currentPhotoBytes || currentRecruitment?.photoBytes || dataUrlSizeBytes(currentPhotoBase64 || currentRecruitment?.photoBase64 || ''),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(), guildId: linkedUid
       };
       if (!currentRecruitment) payload.createdAt = serverTimestamp();
-      await setDoc(doc(recDb, 'rec', linkedUid), payload, { merge: true });
+      await setDoc(doc(recDb,'rec',linkedUid), payload, { merge:true });
       currentRecruitment = { ...currentRecruitment, ...payload, id: linkedUid };
-      closeModal(); renderRecruitment(); await loadRequests(); setStatus('Seu recrutamento foi salvo com sucesso.', 'success'); showToast('success', 'Recrutamento salvo!');
-    } catch (err) { console.error(err); showToast('error', 'Não foi possível salvar o recrutamento.'); }
+      closeModal(); renderRecruitment(); await loadRequests(); setStatus('Seu recrutamento foi salvo com sucesso.','success'); showToast('success','Recrutamento salvo!');
+    } catch (err) { console.error(err); showToast('error','Não foi possível salvar o recrutamento.'); }
   }
   async function deleteRecruitment() {
     if (!linkedUid || !currentRecruitment) return;
     if (!window.confirm('Excluir este recrutamento?')) return;
     try {
-      await deleteDoc(doc(recDb, 'rec', linkedUid));
-      currentRecruitment = null; currentRequests = []; renderRecruitment(); setStatus('Seu recrutamento foi excluído com sucesso.', 'success'); showToast('success', 'Recrutamento excluído!');
-    } catch (err) { console.error(err); showToast('error', 'Não foi possível excluir o recrutamento.'); }
+      await deleteDoc(doc(recDb,'rec',linkedUid));
+      currentRecruitment = null; currentRequests = [];
+      renderRecruitment(); setStatus('Seu recrutamento foi excluído com sucesso.','success'); showToast('success','Recrutamento excluído!');
+    } catch (err) { console.error(err); showToast('error','Não foi possível excluir o recrutamento.'); }
   }
   function bindEvents() {
     document.querySelectorAll('[data-close-rec]').forEach(el => el.addEventListener('click', closeModal));
+    document.querySelectorAll('[data-close-request-detail]').forEach(el => el.addEventListener('click', closeRequestModal));
     els.newBtn?.addEventListener('click', () => openModal('create'));
     els.loadBtn?.addEventListener('click', () => resolveKeyAndLoad(true));
     els.reloadBtn?.addEventListener('click', () => resolveKeyAndLoad(false));
     els.form?.addEventListener('submit', saveRecruitment);
     qs('btn-logout')?.addEventListener('click', logout);
     els.desc?.addEventListener('input', () => {
-      els.desc.value = els.desc.value.slice(0, 100);
-      els.descCount.textContent = `${els.desc.value.length}/100`;
+      els.desc.value = els.desc.value.slice(0,100);
+      if (els.descCount) els.descCount.textContent = `${els.desc.value.length}/100`;
     });
     els.keyInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); resolveKeyAndLoad(true); } });
     els.photoInput?.addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
       if (!file) { if (!currentRecruitment?.photoBase64) resetPhotoState(); return; }
       try {
-        els.photoStatus.textContent = 'Comprimindo imagem...';
+        if (els.photoStatus) els.photoStatus.textContent = 'Comprimindo imagem...';
         const result = await compressImageToBase64(file, 800 * 1024);
         setPhotoPreview(result.base64, result.bytes);
       } catch (err) { console.error(err); resetPhotoState(); showToast('error', err?.message || 'Não foi possível processar a imagem.'); }
     });
+    els.requestAcceptBtn?.addEventListener('click', async () => {
+      if (!activeRequest) return;
+      try { await acceptRequest(activeRequest); closeRequestModal(); await loadRequests(); showToast('success','Pedido aceito e membro adicionado!'); }
+      catch (err) { console.error(err); showToast('error', err?.message || 'Não foi possível aceitar o pedido.'); }
+    });
+    els.requestRejectBtn?.addEventListener('click', async () => {
+      if (!activeRequest) return;
+      try { await rejectRequest(activeRequest); closeRequestModal(); await loadRequests(); showToast('success','Pedido recusado!'); }
+      catch (err) { console.error(err); showToast('error', err?.message || 'Não foi possível recusar o pedido.'); }
+    });
   }
-
-  (async function boot() {
+  (async function boot(){
     bindEvents();
     const user = await checkAuth(true);
     if (!user) return;
     const ctx = getGuildContext() || {};
-    if (els.currentUid) els.currentUid.textContent = auth.currentUser?.uid || '-';
-    if (els.currentGuildName) els.currentGuildName.textContent = ctx.guildName || '-';
+    if (els.currentUid) els.currentUid.textContent = String(ctx.guildId || '-');
+    if (els.currentGuildName) els.currentGuildName.textContent = String(ctx.guildName || '-');
+    if (els.openedKey) els.openedKey.textContent = 'Nenhuma';
+    const vipAllowed = applyRecruitmentVipGate();
+    if (!vipAllowed) {
+      setStatus('Seu plano atual não libera o recrutamento. Para abrir essa área, use Pro ou Business.','warn');
+    }
     resetPhotoState(); renderRecruitment(); initIcons();
   })();
 }
 
-// ========= marketplace mode (eventos.html) =========
 function bootMarketplaceMode() {
-  function ensureMarketplaceModal() {
-    if (qs('request-form')) return;
-    const wrap = document.createElement('div');
-    wrap.innerHTML = `
-      <div id="request-modal" class="fixed inset-0 z-[120] hidden">
-        <div data-close-request class="absolute inset-0 bg-slate-900/55 backdrop-blur-[1px]"></div>
-        <div class="absolute inset-x-0 bottom-0 mx-auto w-full max-w-lg rounded-t-[28px] bg-white p-5 shadow-2xl sm:inset-0 sm:m-auto sm:h-fit sm:rounded-[28px]">
-          <div class="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <p class="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Enviar pedido</p>
-              <h3 id="request-modal-guild" class="mt-1 text-lg font-black text-slate-900">Guilda</h3>
-              <p id="request-helper" class="mt-1 text-sm text-slate-500">Preencha seus dados para enviar o pedido para essa guilda.</p>
-            </div>
-            <button type="button" data-close-request class="grid h-10 w-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100">
-              <i data-lucide="x" class="h-5 w-5"></i>
-            </button>
-          </div>
-          <form id="request-form" class="space-y-4">
-            <div>
-              <label class="text-xs font-semibold text-slate-500">Seu ID</label>
-              <input id="applicant-id" inputmode="numeric" type="text" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100" placeholder="Somente números">
-            </div>
-            <div>
-              <label class="text-xs font-semibold text-slate-500">Seu nick</label>
-              <input id="applicant-nick" type="text" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100" placeholder="Digite seu nick">
-            </div>
-            <div>
-              <label class="text-xs font-semibold text-slate-500">WhatsApp</label>
-              <input id="applicant-whatsapp" inputmode="numeric" type="text" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100" placeholder="Somente números">
-            </div>
-            <div>
-              <label class="text-xs font-semibold text-slate-500">Modo que joga</label>
-              <div id="applicant-modes-wrap" class="mt-2 flex flex-wrap gap-2"></div>
-            </div>
-            <div class="flex items-center justify-end gap-2 pt-2">
-              <button type="button" data-close-request class="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
-              <button type="submit" class="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800">Enviar</button>
-            </div>
-          </form>
-        </div>
-      </div>`;
-    document.body.appendChild(wrap.firstElementChild);
-  }
-  ensureMarketplaceModal();
+  // preserve the existing shared script behavior for eventos.html pages that use the recruitment marketplace.
   const els = {
     grid: qs('grid'), status: qs('status'), q: qs('q'), filter: qs('filter'), filterBtn: qs('filterBtn'), filterMenu: qs('filterMenu'), filterLabel: qs('filterLabel'),
     modal: qs('request-modal'), modalGuild: qs('request-modal-guild'), helper: qs('request-helper'), form: qs('request-form'),
-    applicantId: qs('applicant-id'), applicantNick: qs('applicant-nick'), applicantWhatsapp: qs('applicant-whatsapp'), modesWrap: qs('applicant-modes-wrap')
+    applicantId: qs('applicant-id'), applicantNick: qs('applicant-nick'), applicantWhatsapp: qs('applicant-whatsapp')
   };
+  if (!els.grid || !els.q || !els.filter) return;
   let allItems = [], activeRecruitment = null;
+  const params = new URLSearchParams(window.location.search);
 
-  function setStatus(msg='') { if (els.status) els.status.textContent = msg; }
-  function openReqModal(item) {
-    activeRecruitment = item;
-    els.form.reset();
-    els.modalGuild.textContent = item.guildName || 'Guilda';
-    els.helper.textContent = 'Preencha seus dados para enviar o pedido para essa guilda.';
-    const modes = Array.isArray(item.roles) && item.roles.length ? item.roles : ['Rush', 'Fuzileiro', 'Full Gás', 'Curandeiro', 'Suporte'];
-    els.modesWrap.innerHTML = modes.map((mode, idx) => `
-      <label class="select-chip">
-        <input type="checkbox" name="applicantRoles" value="${escapeHtml(mode)}">
-        <span><i data-lucide="check-circle" class="h-4 w-4"></i>${escapeHtml(mode)}</span>
-      </label>`).join('');
-    els.modal.classList.remove('hidden');
+  function ensureMarketplaceRequestModal() {
+    if (els.modal && els.form && els.applicantId && els.applicantNick && els.applicantWhatsapp) return;
+    const existing = document.getElementById('request-modal-dynamic');
+    if (!existing) {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `
+        <div id="request-modal-dynamic" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/60 px-4 py-6">
+          <div class="w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div>
+                <h3 class="text-lg font-black text-slate-900">Enviar pedido</h3>
+                <p id="request-helper-dynamic" class="mt-1 text-sm text-slate-500">Preencha seus dados para enviar a solicitação.</p>
+              </div>
+              <button type="button" data-close-marketplace-request class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50">
+                <i data-lucide="x" class="h-5 w-5"></i>
+              </button>
+            </div>
+            <form id="request-form-dynamic" class="space-y-4 px-5 py-5">
+              <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700">Guilda</label>
+                <div id="request-modal-guild-dynamic" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">-</div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label for="applicant-id-dynamic" class="mb-2 block text-sm font-bold text-slate-700">ID</label>
+                  <input id="applicant-id-dynamic" type="text" inputmode="numeric" placeholder="Somente números" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">
+                </div>
+                <div>
+                  <label for="applicant-nick-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Nick</label>
+                  <input id="applicant-nick-dynamic" type="text" placeholder="Seu nick" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">
+                </div>
+              </div>
+              <div>
+                <label for="applicant-whatsapp-dynamic" class="mb-2 block text-sm font-bold text-slate-700">WhatsApp</label>
+                <input id="applicant-whatsapp-dynamic" type="text" inputmode="tel" placeholder="Somente números com DDD" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">
+              </div>
+              <div>
+                <p class="mb-2 block text-sm font-bold text-slate-700">Modo de jogo</p>
+                <div id="request-modes-dynamic" class="grid gap-2 sm:grid-cols-2"></div>
+              </div>
+              <div class="flex items-center justify-end gap-3 pt-2">
+                <button type="button" data-close-marketplace-request class="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
+                <button type="submit" class="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-extrabold text-white hover:bg-slate-800">Enviar pedido</button>
+              </div>
+            </form>
+          </div>
+        </div>`;
+      document.body.appendChild(wrap.firstElementChild);
+    }
+    els.modal = document.getElementById('request-modal') || document.getElementById('request-modal-dynamic');
+    els.modalGuild = document.getElementById('request-modal-guild') || document.getElementById('request-modal-guild-dynamic');
+    els.helper = document.getElementById('request-helper') || document.getElementById('request-helper-dynamic');
+    els.form = document.getElementById('request-form') || document.getElementById('request-form-dynamic');
+    els.applicantId = document.getElementById('applicant-id') || document.getElementById('applicant-id-dynamic');
+    els.applicantNick = document.getElementById('applicant-nick') || document.getElementById('applicant-nick-dynamic');
+    els.applicantWhatsapp = document.getElementById('applicant-whatsapp') || document.getElementById('applicant-whatsapp-dynamic');
+    if (!els.form.dataset.marketplaceBound) {
+      els.form.dataset.marketplaceBound = '1';
+      els.form.addEventListener('submit', submitMarketplaceRequest);
+      document.querySelectorAll('[data-close-marketplace-request]').forEach((btn) => btn.addEventListener('click', closeMarketplaceRequestModal));
+    }
     initIcons();
   }
-  function closeReqModal() { els.modal?.classList.add('hidden'); activeRecruitment = null; }
-  function itemMatchesFilter(item, filterValue) {
-    const v = String(filterValue || 'all').toLowerCase();
-    if (v === 'all') return true;
-    const roles = (item.roles || []).map(x => String(x).toLowerCase());
-    const contacts = (item.contacts || []).map(x => String(x).toLowerCase());
-    const types = (item.guildType || []).map(x => String(x).toLowerCase());
-    const focuses = (item.focus || []).map(x => String(x).toLowerCase());
-    return roles.includes(v) || contacts.includes(v) || types.includes(v) || focuses.includes(v);
+
+  function renderMarketplaceModes(item) {
+    const wrap = document.getElementById('request-modes') || document.getElementById('request-modes-dynamic');
+    if (!wrap) return;
+    const roles = Array.isArray(item?.roles) ? item.roles.filter(Boolean) : [];
+    wrap.innerHTML = roles.length ? roles.map((role, idx) => `
+      <label class="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
+        <input type="checkbox" name="marketplace-roles" value="${escapeHtml(role)}" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" ${idx === 0 ? 'checked' : ''}>
+        <span>${escapeHtml(role)}</span>
+      </label>`).join('') : '<div class="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-400">Esse recrutamento não informou modos de jogo.</div>';
   }
-  function itemMatchesQuery(item, query) {
-    const q = String(query || '').trim().toLowerCase();
+
+  function openMarketplaceRequestModal(item) {
+    ensureMarketplaceRequestModal();
+    if (!els.modal || !els.form) return;
+    els.form.reset();
+    if (els.modalGuild) els.modalGuild.textContent = item?.guildName || 'Guilda';
+    if (els.helper) els.helper.textContent = 'Preencha seus dados para enviar a solicitação para essa guilda.';
+    renderMarketplaceModes(item);
+    els.modal.classList.remove('hidden');
+    els.modal.classList.add('flex');
+    initIcons();
+  }
+
+  function closeMarketplaceRequestModal() {
+    if (!els.modal) return;
+    els.modal.classList.add('hidden');
+    els.modal.classList.remove('flex');
+    activeRecruitment = null;
+  }
+
+  async function submitMarketplaceRequest(event) {
+    event.preventDefault();
+    if (!activeRecruitment?.id) return;
+    const applicantId = normalizeDigits(els.applicantId?.value || '');
+    const applicantNick = String(els.applicantNick?.value || '').trim();
+    const applicantWhatsapp = normalizeDigits(els.applicantWhatsapp?.value || '');
+    const roles = [...document.querySelectorAll('input[name="marketplace-roles"]:checked')].map((el) => String(el.value || '').trim()).filter(Boolean);
+    if (!applicantId) { showToast('error', 'Informe seu ID.'); return; }
+    if (!applicantNick) { showToast('error', 'Informe seu nick.'); return; }
+    if (!applicantWhatsapp) { showToast('error', 'Informe seu WhatsApp.'); return; }
+    if (!roles.length) { showToast('error', 'Selecione pelo menos um modo de jogo.'); return; }
+    try {
+      const reqRef = doc(recDb, 'rec', activeRecruitment.id, 'pedidos', applicantId);
+      const existing = await getDoc(reqRef);
+      if (existing.exists()) { showToast('error', 'Já existe uma solicitação enviada com esse ID.'); return; }
+      await setDoc(reqRef, {
+        id: applicantId,
+        nick: applicantNick,
+        whatsapp: applicantWhatsapp,
+        roles,
+        status: 'pendente',
+        guildId: activeRecruitment.id,
+        guildName: activeRecruitment.guildName || '',
+        createdAt: serverTimestamp()
+      }, { merge: true });
+      closeMarketplaceRequestModal();
+      showToast('success', 'Pedido enviado com sucesso!');
+    } catch (err) {
+      console.error(err);
+      showToast('error', 'Não foi possível enviar o pedido.');
+    }
+  }
+  function setStatus(msg=''){ if (els.status) els.status.textContent = msg; }
+  function itemMatchesFilter(item, value) {
+    if (!value || value === 'all') return true;
+    const test = String(value).toLowerCase();
+    const arrays = [item.guildType || [], item.focus || [], item.roles || [], item.contacts || []].flat().map(v => String(v).toLowerCase());
+    return arrays.includes(test);
+  }
+  function itemMatchesQuery(item, value) {
+    const q = String(value || '').trim().toLowerCase();
     if (!q) return true;
-    const hay = [item.guildName, item.description, ...(item.roles || []), ...(item.contacts || []), ...(item.guildType || []), ...(item.focus || [])].join(' ').toLowerCase();
+    const hay = [item.id, item.guildName, item.description, ...(item.roles || []), ...(item.contacts || []), ...(item.guildType || []), ...(item.focus || [])].join(' ').toLowerCase();
     return hay.includes(q);
+  }
+  function syncUrl(){
+    const sp = new URLSearchParams(window.location.search);
+    const q = String(els.q.value || '').trim();
+    const f = String(els.filter.value || 'all').trim();
+    q ? sp.set('q', q) : sp.delete('q');
+    f && f !== 'all' ? sp.set('filter', f) : sp.delete('filter');
+    const url = `${window.location.pathname}${sp.toString() ? '?' + sp.toString() : ''}`;
+    window.history.replaceState({}, '', url);
   }
   function renderGrid(items) {
     if (!items.length) {
-      els.grid.innerHTML = `<div class="col-span-full rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center text-slate-500">Nenhum recrutamento encontrado com esse filtro.</div>`;
-      initIcons();
+      els.grid.innerHTML = '<div class="col-span-full rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Nenhum recrutamento encontrado.</div>';
       return;
     }
     els.grid.innerHTML = items.map(item => {
-      const photo = item.photoBase64
-        ? `<img src="${item.photoBase64}" alt="Foto da guilda" class="h-20 w-20 shrink-0 rounded-2xl border border-slate-200 object-cover bg-slate-50">`
-        : `<div class="h-20 w-20 shrink-0 rounded-2xl border border-slate-200 bg-gradient-to-br from-emerald-50 to-sky-50"></div>`;
-      const roles = (item.roles || []).map(v => tagChip(v, 'role')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
-      const types = (item.guildType || []).map(v => tagChip(v, 'type')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
-      const focuses = (item.focus || []).map(v => tagChip(v, 'focus')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
-      const contacts = (item.contacts || []).map(v => tagChip(v, 'contact')).join(' ') || '<span class="text-xs text-slate-400">Não informado</span>';
-      return `
-        <article class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div class="flex items-start gap-3">
-            ${photo}
-            <div class="min-w-0 flex-1">
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <h3 class="truncate text-base font-black text-slate-900">${escapeHtml(item.guildName || 'Sem nome')}</h3>
-                  <p class="mt-1 text-xs text-slate-500">Publicado em ${escapeHtml(formatDateBR(item.dateMs || item.createdAt || Date.now()))}</p>
-                </div>
-                <span class="shrink-0 inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 ring-1 ring-emerald-200">ABERTO</span>
-              </div>
-            </div>
-          </div>
-          <div class="mt-4 space-y-3">
-            <div class="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600 min-h-[72px] whitespace-pre-wrap">${escapeHtml(item.description || 'Sem descrição.')}</div>
-            <div class="space-y-3">
-              <div><p class="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Modo de jogo</p><div class="flex flex-wrap gap-2">${roles}</div></div>
-              <div><p class="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Tipo de guilda</p><div class="flex flex-wrap gap-2">${types}</div></div>
-              <div><p class="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Foco de meta</p><div class="flex flex-wrap gap-2">${focuses}</div></div>
-              <div><p class="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Contato</p><div class="flex flex-wrap gap-2">${contacts}</div></div>
-            </div>
-            <button type="button" data-open-request="${escapeHtml(item.id)}" class="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800">
-              <i data-lucide="send" class="h-4 w-4"></i>Enviar pedido
-            </button>
-          </div>
-        </article>`;
+      const photo = item.photoBase64 ? `<img src="${item.photoBase64}" alt="${escapeHtml(item.guildName || 'Guilda')}" class="h-16 w-16 rounded-2xl object-cover border border-slate-200 bg-slate-100">` : '<div class="h-16 w-16 rounded-2xl border border-slate-200 bg-slate-100"></div>';
+      const roles = (item.roles || []).map(v => tagChip(v,'role')).join(' ');
+      const types = (item.guildType || []).map(v => tagChip(v,'type')).join(' ');
+      const focuses = (item.focus || []).map(v => tagChip(v,'focus')).join(' ');
+      const contacts = (item.contacts || []).map(v => tagChip(v,'contact')).join(' ');
+      return `<article class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"><div class="flex items-start gap-3"><div class="shrink-0">${photo}</div><div class="min-w-0 flex-1"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><h3 class="truncate text-base font-black text-slate-900">${escapeHtml(item.guildName || 'Sem nome')}</h3><p class="mt-1 text-xs text-slate-500">${escapeHtml(formatDateBR(item.createdAt || item.updatedAt || item.dateMs || Date.now()))}</p></div><span class="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 ring-1 ring-emerald-200">ABERTO</span></div></div></div><div class="mt-4 space-y-3"><div><p class="mb-2 text-xs font-semibold text-slate-500">Modo de jogo</p><div class="flex flex-wrap gap-2">${roles || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Foco de meta</p><div class="flex flex-wrap gap-2">${focuses || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Contato</p><div class="flex flex-wrap gap-2">${contacts || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><button type="button" data-open-request="${escapeHtml(item.id)}" class="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800"><i data-lucide="send" class="h-4 w-4"></i>Enviar pedido</button></div></article>`;
     }).join('');
-    document.querySelectorAll('[data-open-request]').forEach(btn => btn.addEventListener('click', () => {
-      const item = allItems.find(x => x.id === btn.getAttribute('data-open-request'));
-      if (item) openReqModal(item);
+    document.querySelectorAll('[data-open-request]').forEach(btn => btn.addEventListener('click', async () => {
+      activeRecruitment = allItems.find(x => x.id === btn.getAttribute('data-open-request')) || null;
+      if (!activeRecruitment) return;
+      ensureMarketplaceRequestModal();
+      openMarketplaceRequestModal(activeRecruitment);
     }));
     initIcons();
   }
-  function applyFilters() {
+  function applyFilters(){
     const filtered = allItems.filter(item => itemMatchesFilter(item, els.filter.value) && itemMatchesQuery(item, els.q.value));
+    syncUrl();
     setStatus(`${filtered.length} recrutamento${filtered.length === 1 ? '' : 's'} encontrado${filtered.length === 1 ? '' : 's'}.`);
     renderGrid(filtered);
   }
   async function loadMarketplace() {
     try {
       setStatus('Carregando recrutamentos...');
-      const snap = await getDocs(collection(recDb, 'rec'));
-      allItems = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(item => item && item.guildName);
+      const snap = await getDocs(collection(recDb,'rec'));
+      allItems = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(item => item && item.guildName);
       allItems.sort((a,b) => (normalizeTimestamp(b.createdAt || b.updatedAt || b.dateMs)?.getTime?.() || 0) - (normalizeTimestamp(a.createdAt || a.updatedAt || a.dateMs)?.getTime?.() || 0));
+      els.q.value = params.get('q') || '';
+      els.filter.value = params.get('filter') || 'all';
       applyFilters();
-    } catch (err) {
-      console.error(err);
-      setStatus('Erro ao carregar recrutamentos.');
-      els.grid.innerHTML = `<div class="col-span-full rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">Erro ao carregar recrutamentos.</div>`;
-    }
+    } catch (err) { console.error(err); setStatus('Erro ao carregar recrutamentos.'); }
   }
-  async function submitRequest(event) {
-    event.preventDefault();
-    if (!activeRecruitment?.id) { showToast('error', 'Recrutamento inválido.'); return; }
-    const playerId = String(els.applicantId.value || '').replace(/\D+/g, '');
-    const nick = String(els.applicantNick.value || '').trim();
-    const whatsapp = String(els.applicantWhatsapp.value || '').replace(/\D+/g, '');
-    const roles = [...document.querySelectorAll('input[name="applicantRoles"]:checked')].map(el => el.value);
-    if (!playerId) { showToast('error', 'Informe seu ID.'); return; }
-    if (!nick) { showToast('error', 'Informe seu nick.'); return; }
-    if (!whatsapp) { showToast('error', 'Informe seu WhatsApp.'); return; }
-    if (!roles.length) { showToast('error', 'Selecione pelo menos um modo de jogo.'); return; }
-    try {
-      const requestRef = doc(recDb, 'rec', activeRecruitment.id, 'pedidos', playerId);
-      const existing = await getDoc(requestRef);
-      if (existing.exists()) { showToast('error', 'Já existe um pedido enviado com esse ID.'); return; }
-      await setDoc(requestRef, { id: playerId, nick, whatsapp, roles, status: 'pendente', createdAt: serverTimestamp(), recUid: activeRecruitment.id, guildName: activeRecruitment.guildName || '' }, { merge: true });
-      showToast('success', 'Pedido enviado com sucesso!');
-      closeReqModal();
-    } catch (err) {
-      console.error(err); showToast('error', 'Não foi possível enviar o pedido.');
-    }
-  }
-  function bindFilters() {
-    els.filterBtn?.addEventListener('click', () => els.filterMenu.classList.toggle('hidden'));
-    document.addEventListener('click', (e) => {
-      if (!els.filterMenu || !els.filterBtn) return;
-      if (els.filterMenu.contains(e.target) || els.filterBtn.contains(e.target)) return;
-      els.filterMenu.classList.add('hidden');
-    });
-    els.filterMenu?.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-value]');
-      if (!btn) return;
-      const value = btn.getAttribute('data-value') || 'all';
-      els.filter.value = value;
-      els.filterLabel.textContent = btn.textContent.trim();
-      els.filterMenu.querySelectorAll('[data-value]').forEach(x => x.setAttribute('aria-selected', 'false'));
-      btn.setAttribute('aria-selected', 'true');
-      els.filterMenu.classList.add('hidden');
-      applyFilters();
-      initIcons();
-    });
-    els.q?.addEventListener('input', applyFilters);
-  }
-  function bindModal() {
-    document.querySelectorAll('[data-close-request]').forEach(el => el.addEventListener('click', closeReqModal));
-    els.form?.addEventListener('submit', submitRequest);
-    els.applicantId?.addEventListener('input', () => { els.applicantId.value = String(els.applicantId.value || '').replace(/\D+/g, ''); });
-    els.applicantWhatsapp?.addEventListener('input', () => { els.applicantWhatsapp.value = String(els.applicantWhatsapp.value || '').replace(/\D+/g, ''); });
-  }
-  (async function boot() {
-    bindFilters(); bindModal(); initIcons(); await loadMarketplace();
-  })();
+  els.q?.addEventListener('input', applyFilters);
+  els.filterBtn?.addEventListener('click', () => els.filterMenu?.classList.toggle('hidden'));
+  els.filterMenu?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-value]');
+    if (!btn) return;
+    els.filter.value = btn.getAttribute('data-value') || 'all';
+    if (els.filterLabel) els.filterLabel.textContent = btn.textContent.trim();
+    els.filterMenu.classList.add('hidden');
+    applyFilters();
+  });
+  loadMarketplace();
 }
 
 const isManagementMode = !!qs('btn-load-recruitment') && !!qs('recruitment-view');
 const isMarketplaceMode = !!qs('grid') && !!qs('q') && !!qs('filter');
 if (isManagementMode) bootManagementMode();
 if (isMarketplaceMode) bootMarketplaceMode();
-
 window.addEventListener('beforeunload', () => { deleteApp(secondaryApp).catch(() => {}); });
