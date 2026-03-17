@@ -10,7 +10,7 @@ import {
   getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, auth, db } from './logic.js';
+import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, auth } from './logic.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA6CETOXLO6yp4Gm1JY7fwiWlWo0pKqzqw",
@@ -69,25 +69,6 @@ function tagChip(text, style = 'default') {
     default: 'bg-slate-100 text-slate-700 ring-slate-200'
   };
   return `<span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-bold ${styles[style] || styles.default}">${escapeHtml(text)}</span>`;
-}
-function normalizeDigits(value) {
-  return String(value ?? '').replace(/\D+/g, '');
-}
-function formatWhatsappHref(value) {
-  const digits = normalizeDigits(value);
-  return digits ? `https://wa.me/${digits}` : '';
-}
-function formatWhatsappLabel(value) {
-  const digits = normalizeDigits(value);
-  return digits || '-';
-}
-function getRequestStatusMeta(status) {
-  const s = String(status || 'pendente').toLowerCase();
-  if (s === 'accepted' || s === 'aceito') return { label: 'ACEITO', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' };
-  if (s === 'rejected' || s === 'recusado') return { label: 'RECUSADO', className: 'bg-red-50 text-red-700 ring-red-200' };
-  return { label: 'PENDENTE', className: 'bg-amber-50 text-amber-700 ring-amber-200' };
-}
-
 }
 
 // ========= shared image helpers for management =========
@@ -153,13 +134,10 @@ function bootManagementMode() {
     modal: qs('rec-modal'), modalTitle: qs('rec-modal-title'), form: qs('rec-form'), guildName: qs('rec-guild-name'),
     desc: qs('rec-description'), descCount: qs('rec-desc-count'), photoInput: qs('rec-photo'),
     photoPreviewWrap: qs('rec-photo-preview-wrap'), photoPreview: qs('rec-photo-preview'), photoStatus: qs('rec-photo-status'),
-    requestsSection: qs('requests-section'), requestsView: qs('requests-view'), requestsBadge: qs('requests-badge'),
-    requestModal: qs('request-detail-modal'), requestModalName: qs('request-detail-name'), requestModalId: qs('request-detail-id'),
-    requestModalStatus: qs('request-detail-status'), requestModalDate: qs('request-detail-date'), requestModalModes: qs('request-detail-modes'),
-    requestModalWhatsapp: qs('request-detail-whatsapp'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject')
+    requestsSection: qs('requests-section'), requestsView: qs('requests-view'), requestsBadge: qs('requests-badge')
   };
 
-  let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [], activeRequest = null;
+  let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [];
 
   function setStatus(message, type = 'info') {
     const map = {
@@ -217,76 +195,14 @@ function bootManagementMode() {
     if (!linkedUid || currentRecruitment) els.newBtn.classList.add('hidden');
     else els.newBtn.classList.remove('hidden');
   }
-  function closeRequestModal() {
-    activeRequest = null;
-    els.requestModal?.classList.add('hidden');
-  }
-  function openRequestModal(requestItem) {
-    if (!requestItem || !els.requestModal) return;
-    activeRequest = requestItem;
-    const meta = getRequestStatusMeta(requestItem.status || 'pendente');
-    if (els.requestModalName) els.requestModalName.textContent = requestItem.nick || requestItem.nickname || requestItem.name || requestItem.nome || 'Sem nome';
-    if (els.requestModalId) els.requestModalId.textContent = requestItem.id || '-';
-    if (els.requestModalStatus) {
-      els.requestModalStatus.textContent = meta.label;
-      els.requestModalStatus.className = `inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-extrabold ${meta.className}`;
-    }
-    if (els.requestModalDate) els.requestModalDate.textContent = formatDateBR(requestItem.createdAt || requestItem.dateMs || requestItem.date || Date.now());
-    if (els.requestModalModes) {
-      const roles = Array.isArray(requestItem.roles) && requestItem.roles.length
-        ? requestItem.roles.map(v => tagChip(v, 'role')).join(' ')
-        : '<span class="text-xs text-gray-400">Modo não informado</span>';
-      els.requestModalModes.innerHTML = roles;
-    }
-    if (els.requestModalWhatsapp) {
-      const href = formatWhatsappHref(requestItem.whatsapp || requestItem.phone || '');
-      const label = formatWhatsappLabel(requestItem.whatsapp || requestItem.phone || '');
-      els.requestModalWhatsapp.innerHTML = href
-        ? `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 font-semibold hover:underline break-all">${escapeHtml(label)}</a>`
-        : '<span class="text-gray-400">Não informado</span>';
-    }
-    els.requestModal.classList.remove('hidden');
-    initIcons();
-  }
-  async function removeRequest(requestId) {
-    if (!linkedUid || !requestId) return;
-    await deleteDoc(doc(recDb, 'rec', linkedUid, 'pedidos', requestId));
-  }
-  async function acceptRequest(requestItem) {
-    const targetGuildId = String(linkedUid || getGuildContext()?.guildId || '').trim();
-    if (!targetGuildId || !requestItem?.id) throw new Error('Guilda ou pedido inválido.');
-    const payload = {
-      visibleId: String(requestItem.id || '').trim(),
-      nick: String(requestItem.nick || requestItem.nickname || requestItem.name || requestItem.nome || '').trim() || 'Sem nick',
-      whatsapp: String(requestItem.whatsapp || requestItem.phone || '').trim(),
-      guildWar: false,
-      guildWarMeta: 0,
-      weeklyMeta: false,
-      weeklyMetaValue: 0,
-      hasTag: false,
-      playMode: Array.isArray(requestItem.roles) && requestItem.roles.length ? requestItem.roles : null,
-      joinDate: new Date().toISOString().split('T')[0],
-      updatedAt: serverTimestamp()
-    };
-    await setDoc(doc(db, 'guildas', targetGuildId, 'membros', payload.visibleId), payload, { merge: true });
-    await removeRequest(payload.visibleId);
-  }
   async function updateRequestStatus(requestId, status) {
-    const requestItem = currentRequests.find(item => String(item.id) === String(requestId)) || activeRequest;
-    if (!linkedUid || !requestId || !requestItem) return;
+    if (!linkedUid || !requestId) return;
     try {
-      if (status === 'accepted') {
-        await acceptRequest(requestItem);
-        showToast('success', 'Pedido aceito e membro adicionado!');
-      } else {
-        await removeRequest(requestId);
-        showToast('success', 'Pedido recusado!');
-      }
-      closeRequestModal();
+      await setDoc(doc(recDb, 'rec', linkedUid, 'pedidos', requestId), { status, reviewedAt: serverTimestamp(), reviewedBy: auth.currentUser?.uid || linkedUid }, { merge: true });
       await loadRequests();
+      showToast('success', status === 'accepted' ? 'Pedido aceito!' : 'Pedido recusado!');
     } catch (err) {
-      console.error(err);
-      showToast('error', status === 'accepted' ? 'Não foi possível aceitar o pedido.' : 'Não foi possível recusar o pedido.');
+      console.error(err); showToast('error', 'Não foi possível atualizar o pedido.');
     }
   }
   function renderRequests() {
@@ -305,23 +221,30 @@ function bootManagementMode() {
     }
     els.requestsView.innerHTML = currentRequests.map((pedido) => {
       const name = pedido.nick || pedido.nickname || pedido.name || pedido.nome || 'Sem nome';
-      const meta = getRequestStatusMeta(pedido.status || 'pendente');
+      const roles = Array.isArray(pedido.roles) && pedido.roles.length ? pedido.roles.map(v => tagChip(v, 'role')).join(' ') : '<span class="text-xs text-gray-400">Modo não informado</span>';
+      const status = (pedido.status || 'pendente').toString();
+      const statusClass = status === 'accepted' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : status === 'rejected' ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-amber-50 text-amber-700 ring-amber-200';
+      const contact = pedido.whatsapp || pedido.phone || pedido.discord || pedido.contact || '';
       return `
-        <button type="button" data-open-request-detail="${escapeHtml(pedido.id || '')}" class="w-full rounded-2xl border border-gray-200 p-4 text-left hover:border-emerald-200 hover:bg-emerald-50/40 transition">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <h5 class="text-sm font-bold text-gray-900 truncate">${escapeHtml(name)}</h5>
-              <p class="mt-1 text-xs text-gray-500">ID: ${escapeHtml(pedido.id || '-')}</p>
+        <div class="rounded-2xl border border-gray-200 p-4">
+          <div class="flex flex-col gap-4">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h5 class="text-base font-bold text-gray-900 break-words">${escapeHtml(name)}</h5>
+                <p class="text-xs text-gray-500 mt-1">ID: ${escapeHtml(pedido.id || '-')} • Enviado em ${escapeHtml(formatDateBR(pedido.createdAt || pedido.dateMs || pedido.date || Date.now()))}</p>
+              </div>
+              <span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-extrabold ${statusClass}">${status === 'accepted' ? 'ACEITO' : status === 'rejected' ? 'RECUSADO' : 'PENDENTE'}</span>
             </div>
-            <span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-extrabold ${meta.className}">${meta.label}</span>
+            <div><p class="text-xs font-semibold text-gray-500 mb-2">Modo de jogo</p><div class="flex flex-wrap gap-2">${roles}</div></div>
+            ${contact ? `<p class="text-sm text-gray-600 break-all"><b>WhatsApp:</b> ${escapeHtml(contact)}</p>` : ''}
+            <div class="mt-1 flex gap-2 flex-wrap">
+              <button data-request-action="accepted" data-request-id="${escapeHtml(pedido.id || '')}" class="px-3 py-2 rounded-xl text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 ${status === 'accepted' ? 'opacity-60' : ''}">Aceitar pedido</button>
+              <button data-request-action="rejected" data-request-id="${escapeHtml(pedido.id || '')}" class="px-3 py-2 rounded-xl text-sm font-medium bg-red-50 text-red-600 hover:bg-red-100 ${status === 'rejected' ? 'opacity-60' : ''}">Recusar</button>
+            </div>
           </div>
-        </button>`;
+        </div>`;
     }).join('');
-    document.querySelectorAll('[data-open-request-detail]').forEach((btn) => btn.addEventListener('click', () => {
-      const requestId = btn.getAttribute('data-open-request-detail') || '';
-      const requestItem = currentRequests.find(item => String(item.id) === String(requestId));
-      if (requestItem) openRequestModal(requestItem);
-    }));
+    document.querySelectorAll('[data-request-action]').forEach((btn) => btn.addEventListener('click', async () => updateRequestStatus(btn.getAttribute('data-request-id') || '', btn.getAttribute('data-request-action') || 'accepted')));
   }
   function renderRecruitment() {
     if (!linkedUid) {
@@ -388,22 +311,22 @@ function bootManagementMode() {
   async function resolveKeyAndLoad(forceMessage = true) {
     const key = (els.keyInput.value || '').trim();
     if (!key) { setStatus('Digite a chave da guilda para continuar.', 'warn'); return; }
-    const currentGuildUid = String(getGuildContext()?.guildId || '').trim();
-    if (!currentGuildUid) { showToast('error', 'Guilda não encontrada na sessão. Faça login novamente.'); return; }
+    const currentUid = auth.currentUser?.uid || '';
+    if (!currentUid) { showToast('error', 'Sessão inválida. Faça login novamente.'); return; }
     try {
       els.loadBtn.disabled = true;
       const keyRef = doc(recDb, 'chave', key);
       let keySnap = await getDoc(keyRef);
       if (!keySnap.exists()) {
-        await setDoc(keyRef, { uid: currentGuildUid, createdAt: serverTimestamp() }, { merge: true });
+        await setDoc(keyRef, { uid: currentUid, createdAt: serverTimestamp() }, { merge: true });
         keySnap = await getDoc(keyRef);
-        setStatus('Essa chave foi vinculada à sua guilda e já está pronta para uso.', 'success');
+        setStatus('Essa chave foi vinculada à sua conta e já está pronta para uso.', 'success');
       }
       const keyData = keySnap.data() || {};
       linkedUid = (keyData.uid || '').toString().trim();
       openedKey = key;
       if (els.openedKey) els.openedKey.textContent = key;
-      if (!linkedUid) { currentRecruitment = null; setStatus('Encontramos a chave, mas ela está sem uma guilda vinculada.', 'error'); renderRecruitment(); return; }
+      if (!linkedUid) { currentRecruitment = null; setStatus('Encontramos a chave, mas ela está sem uma conta vinculada.', 'error'); renderRecruitment(); return; }
       const recSnap = await getDoc(doc(recDb, 'rec', linkedUid));
       currentRecruitment = recSnap.exists() ? ({ id: recSnap.id, ...recSnap.data() }) : null;
       if (forceMessage) {
@@ -451,9 +374,6 @@ function bootManagementMode() {
   }
   function bindEvents() {
     document.querySelectorAll('[data-close-rec]').forEach(el => el.addEventListener('click', closeModal));
-    document.querySelectorAll('[data-close-request-detail]').forEach(el => el.addEventListener('click', closeRequestModal));
-    els.requestAcceptBtn?.addEventListener('click', () => activeRequest && updateRequestStatus(activeRequest.id, 'accepted'));
-    els.requestRejectBtn?.addEventListener('click', () => activeRequest && updateRequestStatus(activeRequest.id, 'rejected'));
     els.newBtn?.addEventListener('click', () => openModal('create'));
     els.loadBtn?.addEventListener('click', () => resolveKeyAndLoad(true));
     els.reloadBtn?.addEventListener('click', () => resolveKeyAndLoad(false));
@@ -480,7 +400,7 @@ function bootManagementMode() {
     const user = await checkAuth(true);
     if (!user) return;
     const ctx = getGuildContext() || {};
-    if (els.currentUid) els.currentUid.textContent = ctx.guildId || '-';
+    if (els.currentUid) els.currentUid.textContent = auth.currentUser?.uid || '-';
     if (els.currentGuildName) els.currentGuildName.textContent = ctx.guildName || '-';
     resetPhotoState(); renderRecruitment(); initIcons();
   })();
