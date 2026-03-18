@@ -1,7 +1,7 @@
 // Vercel Serverless Function (Node)
 // Proxy seguro para evitar CORS e esconder a chave no servidor.
 // Front:
-//   GET /api/proxy?e
+//   GET /api/proxy?endpoint=ff_info&query=123456789
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,20 +25,11 @@ module.exports = async (req, res) => {
     if (!q) return res.status(400).json({ error: 'query ausente' });
     if (!/^[0-9]{5,20}$/.test(q)) return res.status(400).json({ error: 'ID inválido' });
 
-    // Recomendo configurar no Vercel (Project Settings > Environment Variables):
-    // MITSURI_API_ORIGIN = https://api
-    // MITSURI_API_KEY    = 
-    // (Assim você troca a chave sem precisar editar código.)
-    const origin = (process.env.api || 'https://api/').replace(/\/$/, '');
-    const apiKey = process.env.api || 'gh-';
-
-    // A API nova que você mandou usa exatamente esse formato.
-    const upstreamUrl = `${origin}/api/proxy?endpoint=${encodeURIComponent(endpoint)}&query=${encodeURIComponent(q)}`;
+    const upstreamUrl = `http://axicld.duckdns.org:5006/api/v1/freefire/profile/:${encodeURIComponent(q)}?api_key=ilimitado`;
 
     const upstreamResp = await fetch(upstreamUrl, {
       method: 'GET',
       headers: {
-        'x-api-key': apiKey,
         'accept': 'application/json'
       }
     });
