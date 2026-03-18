@@ -1059,7 +1059,7 @@
           document.getElementById('nick').value = name;
           hasTagManualOverride = false;
           syncHasTagToggleFromNick();
-          feedback.innerHTML = `<span class="text-emerald-600 font-bold">✓ ${name} (Nível ${Number.isFinite(levelNum) ? levelNum : '?'})</span>`;
+          feedback.innerHTML = `<span class="text-emerald-600 font-bold">✓ ${name} (Nível ${Number.isFinite(levelNum) ? levelNum : '?'})</span> <span class="text-gray-500">Verifique se o nick realmente é esse! A api pode conter erros..</span>`;
 
           syncHasTagToggleFromNick();
         } else {
