@@ -1051,15 +1051,15 @@
         const res = await fetch(url, { method: 'GET', signal: controller.signal });
         const data = await res.json().catch(() => ({}));
 
-        const info = data?.AccountInfo;
-        const name = info?.Name ?? info?.AccountName;
-        const level = info?.Level ?? info?.AccountLevel;
+        const name = data?.nick;
+        const level = data?.level;
+        const levelNum = Number(level);
 
-        if (res.ok && name) {
+        if (res.ok && data?.success && name) {
           document.getElementById('nick').value = name;
           hasTagManualOverride = false;
           syncHasTagToggleFromNick();
-          feedback.innerHTML = `<span class="text-emerald-600 font-bold">✓ ${name} (Nível ${Number.isFinite(level) ? level : '?'})</span> <span class="text-gray-500">Dados fornecidos por <a href=null" target="_blank" class="text-pink-500 hover:underline">null</a>!</span>`;
+          feedback.innerHTML = `<span class="text-emerald-600 font-bold">✓ ${name} (Nível ${Number.isFinite(levelNum) ? levelNum : '?'})</span>`;
 
           syncHasTagToggleFromNick();
         } else {
