@@ -124,7 +124,7 @@
               <option value="all">Todas</option>
               <option value="today">Hoje</option>
               <option value="yesterday">Ontem</option>
-              <option value="d3">+3 dias</option>
+              <option value="d2">+2 dias</option>
               <option value="d7">+7 dias</option>
               <option value="d15">+15 dias</option>
               <option value="d30">+30 dias</option>
@@ -268,7 +268,7 @@
       if (days == null) return false;
       if (f === 'today') return days === 0;
       if (f === 'yesterday') return days === 1;
-      if (f === 'd3') return days >= 3 && days <= 6;
+      if (f === 'd2') return days >= 2 && days <= 6;
       if (f === 'd7') return days >= 7 && days <= 14;
       if (f === 'd15') return days >= 15 && days <= 29;
       if (f === 'd30') return days >= 30;
