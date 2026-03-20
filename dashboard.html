@@ -213,7 +213,7 @@
 
   <script type="module">
     import { checkAuth, setupSidebar, initIcons, logout, db, consumeLoginToasts, showWelcomeLoginModal, getGuildContext, applyVipUiAndGates, getVipTier } from './logic.js';
-    import { collection, getDocs, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { collection, getDocs, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     function normalizeTier(raw){
       const s = (raw || 'free').toString().toLowerCase().trim();
@@ -245,6 +245,18 @@
       const guildWar = members.filter(m => !!m.guildWar).length;
       const weeklyMeta = members.filter(m => !!m.weeklyMeta).length;
       return { total, hasTag, guildWar, weeklyMeta };
+    }
+
+    async function syncTotalMembros(guildId, total){
+      try {
+        const safeGuildId = (guildId || '').toString().trim();
+        const safeTotal = Math.max(0, Math.floor(Number(total)));
+        if (!safeGuildId || !Number.isFinite(safeTotal)) return;
+
+        await setDoc(doc(db, 'configGuilda', safeGuildId), { totalMembros: safeTotal }, { merge: true });
+      } catch (e) {
+        console.warn('Falha ao sincronizar totalMembros:', e);
+      }
     }
 
     function renderFromMembersCache(){
@@ -324,6 +336,7 @@
         // Atualiza a dashboard instantaneamente com os números reais
         const stats = calcStats(normalized);
         updateUI(stats);
+        syncTotalMembros(guildId, stats.total);
       } catch (e) {
         console.warn("Falha ao atualizar membros em tempo real:", e);
       }
