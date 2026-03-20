@@ -222,6 +222,12 @@
       return { text: `Faltam ${days}d`, cls: 'bg-sky-100 text-sky-700' };
     }
 
+    function normalizeMemberCount(v) {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) return 0;
+      return Math.floor(n);
+    }
+
     let allGuilds = [];
     window.allSolicita = [];
 
@@ -312,7 +318,7 @@
         leaders: configMap[d.id]?.leaders || (d.ownerEmail ? [d.ownerEmail] : []),
         admins: configMap[d.id]?.admins || [],
         ownerUid: d.ownerUid || configMap[d.id]?.ownerUid || configMap[d.id]?.uid || null,
-        memberCount: d.memberCount !== undefined ? d.memberCount : '...' // Preserva do cache se tiver
+        memberCount: normalizeMemberCount(configMap[d.id]?.totalMembros)
       }));
 
       // Ordena por data de criação (Mais novas primeiro)
@@ -386,7 +392,7 @@
             </div>
             <div class="flex items-center gap-2 text-[11px] text-gray-500">
               <i data-lucide="users" class="w-3.5 h-3.5 text-emerald-500"></i>
-              <span><b>Membros:</b> <span id="card-members-${g.id}" class="font-bold">${g.memberCount !== undefined ? g.memberCount : '...'}</span></span>
+              <span><b>Membros:</b> <span id="card-members-${g.id}" class="font-bold">${normalizeMemberCount(g.memberCount)}</span></span>
             </div>
           </div>
 
@@ -401,24 +407,6 @@
         </div>
       `).join('');
       initIcons();
-
-      // Busca a quantidade de membros para os cards que ainda não estão no cache
-      filtered.forEach(g => {
-        if (g.memberCount === undefined || g.memberCount === '...') {
-          getDocs(collection(db, 'guildas', g.id, 'membros')).then(snap => {
-             const count = snap.size;
-             g.memberCount = count; // Salva na memória
-             const el = document.getElementById(`card-members-${g.id}`);
-             if (el) el.textContent = count;
-             
-             // Atualiza o cache de forma invisível
-             localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas }));
-          }).catch(() => {
-             const el = document.getElementById(`card-members-${g.id}`);
-             if (el) el.textContent = 'Erro';
-          });
-        }
-      });
     }
 
     window.openDetails = (gid) => {
@@ -445,7 +433,7 @@
             <div class="grid grid-cols-2 gap-2">
               <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
                 <p class="text-[10px] text-gray-500 font-black uppercase">Membros</p>
-                <p class="text-xl font-black text-gray-900 mt-1"><span id="members-count">${g.memberCount !== '...' ? g.memberCount : '—'}</span></p>
+                <p class="text-xl font-black text-gray-900 mt-1"><span id="members-count">${normalizeMemberCount(g.memberCount)}</span></p>
               </div>
               <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
                 <p class="text-[10px] text-gray-500 font-black uppercase">Plano</p>
@@ -484,16 +472,6 @@
 
       document.getElementById('drawer').classList.remove('hidden');
       setTimeout(() => body.classList.remove('translate-x-full'), 10);
-
-      // Se não tinha o count salvo, busca para os detalhes também
-      if (g.memberCount === '...') {
-          getDocs(collection(db, 'guildas', gid, 'membros')).then(snap => {
-            const count = snap.size;
-            g.memberCount = count;
-            const el = document.getElementById('members-count');
-            if (el) el.textContent = String(count);
-          }).catch(()=>{});
-      }
 
       document.getElementById('btn-save-vip').onclick = async () => {
         const nv = document.getElementById('edit-vip-sel').value;
