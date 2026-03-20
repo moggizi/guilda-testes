@@ -318,7 +318,8 @@
         leaders: configMap[d.id]?.leaders || (d.ownerEmail ? [d.ownerEmail] : []),
         admins: configMap[d.id]?.admins || [],
         ownerUid: d.ownerUid || configMap[d.id]?.ownerUid || configMap[d.id]?.uid || null,
-        memberCount: normalizeMemberCount(configMap[d.id]?.totalMembros)
+        memberCount: normalizeMemberCount(configMap[d.id]?.totalMembros),
+        configUpdatedAt: configMap[d.id]?.updatedAt || d.configUpdatedAt || d.updatedAt || null
       }));
 
       // Ordena por data de criação (Mais novas primeiro)
@@ -466,6 +467,7 @@
           <div class="pt-4 border-t border-gray-100 text-[10px] text-gray-400">
             <p>ID da Guilda: ${g.id}</p>
             <p>Criada em: ${fmtDate(g.createdAt)}</p>
+            <p>Última atualização: ${fmtDate(g.configUpdatedAt)}</p>
           </div>
         </div>
       `;
@@ -477,12 +479,12 @@
         const nv = document.getElementById('edit-vip-sel').value;
         try {
           const expiresAtMs = buildVipExpiresAt(nv);
-          const patch = { vipTier: nv, vipExpiresAt: expiresAtMs, updatedAtMs: Date.now() };
+          const patch = { vipTier: nv, vipExpiresAt: expiresAtMs, updatedAt: serverTimestamp(), updatedAtMs: Date.now() };
           await updateDoc(doc(db, 'configGuilda', gid), patch);
           try { await updateDoc(doc(db, 'guildas', gid), patch); } catch(_) {}
           showToast('success', `Plano da guilda ${g.name} alterado para ${nv.toUpperCase()}`);
           closeDrawer();
-          try { const gx = window.allGuildas.find(x=>x.id===gid); if (gx) {gx.vipTier = nv; gx.vip = nv; gx.vipExpiresAt = expiresAtMs;} } catch(_) {}
+          try { const gx = window.allGuildas.find(x=>x.id===gid); if (gx) {gx.vipTier = nv; gx.vip = nv; gx.vipExpiresAt = expiresAtMs; gx.configUpdatedAt = Date.now();} } catch(_) {}
           renderGuilds();
           
           localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas }));
@@ -502,7 +504,7 @@
 
           showToast('success', 'Nome da guilda atualizado.');
           closeDrawer();
-          try { const gx = window.allGuildas.find(x=>x.id===gid); if (gx) gx.name = newName; } catch(_) {}
+          try { const gx = window.allGuildas.find(x=>x.id===gid); if (gx) { gx.name = newName; gx.configUpdatedAt = Date.now(); } } catch(_) {}
           renderGuilds();
           
           localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas }));
@@ -668,6 +670,7 @@
             gx.vipTier = normalizedPlano;
             gx.vip = normalizedPlano;
             gx.vipExpiresAt = expiresAtMs;
+            gx.configUpdatedAt = Date.now();
           }
           localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas }));
         } catch(_) {}
