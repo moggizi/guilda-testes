@@ -120,6 +120,14 @@
               <option value="pro">Pro</option>
               <option value="business">Business</option>
             </select>
+            <select id="updated-filter" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-[11px] font-black">
+              <option value="all">Todas</option>
+              <option value="today">Hoje</option>
+              <option value="yesterday">Ontem</option>
+              <option value="d7">+7 dias</option>
+              <option value="d15">+15 dias</option>
+              <option value="d30">+30 dias</option>
+            </select>
           </div>
           </div>
         </div>
@@ -226,6 +234,43 @@
       const n = Number(v);
       if (!Number.isFinite(n) || n < 0) return 0;
       return Math.floor(n);
+    }
+
+    function toTimestampMs(v) {
+      if (v == null) return null;
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+      if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v);
+      if (v && typeof v.toMillis === 'function') return v.toMillis();
+      if (v && typeof v.seconds === 'number') return v.seconds * 1000;
+      const parsed = new Date(v).getTime();
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function updatedDaysAgo(v) {
+      const ms = toTimestampMs(v);
+      if (ms == null) return null;
+
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const d = new Date(ms);
+      const dateStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      const diff = Math.floor((todayStart - dateStart) / 86400000);
+
+      return diff >= 0 ? diff : null;
+    }
+
+    function matchesUpdatedFilter(v, filterValue) {
+      const f = (filterValue || 'all').toString();
+      if (f === 'all') return true;
+
+      const days = updatedDaysAgo(v);
+      if (days == null) return false;
+      if (f === 'today') return days === 0;
+      if (f === 'yesterday') return days === 1;
+      if (f === 'd7') return days >= 2 && days <= 14;
+      if (f === 'd15') return days >= 15 && days <= 29;
+      if (f === 'd30') return days >= 30;
+      return true;
     }
 
     let allGuilds = [];
@@ -351,6 +396,7 @@
     function renderGuilds() {
       const q = document.getElementById('guild-search').value.toLowerCase().trim();
       const vf = (document.getElementById('vip-filter')?.value || 'all');
+      const uf = (document.getElementById('updated-filter')?.value || 'all');
       const filtered = allGuilds.filter(g => {
         const matchesQ =
           (g.name && g.name.toLowerCase().includes(q)) ||
@@ -358,7 +404,8 @@
           (g.leaders && g.leaders.join(' ').toLowerCase().includes(q));
 
         const matchesVip = (vf === 'all') ? true : (normalizeVip(g.vip) === vf);
-        return matchesQ && matchesVip;
+        const matchesUpdated = matchesUpdatedFilter(g.configUpdatedAt, uf);
+        return matchesQ && matchesVip && matchesUpdated;
       });
 
       const grid = document.getElementById('guilds-grid');
@@ -707,6 +754,7 @@
     document.getElementById('btn-reload').onclick = () => loadData(true); // O "true" Força a carregar do Firebase
     document.getElementById('guild-search').oninput = renderGuilds;
     document.getElementById('vip-filter').onchange = renderGuilds;
+    document.getElementById('updated-filter').onchange = renderGuilds;
     document.getElementById('btn-open-solicita').onclick = () => { 
       document.getElementById('solicita-panel').classList.remove('hidden'); 
       loadSolicita(); 
