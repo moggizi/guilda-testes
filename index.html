@@ -449,7 +449,13 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } f
 
       try {
         const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        await finalizeSignup(cred.user, username);
+        const signupResult = await finalizeSignup(cred.user, username);
+
+        if ((signupResult?.promoDays || 0) > 0) {
+          try {
+            sessionStorage.setItem('hub_signup_promo_toast', `Promoção de ${signupResult.promoDays} dias ativada!`);
+          } catch(_) {}
+        }
 
         showToast('success', 'Conta criada com sucesso!');
         try { sessionStorage.setItem('hub_do_preload', '1'); } catch(_) {}

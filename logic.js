@@ -513,10 +513,30 @@ async function normalizeConfigGuilda(guildId) {
 
 // Bootstrap de primeira criação (signup): NÃO faz leituras antes, porque as regras
 // podem bloquear read quando a guilda ainda não existe.
-async function bootstrapNewGuildAndUser(user, username) {
+async function getSignupPromoDays() {
+  try {
+    const snap = await getDoc(doc(db, "novo", "Mnovo"));
+    if (!snap.exists()) return 0;
+
+    const data = snap.data() || {};
+    const rawDays = data.dias;
+    const parsed = parseInt(String(rawDays ?? "").trim(), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+
+    return Math.max(0, Math.floor(parsed));
+  } catch (_) {
+    return 0;
+  }
+}
+
+async function bootstrapNewGuildAndUser(user, username, promoDays = 0) {
   const uid = user.uid;
   const email = cleanEmail(user.email);
   const uname = (username || "").toString().trim();
+  const safePromoDays = (Number.isFinite(Number(promoDays)) && Number(promoDays) > 0)
+    ? Math.floor(Number(promoDays))
+    : 0;
+  const promoExpiresAtMs = safePromoDays > 0 ? (Date.now() + (safePromoDays * 86400000)) : null;
 
   if (!uid) throw new Error("UID inválido.");
   if (!uname) throw new Error("Nome de guilda inválido.");
@@ -538,6 +558,10 @@ async function bootstrapNewGuildAndUser(user, username) {
     name: uname || "Minha Guilda",
     ownerUid: uid,
     ownerEmail: email,
+    ...(safePromoDays > 0 ? {
+      vipTier: "pro",
+      vipExpiresAt: promoExpiresAtMs
+    } : {}),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   }, { merge: true });
@@ -549,11 +573,13 @@ async function bootstrapNewGuildAndUser(user, username) {
     tagMembros: "",
     leaders: email ? [email] : [],
     admins: [],
+    ...(safePromoDays > 0 ? { permissoesAtivas: true } : {}),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   }, { merge: true });
 
   await batch.commit();
+  return { promoDays: safePromoDays, promoExpiresAtMs };
 }
 
 // Garantia leve (logins futuros do dono): não mexe no nome, só garante timestamps.
@@ -573,8 +599,13 @@ export async function finalizeSignup(user, username) {
   const uname = (username || "").toString().trim();
   if (!uname) throw new Error("Nome de usuário inválido.");
 
-  await bootstrapNewGuildAndUser(user, uname);
-  return { guildId: user.uid };
+  const promoDays = await getSignupPromoDays();
+  const signupResult = await bootstrapNewGuildAndUser(user, uname, promoDays);
+  return {
+    guildId: user.uid,
+    promoDays: signupResult?.promoDays || 0,
+    promoExpiresAtMs: signupResult?.promoExpiresAtMs ?? null
+  };
 }
 
 export async function getMemberTagConfig() {
@@ -932,6 +963,16 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+function __flushOneTimeSignupToast() {
+  try {
+    if (typeof sessionStorage === "undefined") return;
+    const message = sessionStorage.getItem("hub_signup_promo_toast");
+    if (!message) return;
+    sessionStorage.removeItem("hub_signup_promo_toast");
+    showToast("success", message);
+  } catch (_) {}
+}
+
 export async function createUpgradeSolicitacao(planId, payerName) {
   const user = auth.currentUser;
   if (!user) throw new Error("Você precisa estar logado para solicitar upgrade.");
@@ -1071,7 +1112,7 @@ export function checkAuth(redirectToLogin = true) {
       } catch (_) {}
 
       // Fallback: se configGuilda não tiver vipTier, tenta /guildas/{guildId}
-      if (!vipTier || vipTier === 'free') {
+      if (!vipTier || vipTier === 'free' || vipExpiresAtMs == null) {
         try {
           const gSnap = await getDoc(doc(db, "guildas", guildId));
           if (gSnap.exists()) {
@@ -1079,6 +1120,18 @@ export function checkAuth(redirectToLogin = true) {
             const rawVip2 = g.vipTier ?? g.vip ?? g.planoVip ?? g.planoVIP ?? g.vipLevel ?? g.vipPlano ?? g.vipName ?? g.plano ?? g.plan ?? g.tier;
             const v2 = vipTierFromValue(rawVip2);
             if (v2) vipTier = v2;
+
+            if (vipExpiresAtMs == null) {
+              const rawExp2 = g.vipExpiresAt ?? g.vipExpiraEm ?? g.vipExpireAt ?? g.expiresAt ?? g.vipExpires;
+              if (rawExp2 && typeof rawExp2.toMillis === 'function') {
+                vipExpiresAtMs = rawExp2.toMillis();
+              } else if (typeof rawExp2 === 'number') {
+                vipExpiresAtMs = rawExp2;
+              } else if (typeof rawExp2 === 'string') {
+                const t2 = Date.parse(rawExp2);
+                vipExpiresAtMs = isFinite(t2) ? t2 : null;
+              }
+            }
           }
         } catch (_) {}
       }
@@ -1208,6 +1261,7 @@ try {
         }
       }
 
+      try { __flushOneTimeSignupToast(); } catch (_) {}
       resolve(user);
     });
   });
