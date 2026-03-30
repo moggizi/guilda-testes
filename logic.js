@@ -268,6 +268,7 @@ export function getVipRemainingDays() {
 function vipTierFromValue(v) {
   const s = (v || '').toString().toLowerCase().trim();
   if (!s || s === 'free') return 'free';
+  if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life')) return 'vitalicio';
   if (s === 'business' || s === 'bussines' || s.includes('buss') || s.includes('business')) return 'business';
   if (s === 'pro' || s.includes('pro')) return 'pro';
   return 'plus';
@@ -285,7 +286,7 @@ async function __syncPermissoesAtivasIfNeeded(guildId, cfgData, vipTier, vipExpi
     if (!guildId) return null;
 
     const tier = (vipTier || cfgData?.vipTier || "free").toString().toLowerCase().trim();
-    const paid = (tier === "plus" || tier === "pro" || tier === "business" || tier.includes("pro") || tier.includes("business") || tier.includes("buss"));
+    const paid = (tier === "plus" || tier === "pro" || tier === "business" || tier === "vitalicio" || tier.includes("pro") || tier.includes("business") || tier.includes("buss") || tier.includes("vital"));
 
     const exp = (vipExpiresAtMs != null && isFinite(Number(vipExpiresAtMs))) ? Number(vipExpiresAtMs) : null;
     const vipAtivo = paid && (exp == null || Date.now() < exp);
@@ -978,7 +979,7 @@ export async function createUpgradeSolicitacao(planId, payerName) {
   if (!user) throw new Error("Você precisa estar logado para solicitar upgrade.");
 
   const plan = (planId || "").toString().toLowerCase().trim();
-  if (!plan || !["plus", "pro", "business"].includes(plan)) {
+  if (!plan || !["plus", "pro", "business", "vitalicio"].includes(plan)) {
     throw new Error("Plano inválido.");
   }
 
@@ -1275,6 +1276,7 @@ try {
 
 function normalizeVipTier(v) {
   const s = (v || '').toString().toLowerCase().trim();
+  if (s.includes('vital') || s.includes('life')) return 'vitalicio';
   if (s.includes('buss') || s.includes('business')) return 'business';
   if (s.includes('pro')) return 'pro';
   if (s.includes('plus')) return 'plus';
@@ -1325,13 +1327,13 @@ export function applyVipUiAndGates(tierRaw) {
   const vipLabel = document.getElementById("vip-label");
   if (vipLabel) {
     const days = getVipRemainingDays();
-    const daysTxt = (tier !== 'free' && days != null) ? ` • ${days} dias` : '';
-    vipLabel.innerHTML = `Guilda: <span class="font-bold text-gray-800">${tier.toUpperCase()}${daysTxt}</span>`;
+    const daysTxt = (tier !== 'free' && tier !== 'vitalicio' && days != null) ? ` • ${days} dias` : '';
+    vipLabel.innerHTML = `Guilda: <span class="font-bold text-gray-800">${tier === 'vitalicio' ? 'VITALÍCIO' : tier.toUpperCase()}${daysTxt}</span>`;
   }
 
   __ensureVipTagsIndex();
   const showPlusTags = tier === "free";
-  const showProTags = (tier !== "pro" && tier !== "business");
+  const showProTags = (tier !== "pro" && tier !== "business" && tier !== "vitalicio");
   document.querySelectorAll("[data-vip-tag]").forEach((el) => {
     const tag = (el.dataset.vipTag || "").toLowerCase();
     if (tag === "plus") el.style.display = showPlusTags ? "" : "none";
@@ -1339,7 +1341,7 @@ export function applyVipUiAndGates(tierRaw) {
   });
 
   const isPlusOrPro = tier !== "free";
-  const isPro = (tier === "pro" || tier === "business");
+  const isPro = (tier === "pro" || tier === "business" || tier === "vitalicio");
 
   __setDisabled(document.getElementById("btn-add-admin"), !isPlusOrPro, "Recurso PLUS");
   __setDisabled(document.getElementById("btn-add-leader"), !isPlusOrPro, "Recurso PLUS");
