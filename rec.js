@@ -665,35 +665,54 @@ function bootMarketplaceMode() {
     const idInput = els.applicantId;
     if (!form || !idInput) return;
 
-    const field = idInput.parentElement;
-    if (!field) return;
+    let field = idInput.closest('[data-marketplace-id-field="true"]');
+    if (!field) {
+      field = idInput.parentElement;
+      if (!field) return;
+      field.setAttribute('data-marketplace-id-field', 'true');
+    }
 
     let row = field.querySelector('[data-marketplace-id-row="true"]');
     if (!row) {
       row = document.createElement('div');
       row.setAttribute('data-marketplace-id-row', 'true');
-      row.className = 'mt-1 flex gap-2';
-      idInput.classList.remove('mt-1');
-      idInput.parentNode.insertBefore(row, idInput);
-      row.appendChild(idInput);
-      idInput.classList.add('flex-1');
+      row.className = 'mt-1 flex items-center gap-2';
+      if (idInput.parentNode === field) {
+        field.insertBefore(row, idInput);
+      } else {
+        field.prepend(row);
+      }
     }
 
-    let button = row.querySelector('[data-marketplace-fetch-nick="true"]');
+    idInput.classList.remove('mt-1');
+    idInput.classList.add('flex-1');
+    if (idInput.parentElement !== row) {
+      row.prepend(idInput);
+    }
+
+    let buttons = [...row.querySelectorAll('[data-marketplace-fetch-nick="true"]')];
+    let button = buttons.shift() || null;
+    buttons.forEach((el) => el.remove());
     if (!button) {
       button = document.createElement('button');
       button.type = 'button';
       button.setAttribute('data-marketplace-fetch-nick', 'true');
       button.className = 'shrink-0 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700';
       button.textContent = 'Buscar';
+    }
+    if (button.parentElement !== row) {
       row.appendChild(button);
     }
 
-    let feedback = field.querySelector('[data-marketplace-api-feedback="true"]');
+    let feedbacks = [...field.querySelectorAll('[data-marketplace-api-feedback="true"]')];
+    let feedback = feedbacks.shift() || null;
+    feedbacks.forEach((el) => el.remove());
     if (!feedback) {
       feedback = document.createElement('div');
       feedback.setAttribute('data-marketplace-api-feedback', 'true');
-      feedback.className = 'mt-2 text-xs';
+      feedback.className = 'mt-2 text-xs leading-5';
+    }
+    if (feedback.previousElementSibling !== row) {
       row.insertAdjacentElement('afterend', feedback);
     }
 
@@ -739,7 +758,7 @@ function bootMarketplaceMode() {
       if (res.ok && data?.success && name) {
         if (els.applicantNick) els.applicantNick.value = name;
         if (feedback) {
-          feedback.innerHTML = `<span class="text-emerald-600 font-bold">✓ ${escapeHtml(name)} (Nível ${Number.isFinite(levelNum) ? levelNum : '?'})</span> <span class="text-slate-500">Verifique se o nick realmente é esse! A api pode conter erros..</span>`;
+          feedback.innerHTML = `<div class="text-emerald-600 font-bold">✓ ${escapeHtml(name)} (Nível ${Number.isFinite(levelNum) ? levelNum : '?'})</div><div class="text-slate-500">Verifique se o nick realmente é esse! A api pode conter erros..</div>`;
         }
       } else if (feedback) {
         feedback.innerHTML = '<span class="text-red-500">Jogador não encontrado ou API indisponivel no momento!</span>';
