@@ -70,6 +70,14 @@ const WHATSAPP_COUNTRY_OPTIONS = [
   { code: '51', flag: '🇵🇪', label: 'Peru', maxDigits: 9, placeholder: 'Número' }
 ];
 const DEFAULT_WHATSAPP_COUNTRY_CODE = '55';
+const shuffleArray = (list=[]) => {
+  const arr = [...list];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
 const getWhatsappCountryMeta = (countryCode) => {
   const wanted = normalizeDigits(countryCode || DEFAULT_WHATSAPP_COUNTRY_CODE);
   return WHATSAPP_COUNTRY_OPTIONS.find((item) => item.code === wanted) || WHATSAPP_COUNTRY_OPTIONS[0];
@@ -782,10 +790,9 @@ function bootMarketplaceMode() {
     if (!wrap) return;
     const recruitmentRoles = Array.isArray(item?.roles) ? item.roles.map((role) => String(role || '').trim()).filter(Boolean) : [];
     const roleOptions = [...new Set([...MARKETPLACE_ROLE_OPTIONS, ...recruitmentRoles])];
-    const selectedRoles = new Set(recruitmentRoles.length ? recruitmentRoles : [roleOptions[0]].filter(Boolean));
     wrap.innerHTML = roleOptions.length ? roleOptions.map((role) => `
       <label class="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer min-w-0">
-        <input type="checkbox" name="marketplace-roles" value="${escapeHtml(role)}" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" ${selectedRoles.has(role) ? 'checked' : ''}>
+        <input type="checkbox" name="marketplace-roles" value="${escapeHtml(role)}" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
         <span>${escapeHtml(role)}</span>
       </label>`).join('') : '<div class="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-400">Esse recrutamento não informou modos de jogo.</div>';
   }
@@ -897,8 +904,9 @@ function bootMarketplaceMode() {
     try {
       setStatus('Carregando recrutamentos...');
       const snap = await getDocs(collection(recDb,'rec'));
-      allItems = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(item => item && item.guildName);
-      allItems.sort((a,b) => (normalizeTimestamp(b.createdAt || b.updatedAt || b.dateMs)?.getTime?.() || 0) - (normalizeTimestamp(a.createdAt || a.updatedAt || a.dateMs)?.getTime?.() || 0));
+      allItems = shuffleArray(
+        snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(item => item && item.guildName)
+      );
       els.q.value = params.get('q') || '';
       els.filter.value = params.get('filter') || 'all';
       applyFilters();
