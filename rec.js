@@ -70,14 +70,6 @@ const WHATSAPP_COUNTRY_OPTIONS = [
   { code: '51', flag: '🇵🇪', label: 'Peru', maxDigits: 9, placeholder: 'Número' }
 ];
 const DEFAULT_WHATSAPP_COUNTRY_CODE = '55';
-const shuffleArray = (list=[]) => {
-  const arr = [...list];
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-};
 const getWhatsappCountryMeta = (countryCode) => {
   const wanted = normalizeDigits(countryCode || DEFAULT_WHATSAPP_COUNTRY_CODE);
   return WHATSAPP_COUNTRY_OPTIONS.find((item) => item.code === wanted) || WHATSAPP_COUNTRY_OPTIONS[0];
@@ -668,6 +660,128 @@ function bootMarketplaceMode() {
     syncMarketplaceWhatsappConstraints();
   }
 
+  function ensureMarketplaceNickLookupElements() {
+    const form = els.form;
+    const idInput = els.applicantId;
+    if (!form || !idInput) return;
+
+    const field = idInput.parentElement;
+    if (!field) return;
+
+    let row = field.querySelector('[data-marketplace-id-row="true"]');
+    if (!row) {
+      row = document.createElement('div');
+      row.setAttribute('data-marketplace-id-row', 'true');
+      row.className = 'mt-1 flex gap-2';
+      idInput.classList.remove('mt-1');
+      idInput.parentNode.insertBefore(row, idInput);
+      row.appendChild(idInput);
+      idInput.classList.add('flex-1');
+    }
+
+    let button = row.querySelector('[data-marketplace-fetch-nick="true"]');
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('data-marketplace-fetch-nick', 'true');
+      button.className = 'shrink-0 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700';
+      button.textContent = 'Buscar';
+      row.appendChild(button);
+    }
+
+    let feedback = field.querySelector('[data-marketplace-api-feedback="true"]');
+    if (!feedback) {
+      feedback = document.createElement('div');
+      feedback.setAttribute('data-marketplace-api-feedback', 'true');
+      feedback.className = 'mt-2 text-xs';
+      row.insertAdjacentElement('afterend', feedback);
+    }
+
+    els.fetchNickBtn = button;
+    els.applicantApiFeedback = feedback;
+  }
+
+  function resetMarketplaceNickLookupState() {
+    if (els.applicantApiFeedback) els.applicantApiFeedback.innerHTML = '';
+    if (els.fetchNickBtn) {
+      els.fetchNickBtn.disabled = false;
+      els.fetchNickBtn.textContent = 'Buscar';
+      els.fetchNickBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+    }
+  }
+
+  async function fetchMarketplaceNick() {
+    const uid = normalizeDigits(els.applicantId?.value || '');
+    const feedback = els.applicantApiFeedback;
+    if (!uid) {
+      if (feedback) feedback.innerHTML = '<span class="text-red-500">Digite o ID para buscar.</span>';
+      showToast('error', 'Digite o ID');
+      return;
+    }
+
+    if (feedback) feedback.innerHTML = '<span class="text-blue-500">Buscando...</span>';
+    if (els.fetchNickBtn) {
+      els.fetchNickBtn.disabled = true;
+      els.fetchNickBtn.textContent = 'Buscando...';
+      els.fetchNickBtn.classList.add('opacity-70', 'cursor-not-allowed');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const url = `/api/proxy?endpoint=ff_info&query=${encodeURIComponent(uid)}`;
+      const res = await fetch(url, { method: 'GET', signal: controller.signal });
+      const data = await res.json().catch(() => ({}));
+      const name = String(data?.nick || '').trim();
+      const levelNum = Number(data?.level);
+
+      if (res.ok && data?.success && name) {
+        if (els.applicantNick) els.applicantNick.value = name;
+        if (feedback) {
+          feedback.innerHTML = `<span class="text-emerald-600 font-bold">✓ ${escapeHtml(name)} (Nível ${Number.isFinite(levelNum) ? levelNum : '?'})</span> <span class="text-slate-500">Verifique se o nick realmente é esse! A api pode conter erros..</span>`;
+        }
+      } else if (feedback) {
+        feedback.innerHTML = '<span class="text-red-500">Jogador não encontrado ou API indisponivel no momento!</span>';
+      }
+    } catch (error) {
+      const message = error?.name === 'AbortError'
+        ? 'A API demorou demais para responder.'
+        : 'Jogador não encontrado ou erro na API.';
+      if (feedback) feedback.innerHTML = `<span class="text-red-500">${message}</span>`;
+    } finally {
+      clearTimeout(timeoutId);
+      if (els.fetchNickBtn) {
+        els.fetchNickBtn.disabled = false;
+        els.fetchNickBtn.textContent = 'Buscar';
+        els.fetchNickBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+      }
+    }
+  }
+
+  function bindMarketplaceNickLookup() {
+    ensureMarketplaceNickLookupElements();
+
+    if (els.fetchNickBtn && !els.fetchNickBtn.dataset.marketplaceBound) {
+      els.fetchNickBtn.dataset.marketplaceBound = '1';
+      els.fetchNickBtn.addEventListener('click', fetchMarketplaceNick);
+    }
+
+    if (els.applicantId && !els.applicantId.dataset.marketplaceNickBound) {
+      els.applicantId.dataset.marketplaceNickBound = '1';
+      els.applicantId.addEventListener('input', () => {
+        const digits = normalizeDigits(els.applicantId.value || '');
+        if (els.applicantId.value !== digits) els.applicantId.value = digits;
+        if (els.applicantApiFeedback) els.applicantApiFeedback.innerHTML = '';
+      });
+      els.applicantId.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        fetchMarketplaceNick();
+      });
+    }
+  }
+
   function ensureMarketplaceRequestModal() {
     let dynamicModal = document.getElementById('request-modal-dynamic');
 
@@ -771,6 +885,7 @@ function bootMarketplaceMode() {
     });
 
     bindMarketplaceWhatsappField();
+    bindMarketplaceNickLookup();
     initIcons();
   }
 
@@ -803,6 +918,7 @@ function bootMarketplaceMode() {
     els.form.reset();
     if (els.applicantWhatsappDdi) els.applicantWhatsappDdi.value = DEFAULT_WHATSAPP_COUNTRY_CODE;
     syncMarketplaceWhatsappConstraints();
+    resetMarketplaceNickLookupState();
     if (els.modalGuild) els.modalGuild.textContent = item?.guildName || 'Guilda';
     if (els.helper) els.helper.textContent = 'Preencha seus dados para enviar a solicitação para essa guilda.';
     renderMarketplaceModes(item);
@@ -900,13 +1016,20 @@ function bootMarketplaceMode() {
     setStatus(`${filtered.length} recrutamento${filtered.length === 1 ? '' : 's'} encontrado${filtered.length === 1 ? '' : 's'}.`);
     renderGrid(filtered);
   }
+  function shuffleMarketplaceItems(list = []) {
+    const items = Array.isArray(list) ? [...list] : [];
+    for (let i = items.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [items[i], items[j]] = [items[j], items[i]];
+    }
+    return items;
+  }
+
   async function loadMarketplace() {
     try {
       setStatus('Carregando recrutamentos...');
       const snap = await getDocs(collection(recDb,'rec'));
-      allItems = shuffleArray(
-        snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(item => item && item.guildName)
-      );
+      allItems = shuffleMarketplaceItems(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(item => item && item.guildName));
       els.q.value = params.get('q') || '';
       els.filter.value = params.get('filter') || 'all';
       applyFilters();
