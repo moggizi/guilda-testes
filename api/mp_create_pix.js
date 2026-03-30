@@ -60,6 +60,7 @@ const PLAN_PRICES = {
   plus: 5.99,
   pro: 8.99,
   business: 61.99,
+  vitalicio: 499.99,
 };
 
 function normalizePlan(input) {
@@ -93,6 +94,8 @@ function normalizePlan(input) {
     yearly: "business",
     year: "business",
     ano: "business",
+
+    vitalicio: "vitalicio",
   };
 
   return map[p] || p;
