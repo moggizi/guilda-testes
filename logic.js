@@ -1273,6 +1273,7 @@ function normalizeVipTier(v) {
   if (s.includes('buss') || s.includes('business')) return 'business';
   if (s.includes('pro')) return 'pro';
   if (s.includes('plus')) return 'plus';
+   if (s.includes('vitalicio')) return 'vitalicio';
   return 'free';
 }
 
@@ -1334,7 +1335,7 @@ export function applyVipUiAndGates(tierRaw) {
   });
 
   const isPlusOrPro = tier !== "free";
-  const isPro = (tier === "pro" || tier === "business");
+  const isPro = (tier === "pro" || tier === "business") || tier === "vitalicio");
 
   __setDisabled(document.getElementById("btn-add-admin"), !isPlusOrPro, "Recurso PLUS");
   __setDisabled(document.getElementById("btn-add-leader"), !isPlusOrPro, "Recurso PLUS");
