@@ -119,6 +119,7 @@
               <option value="plus">Plus</option>
               <option value="pro">Pro</option>
               <option value="business">Business</option>
+              <option value="vitalicio">Vitalício</option>
             </select>
             <select id="updated-filter" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-[11px] font-black">
               <option value="all">Todas</option>
@@ -184,22 +185,30 @@
     // Normalização
     function normalizeVip(v) {
       const s = (v || 'free').toString().toLowerCase().trim();
+      if (s.includes('vital') || s.includes('life')) return 'vitalicio';
       if (s.includes('buss') || s.includes('business')) return 'business';
       if (s.includes('pro')) return 'pro';
       if (s.includes('plus')) return 'plus';
       return 'free';
     }
 
+    function prettyVipName(v) {
+      const t = normalizeVip(v);
+      return t === 'vitalicio' ? 'VITALÍCIO' : t.toUpperCase();
+    }
+
     function vipDurationDays(tier) {
       const t = normalizeVip(tier);
       if (t === 'plus' || t === 'pro') return 30;
       if (t === 'business') return 365;
+      if (t === 'vitalicio') return 'forever';
       return null;
     }
     
     function buildVipExpiresAt(tier) {
       const days = vipDurationDays(tier);
       if (!days) return null;
+      if (days === 'forever') return Date.UTC(9999, 11, 31, 23, 59, 59, 999);
       return Date.now() + days * 24 * 60 * 60 * 1000;
     }
 
@@ -220,6 +229,8 @@
 
     function remainingTag(expiresAtMs, tier) {
       const t = normalizeVip(tier);
+      if (t === 'vitalicio') return { text: 'Vitalício ativo', cls: 'bg-amber-100 text-amber-700' };
+
       const ms = vipExpiresAtMsFromAny(expiresAtMs);
       if (!ms) return { text: (t === 'free' ? 'FREE' : 'Sem expiração'), cls: 'bg-gray-100 text-gray-600' };
 
@@ -424,8 +435,8 @@
               <p class="text-[10px] text-gray-400 font-mono tracking-tighter">${g.id}</p>
             </div>
             <div class="flex flex-col items-end gap-2">
-            <span class="px-3 py-1 rounded-xl ${g.vip === 'business' ? 'bg-purple-100 text-purple-700' : (g.vip === 'pro' ? 'bg-blue-100 text-blue-700' : (g.vip === 'plus' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'))} text-[10px] font-black uppercase tracking-wider shadow-sm border border-black/5">
-              ${g.vip}
+            <span class="px-3 py-1 rounded-xl ${normalizeVip(g.vip) === 'vitalicio' ? 'bg-amber-100 text-amber-700' : (normalizeVip(g.vip) === 'business' ? 'bg-purple-100 text-purple-700' : (normalizeVip(g.vip) === 'pro' ? 'bg-blue-100 text-blue-700' : (normalizeVip(g.vip) === 'plus' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600')))} text-[10px] font-black uppercase tracking-wider shadow-sm border border-black/5">
+              ${prettyVipName(g.vip)}
             </span>
             ${(() => { const rt = remainingTag(g.vipExpiresAt, g.vip); return '<span class="px-3 py-1 rounded-xl '+rt.cls+' text-[10px] font-black tracking-wider shadow-sm border border-black/5">'+rt.text+'</span>'; })()}
           </div>
@@ -470,10 +481,11 @@
           <div class="p-4 bg-gray-50 rounded-2xl border border-gray-100">
              <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">Plano Atual</p>
              <select id="edit-vip-sel" class="w-full p-3 rounded-xl border border-gray-200 bg-white text-sm font-bold">
-                <option value="free" ${g.vip==='free'?'selected':''}>FREE</option>
-                <option value="plus" ${g.vip==='plus'?'selected':''}>PLUS</option>
-                <option value="pro" ${g.vip==='pro'?'selected':''}>PRO</option>
-                <option value="business" ${g.vip==='business'?'selected':''}>BUSINESS</option>
+                <option value="free" ${normalizeVip(g.vip)==='free'?'selected':''}>FREE</option>
+                <option value="plus" ${normalizeVip(g.vip)==='plus'?'selected':''}>PLUS</option>
+                <option value="pro" ${normalizeVip(g.vip)==='pro'?'selected':''}>PRO</option>
+                <option value="business" ${normalizeVip(g.vip)==='business'?'selected':''}>BUSINESS</option>
+                <option value="vitalicio" ${normalizeVip(g.vip)==='vitalicio'?'selected':''}>VITALÍCIO</option>
              </select>
              <button id="btn-save-vip" class="w-full mt-3 py-3 rounded-xl bg-emerald-600 text-white font-black text-xs hover:bg-emerald-700 transition">ATUALIZAR PLANO</button>
           </div>
@@ -487,7 +499,7 @@
               </div>
               <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
                 <p class="text-[10px] text-gray-500 font-black uppercase">Plano</p>
-                <p class="text-xl font-black text-gray-900 mt-1">${normalizeVip(g.vip).toUpperCase()}</p>
+                <p class="text-xl font-black text-gray-900 mt-1">${prettyVipName(g.vip)}</p>
               </div>
             </div>
           </div>
@@ -531,7 +543,7 @@
           const patch = { vipTier: nv, vipExpiresAt: expiresAtMs, updatedAt: serverTimestamp(), updatedAtMs: Date.now() };
           await updateDoc(doc(db, 'configGuilda', gid), patch);
           try { await updateDoc(doc(db, 'guildas', gid), patch); } catch(_) {}
-          showToast('success', `Plano da guilda ${g.name} alterado para ${nv.toUpperCase()}`);
+          showToast('success', `Plano da guilda ${g.name} alterado para ${prettyVipName(nv)}`);
           closeDrawer();
           try { const gx = window.allGuildas.find(x=>x.id===gid); if (gx) {gx.vipTier = nv; gx.vip = nv; gx.vipExpiresAt = expiresAtMs; gx.configUpdatedAt = Date.now();} } catch(_) {}
           renderGuilds();
@@ -650,7 +662,7 @@
           <div class="bg-gray-50 border border-gray-100 p-4 rounded-2xl shadow-sm hover:bg-white transition">
             <div class="flex justify-between items-start mb-3">
                <div class="min-w-0">
-                  <p class="text-[10px] font-black text-emerald-600 uppercase tracking-widest">${s.plano || 'FREE'}</p>
+                  <p class="text-[10px] font-black text-emerald-600 uppercase tracking-widest">${prettyVipName(s.plano || 'FREE')}</p>
                   <h5 class="font-bold text-gray-900 text-sm truncate">${s.email || '—'}</h5>
                </div>
                <span class="px-2 py-0.5 rounded-lg text-[9px] font-bold ${s.status === 'pendente' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'} uppercase">
@@ -707,6 +719,7 @@
         await updateDoc(doc(db, 'solicita', sid), {
           status: 'aprovado',
           approvedVipTier: normalizedPlano,
+          plano: normalizedPlano,
           vipExpiresAt: expiresAtMs,
           updatedAt: serverTimestamp(),
           updatedAtMs: Date.now()

@@ -9,7 +9,7 @@ import {
   collection,
   getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, auth, db } from './logic.js';
+import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, getGuildAccessKeyConfig, showToast, auth, db } from './logic.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA6CETOXLO6yp4Gm1JY7fwiWlWo0pKqzqw",
@@ -57,7 +57,7 @@ function tagChip(text, style='default') {
   return `<span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-bold ${styles[style] || styles.default}">${escapeHtml(text)}</span>`;
 }
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
-const formatWhatsappHref = (v) => normalizeDigits(v) ? `https://wa.me/${normalizeDigits(v)}` : '';
+const formatWhatsappHref = (v) => normalizeDigits(v) ? `https://wa.me/+55${normalizeDigits(v)}` : '';
 const formatWhatsappLabel = (v) => normalizeDigits(v) || '-';
 function getRequestStatusMeta(status) {
   const s = String(status || 'pendente').toLowerCase();
@@ -121,6 +121,7 @@ function bootManagementMode() {
     loadBtn: qs('btn-load-recruitment'), reloadBtn: qs('btn-reload'), newBtn: qs('btn-new-rec'), copyBtn: qs('btn-copy-rec-link'),
     keyInput: qs('guild-access-key-input'), keyStatus: qs('key-status'), currentUid: qs('current-uid'),
     currentGuildName: qs('current-guild-name'), openedKey: qs('opened-key'), view: qs('recruitment-view'),
+    keyLabel: document.querySelector('label[for="guild-access-key-input"]'),
     modal: qs('rec-modal'), modalTitle: qs('rec-modal-title'), form: qs('rec-form'), guildName: qs('rec-guild-name'),
     desc: qs('rec-description'), descCount: qs('rec-desc-count'), photoInput: qs('rec-photo'),
     photoPreviewWrap: qs('rec-photo-preview-wrap'), photoPreview: qs('rec-photo-preview'), photoStatus: qs('rec-photo-status'),
@@ -136,6 +137,7 @@ function bootManagementMode() {
   const getNormalizedVipTier = () => {
     const raw = String(getGuildContext()?.vipTier || 'free').toLowerCase().trim();
     if (!raw) return 'free';
+    if (raw.includes('vital') || raw.includes('life')) return 'vitalicio';
     if (raw.includes('business') || raw.includes('buss')) return 'business';
     if (raw.includes('pro')) return 'pro';
     if (raw.includes('plus')) return 'plus';
@@ -143,11 +145,24 @@ function bootManagementMode() {
   };
   const canOpenRecruitment = () => {
     const tier = getNormalizedVipTier();
-    return tier === 'pro' || tier === 'business';
+    return tier === 'pro' || tier === 'business' || tier === 'vitalicio';
   };
+  function setManualKeyMode(showManual = true) {
+    const method = showManual ? 'remove' : 'add';
+    [els.keyInput, els.loadBtn, els.keyLabel].forEach((el) => {
+      if (!el) return;
+      el.classList[method]('hidden');
+    });
+    if (els.keyInput) {
+      els.keyInput.disabled = !showManual || !canOpenRecruitment();
+    }
+    if (els.loadBtn) {
+      els.loadBtn.disabled = !showManual || !canOpenRecruitment();
+    }
+  }
   function applyRecruitmentVipGate() {
     const allowed = canOpenRecruitment();
-    const disabledText = 'O recrutamento está disponível apenas para os planos Pro ou Business.';
+    const disabledText = 'O recrutamento está disponível apenas para os planos Pro, Business ou Vitalício.';
     [els.loadBtn, els.reloadBtn, els.newBtn].forEach((btn) => {
       if (!btn) return;
       btn.disabled = !allowed;
@@ -157,10 +172,15 @@ function bootManagementMode() {
       else btn.removeAttribute('title');
     });
     if (els.keyInput) {
-      els.keyInput.disabled = !allowed;
+      els.keyInput.disabled = !allowed || els.keyInput.classList.contains('hidden');
       els.keyInput.classList.toggle('opacity-60', !allowed);
       if (!allowed) els.keyInput.setAttribute('title', disabledText);
       else els.keyInput.removeAttribute('title');
+    }
+    if (els.loadBtn) {
+      els.loadBtn.disabled = !allowed || els.loadBtn.classList.contains('hidden');
+      if (!allowed) els.loadBtn.setAttribute('title', disabledText);
+      else els.loadBtn.removeAttribute('title');
     }
     return allowed;
   }
@@ -235,8 +255,8 @@ function bootManagementMode() {
   function openModal(mode='create') {
     if (!els.form || !els.modal) return;
     if (!canOpenRecruitment()) {
-      setStatus('O recrutamento está disponível apenas para os planos Pro ou Business.','warn');
-      showToast('error', 'Libere o plano Pro ou Business para criar recrutamento.');
+      setStatus('O recrutamento está disponível apenas para os planos Pro, Business ou Vitalício.','warn');
+      showToast('error', 'Libere o plano Pro, Business ou Vitalício para criar recrutamento.');
       return;
     }
     els.form.reset();
@@ -378,16 +398,16 @@ function bootManagementMode() {
     } catch (err) { console.error(err); }
     renderRequests();
   }
-  async function resolveKeyAndLoad(forceMessage=true) {
+  async function resolveKeyAndLoad(forceMessage=true, providedKey=null) {
     if (!canOpenRecruitment()) {
-      setStatus('O recrutamento está disponível apenas para os planos Pro ou Business.','warn');
-      showToast('error', 'Libere o plano Pro ou Business para usar o recrutamento.');
-      return;
+      setStatus('O recrutamento está disponível apenas para os planos Pro, Business ou Vitalício.','warn');
+      showToast('error', 'Libere o plano Pro, Business ou Vitalício para usar o recrutamento.');
+      return false;
     }
-    const key = String(els.keyInput?.value || '').trim();
-    if (!key) { setStatus('Digite a chave da guilda para continuar.','warn'); return; }
+    const key = String((providedKey != null ? providedKey : els.keyInput?.value) || '').trim();
+    if (!key) { setStatus('Digite a chave da guilda para continuar.','warn'); return false; }
     const guildId = ctxGuildId();
-    if (!guildId) { showToast('error', 'Guilda não encontrada na sessão.'); return; }
+    if (!guildId) { showToast('error', 'Guilda não encontrada na sessão.'); return false; }
     try {
       if (els.loadBtn) els.loadBtn.disabled = true;
       const keyRef = doc(recDb, 'chave', key);
@@ -410,24 +430,68 @@ function bootManagementMode() {
         currentRecruitment = null;
         setStatus('Encontramos a chave, mas ela está sem uma guilda vinculada.','error');
         renderRecruitment();
-        return;
+        return false;
       }
       const recSnap = await getDoc(doc(recDb, 'rec', linkedUid));
       currentRecruitment = recSnap.exists() ? ({ id: recSnap.id, ...recSnap.data() }) : null;
       if (forceMessage) setStatus(currentRecruitment ? 'Pronto! Seu recrutamento foi encontrado e carregado.' : 'Tudo certo com a chave. Agora você já pode criar o recrutamento dessa guilda.','success');
       renderRecruitment();
       await loadRequests();
+      return true;
     } catch (err) {
       console.error(err);
       setStatus('Não foi possível abrir essa chave agora.','error');
       showToast('error', 'Erro ao carregar recrutamento.');
+      return false;
     } finally {
       if (els.loadBtn) els.loadBtn.disabled = false;
     }
   }
+  async function tryBootWithSavedKey() {
+    if (!canOpenRecruitment()) return false;
+
+    let savedKey = '';
+    try {
+      savedKey = String(await getGuildAccessKeyConfig() || '').trim();
+    } catch (_) {
+      savedKey = '';
+    }
+
+    if (!savedKey) {
+      setManualKeyMode(true);
+      return false;
+    }
+
+    try {
+      const existingKeySnap = await getDoc(doc(recDb, 'chave', savedKey));
+      if (!existingKeySnap.exists()) {
+        setManualKeyMode(true);
+        if (els.keyInput && !String(els.keyInput.value || '').trim()) {
+          els.keyInput.value = savedKey;
+        }
+        setStatus('Sua chave já existe na guilda, mas ainda precisa ser vinculada aqui. Digite a chave para continuar.','warn');
+        return false;
+      }
+    } catch (_) {
+      setManualKeyMode(true);
+      return false;
+    }
+
+    setManualKeyMode(false);
+    const loaded = await resolveKeyAndLoad(false, savedKey);
+    if (loaded) {
+      setStatus('Chave encontrada e carregada automaticamente.','success');
+      showToast('success', 'Chave carregada automaticamente!');
+      return true;
+    }
+
+    setManualKeyMode(true);
+    return false;
+  }
+
   async function saveRecruitment(event) {
     event.preventDefault();
-    if (!canOpenRecruitment()) { showToast('error','Apenas Pro ou Business podem salvar recrutamento.'); return; }
+    if (!canOpenRecruitment()) { showToast('error','Apenas Pro, Business ou Vitalício podem salvar recrutamento.'); return; }
     if (!linkedUid) { showToast('error','Abra uma chave antes de salvar.'); return; }
     const guildName = String(els.guildName?.value || '').trim();
     const roles = getCheckedValues('roles');
@@ -504,8 +568,12 @@ function bootManagementMode() {
     if (els.openedKey) els.openedKey.textContent = 'Nenhuma';
     const vipAllowed = applyRecruitmentVipGate();
     if (!vipAllowed) {
-      setStatus('Seu plano atual não libera o recrutamento. Para abrir essa área, use Pro ou Business.','warn');
+      setManualKeyMode(true);
+      setStatus('Seu plano atual não libera o recrutamento. Para abrir essa área, use Pro, Business ou Vitalício.','warn');
+      resetPhotoState(); renderRecruitment(); updateCopyLinkVisibility(); initIcons();
+      return;
     }
+    await tryBootWithSavedKey();
     resetPhotoState(); renderRecruitment(); updateCopyLinkVisibility(); initIcons();
   })();
 }

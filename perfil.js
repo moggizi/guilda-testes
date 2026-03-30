@@ -41,6 +41,7 @@ let isBooted = false;
 
 function normalizeVipTierValue(v) {
   const s = (v || '').toString().toLowerCase().trim();
+  if (s.includes('vital') || s.includes('life')) return 'vitalicio';
   if (s.includes('business') || s.includes('buss')) return 'business';
   if (s.includes('pro')) return 'pro';
   if (s.includes('plus')) return 'plus';
@@ -501,7 +502,7 @@ async function handleUpdateWeek() {
   }
 
   const vipTier = await getCurrentGuildVipTier();
-  if (!['plus', 'pro', 'business'].includes(vipTier)) {
+  if (!['plus', 'pro', 'business', 'vitalicio'].includes(vipTier)) {
     showWarningToast('Opção disponível apenas para usuários VIP!');
     return;
   }

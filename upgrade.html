@@ -101,24 +101,26 @@
         <div class="mt-4 text-sm text-gray-600 bg-white rounded-xl border border-gray-200 p-4">
           <div style="background-color: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin-bottom: 15px; font-family: sans-serif;">
   <strong>⚠️ ATENÇÃO: Por que cobramos por algumas funcionalidades?</strong><br>
-  Este projeto foi feito exclusivamente para ajudar a comunidade na administração de guildas de FF. Os valores são bem acessíveis e servem apenas para cobrir nossos custos de banco de dados e manter o projeto ativo, não para gerar lucro. Fizemos na intenção de ajudar, mas não conseguimos cobrir todos os custos sozinhos!
+  Este projeto foi feito exclusivamente para ajudar a comunidade na administração de guildas de FF. Cobramos por algumas funções apenas para manter a Guilda HUB ativa e cobrir custos do sistema e banco de dados, e não para gerar lucro.
 </div>
 
 <p style="font-family: sans-serif;">
-  <b>Como funciona a liberação:</b> Após solicitar e confirmar o pagamento, a ativação do plano normalmente acontece em menos de <b>10 segundos</b>. Se o pagamento for aprovado e o plano <b>não ativar</b>, entre em contato em nosso Instagram <a href="https://www.instagram.com/guildahub" target="_blank" rel="noopener noreferrer" style="color: #E1306C; text-decoration: none;"><b>@guildahub</b></a>.
+  <b>Como funciona a liberação:</b> Após solicitar e confirmar o pagamento, o plano costuma ativar em menos de <b>10 segundos</b>. Se não ativar, fale com <a href="https://www.instagram.com/guildahub" target="_blank" rel="noopener noreferrer" style="color: #E1306C; text-decoration: none;"><b>@guildahub</b></a>.
 </p>
 
-        </div>
+</div>
 
-        <div id="termos-vitalicio" class="mt-4 text-sm text-gray-600 bg-white rounded-xl border border-gray-200 p-4">
-          <div class="text-sm font-extrabold text-gray-900 mb-2">Termos do plano Vitalício</div>
-          <p class="leading-6">
-            O plano <b>Vitalício</b> garante <b>acesso total</b> a tudo que é VIP na plataforma e também a <b>todos os futuros sistemas</b> lançados enquanto a Guilda HUB estiver em funcionamento.
-          </p>
-          <p class="leading-6 mt-3">
-            Em outras palavras, o pagamento do Vitalício não representa uma garantia eterna independente do projeto, e sim um acesso completo durante toda a vida útil da Guilda HUB. Enquanto a plataforma existir e continuar funcionando normalmente, o seu acesso permanece liberado. Se algum dia o projeto for encerrado de forma definitiva, o plano também será encerrado junto com a plataforma, <b>sem reembolso total ou parcial</b>.
-          </p>
-        </div>
+<div id="termos-vitalicio" class="mt-4 text-sm text-gray-600 bg-white rounded-xl border border-gray-200 p-4">
+  <div class="text-sm font-extrabold text-gray-900 mb-2">Termos do plano Vitalício</div>
+
+  <p class="leading-6">
+    O plano <b>Vitalício</b> libera todas as funções VIP, inclusive futuras, enquanto a Guilda HUB estiver ativa.
+  </p>
+
+  <p class="leading-6 mt-3">
+    Se a plataforma for encerrada definitivamente, o plano também será encerrado, <b>sem reembolso total ou parcial</b>.
+  </p>
+</div>
       </section>
 
       <footer class="bg-white py-10 border-t border-slate-200">
@@ -354,7 +356,7 @@
     let body = '';
 
     if (type === 'terms') {
-      title = 'Termos do plano Vitalício';
+      title = 'Termos dos planos';
       body = `
         <div class="space-y-4 text-sm text-gray-700 leading-6">
           <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
@@ -382,7 +384,12 @@
           </div>
 
           <div>
-            <div class="font-extrabold text-gray-900 mb-1">5. Liberação do acesso</div>
+            <div class="font-extrabold text-gray-900 mb-1">5. Termos dos planos PLUS, PRO e BUSINESS</div>
+            <p>Os planos PLUS, PRO e BUSINESS funcionam por prazo determinado, de acordo com a modalidade contratada no momento da compra. Durante esse período, a guilda terá acesso às funções incluídas no plano ativo. Após o vencimento, caso não haja renovação, o acesso às funcionalidades pagas poderá ser encerrado automaticamente.</p>
+          </div>
+
+          <div>
+            <div class="font-extrabold text-gray-900 mb-1">6. Liberação do acesso</div>
             <p>Depois da confirmação do pagamento, a liberação normalmente ocorre em poucos segundos para a conta/guilda vinculada à compra. Se o pagamento for aprovado e a ativação não acontecer, o suporte pode ser acionado pelo Instagram oficial informado na página.</p>
           </div>
         </div>

@@ -217,6 +217,7 @@
 
     function normalizeTier(raw){
       const s = (raw || 'free').toString().toLowerCase().trim();
+      if (s.includes('vital') || s.includes('life')) return 'vitalicio';
       if (s.includes('buss') || s.includes('business')) return 'business';
       if (s.includes('pro')) return 'pro';
       if (s.includes('plus')) return 'plus';

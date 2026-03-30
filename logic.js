@@ -228,7 +228,8 @@ function __maybeDowngradeVipSync() {
     if (!__guildCtx) return;
     const tier = String(__guildCtx.vipTier || 'free');
     const exp = (__guildCtx.vipExpiresAtMs != null) ? Number(__guildCtx.vipExpiresAtMs) : null;
-    if (tier !== 'free' && exp != null && isFinite(exp) && Date.now() > exp) {
+    // FIX 1: Impede downgrade se o plano for vitalício
+    if (tier !== 'free' && tier !== 'vitalicio' && exp != null && isFinite(exp) && Date.now() > exp) {
       __guildCtx.vipTier = 'free';
       __guildCtx.vipExpiresAtMs = null;
       try {
@@ -289,7 +290,8 @@ async function __syncPermissoesAtivasIfNeeded(guildId, cfgData, vipTier, vipExpi
     const paid = (tier === "plus" || tier === "pro" || tier === "business" || tier === "vitalicio" || tier.includes("pro") || tier.includes("business") || tier.includes("buss") || tier.includes("vital"));
 
     const exp = (vipExpiresAtMs != null && isFinite(Number(vipExpiresAtMs))) ? Number(vipExpiresAtMs) : null;
-    const vipAtivo = paid && (exp == null || Date.now() < exp);
+    // FIX 2: Garante que vitalicio ignore a data de expiração para não desativar permissões
+    const vipAtivo = paid && (tier.includes("vital") || exp == null || Date.now() < exp);
 
     const atual = (cfgData && cfgData.permissoesAtivas !== undefined) ? (cfgData.permissoesAtivas !== false) : null;
     const novo = !!vipAtivo;
@@ -1138,7 +1140,8 @@ export function checkAuth(redirectToLogin = true) {
       }
 
       // ✅ Verificação automática de expiração (somente se vipExpiresAt existir)
-      if (vipTier && vipTier !== 'free' && vipExpiresAtMs != null && isFinite(vipExpiresAtMs)) {
+      // FIX 3: Garante que vitalício JAMAIS seja expirado/rebaixado pro FREE
+      if (vipTier && vipTier !== 'free' && vipTier !== 'vitalicio' && vipExpiresAtMs != null && isFinite(vipExpiresAtMs)) {
         if (Date.now() > vipExpiresAtMs) {
           vipTier = 'free';
           vipExpiresAtMs = null;
