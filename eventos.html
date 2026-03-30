@@ -128,7 +128,7 @@
   </main>
 
   <div id="request-modal" class="fixed inset-0 z-[80] hidden">
-    <div data-close-request class="absolute inset-0 bg-slate-950/55"></div>
+    <div data-close-request data-close-marketplace-request class="absolute inset-0 bg-slate-950/55"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
       <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
         <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
@@ -136,7 +136,7 @@
             <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Enviar pedido</p>
             <h3 class="text-lg font-black text-slate-900" id="request-modal-guild">Guilda</h3>
           </div>
-          <button type="button" data-close-request class="grid h-10 w-10 place-items-center rounded-2xl hover:bg-slate-100">
+          <button type="button" data-close-request data-close-marketplace-request class="grid h-10 w-10 place-items-center rounded-2xl hover:bg-slate-100">
             <i data-lucide="x" class="h-5 w-5 text-slate-700"></i>
           </button>
         </div>
@@ -152,11 +152,24 @@
           </div>
           <div>
             <label class="text-xs font-semibold text-slate-500">WhatsApp</label>
-            <input id="applicant-whatsapp" type="text" inputmode="numeric" placeholder="Apenas números" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+            <div class="mt-1 grid grid-cols-[132px_minmax(0,1fr)] gap-2">
+              <select id="applicant-whatsapp-ddi" class="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">
+                <option value="55" selected>🇧🇷 +55</option>
+                <option value="1">🇺🇸 +1</option>
+                <option value="54">🇦🇷 +54</option>
+                <option value="351">🇵🇹 +351</option>
+                <option value="52">🇲🇽 +52</option>
+                <option value="595">🇵🇾 +595</option>
+                <option value="56">🇨🇱 +56</option>
+                <option value="57">🇨🇴 +57</option>
+                <option value="51">🇵🇪 +51</option>
+              </select>
+              <input id="applicant-whatsapp" type="text" inputmode="numeric" placeholder="DDD + número" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+            </div>
           </div>
           <div>
             <label class="text-xs font-semibold text-slate-500">Qual modo você joga?</label>
-            <div id="applicant-modes-wrap" class="mt-2 flex flex-wrap gap-2"></div>
+            <div id="request-modes" class="mt-2 grid grid-cols-2 gap-2"></div>
           </div>
           <button id="btn-send-request" type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800">
             <i data-lucide="send" class="h-4 w-4"></i>

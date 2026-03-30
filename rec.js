@@ -57,8 +57,49 @@ function tagChip(text, style='default') {
   return `<span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-bold ${styles[style] || styles.default}">${escapeHtml(text)}</span>`;
 }
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
-const formatWhatsappHref = (v) => normalizeDigits(v) ? `https://wa.me/+55${normalizeDigits(v)}` : '';
-const formatWhatsappLabel = (v) => normalizeDigits(v) || '-';
+const MARKETPLACE_ROLE_OPTIONS = ['Rush', 'Full Gás', 'Curandeiro', 'Fuzileiro', 'Suporte'];
+const WHATSAPP_COUNTRY_OPTIONS = [
+  { code: '55', flag: '🇧🇷', label: 'Brasil', maxDigits: 11, placeholder: 'DDD + número' },
+  { code: '1', flag: '🇺🇸', label: 'Estados Unidos', maxDigits: 10, placeholder: 'Área + número' },
+  { code: '54', flag: '🇦🇷', label: 'Argentina', maxDigits: 10, placeholder: 'Área + número' },
+  { code: '351', flag: '🇵🇹', label: 'Portugal', maxDigits: 9, placeholder: 'Número' },
+  { code: '52', flag: '🇲🇽', label: 'México', maxDigits: 10, placeholder: 'Área + número' },
+  { code: '595', flag: '🇵🇾', label: 'Paraguai', maxDigits: 10, placeholder: 'Área + número' },
+  { code: '56', flag: '🇨🇱', label: 'Chile', maxDigits: 9, placeholder: 'Número' },
+  { code: '57', flag: '🇨🇴', label: 'Colômbia', maxDigits: 10, placeholder: 'Número' },
+  { code: '51', flag: '🇵🇪', label: 'Peru', maxDigits: 9, placeholder: 'Número' }
+];
+const DEFAULT_WHATSAPP_COUNTRY_CODE = '55';
+const getWhatsappCountryMeta = (countryCode) => {
+  const wanted = normalizeDigits(countryCode || DEFAULT_WHATSAPP_COUNTRY_CODE);
+  return WHATSAPP_COUNTRY_OPTIONS.find((item) => item.code === wanted) || WHATSAPP_COUNTRY_OPTIONS[0];
+};
+const buildWhatsappPayload = (rawNumber, rawCountryCode = DEFAULT_WHATSAPP_COUNTRY_CODE) => {
+  const country = getWhatsappCountryMeta(rawCountryCode);
+  const localNumber = normalizeDigits(rawNumber).slice(0, country.maxDigits);
+  return {
+    countryCode: country.code,
+    localNumber,
+    fullNumber: `${country.code}${localNumber}`,
+    maxDigits: country.maxDigits,
+    placeholder: country.placeholder,
+    flag: country.flag,
+    label: country.label
+  };
+};
+const formatWhatsappHref = (v, countryCode) => {
+  const digits = normalizeDigits(v);
+  if (!digits) return '';
+  const normalizedCountryCode = normalizeDigits(countryCode);
+  const fullDigits = normalizedCountryCode ? `${normalizedCountryCode}${digits}` : digits.length <= 11 ? `${DEFAULT_WHATSAPP_COUNTRY_CODE}${digits}` : digits;
+  return `https://wa.me/${fullDigits}`;
+};
+const formatWhatsappLabel = (v, countryCode) => {
+  const digits = normalizeDigits(v);
+  if (!digits) return '-';
+  const normalizedCountryCode = normalizeDigits(countryCode);
+  return normalizedCountryCode ? `+${normalizedCountryCode} ${digits}` : digits.length <= 11 ? `+${DEFAULT_WHATSAPP_COUNTRY_CODE} ${digits}` : `+${digits}`;
+};
 function getRequestStatusMeta(status) {
   const s = String(status || 'pendente').toLowerCase();
   if (s === 'accepted' || s === 'aceito') return { label: 'ACEITO', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' };
@@ -295,8 +336,8 @@ function bootManagementMode() {
       els.requestModalModes.innerHTML = roles;
     }
     if (els.requestModalWhatsapp) {
-      const href = formatWhatsappHref(item.whatsapp || item.phone || '');
-      const label = formatWhatsappLabel(item.whatsapp || item.phone || '');
+      const href = formatWhatsappHref(item.whatsapp || item.phone || '', item.whatsappCountryCode || item.phoneCountryCode || '');
+      const label = formatWhatsappLabel(item.whatsapp || item.phone || '', item.whatsappCountryCode || item.phoneCountryCode || '');
       els.requestModalWhatsapp.innerHTML = href ? `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 font-semibold hover:underline break-all">${escapeHtml(label)}</a>` : '<span class="text-gray-400">Não informado</span>';
     }
     els.requestModal.classList.remove('hidden');
@@ -583,11 +624,41 @@ function bootMarketplaceMode() {
   const els = {
     grid: qs('grid'), status: qs('status'), q: qs('q'), filter: qs('filter'), filterBtn: qs('filterBtn'), filterMenu: qs('filterMenu'), filterLabel: qs('filterLabel'),
     modal: qs('request-modal'), modalGuild: qs('request-modal-guild'), helper: qs('request-helper'), form: qs('request-form'),
-    applicantId: qs('applicant-id'), applicantNick: qs('applicant-nick'), applicantWhatsapp: qs('applicant-whatsapp')
+    applicantId: qs('applicant-id'), applicantNick: qs('applicant-nick'), applicantWhatsapp: qs('applicant-whatsapp'), applicantWhatsappDdi: qs('applicant-whatsapp-ddi')
   };
   if (!els.grid || !els.q || !els.filter) return;
   let allItems = [], activeRecruitment = null;
   const params = new URLSearchParams(window.location.search);
+
+  function getMarketplaceCountrySelectOptions() {
+    return WHATSAPP_COUNTRY_OPTIONS.map((country) => `<option value="${country.code}" ${country.code === DEFAULT_WHATSAPP_COUNTRY_CODE ? 'selected' : ''}>${country.flag} +${country.code}</option>`).join('');
+  }
+
+  function syncMarketplaceWhatsappConstraints() {
+    if (!els.applicantWhatsapp) return;
+    const country = getWhatsappCountryMeta(els.applicantWhatsappDdi?.value || DEFAULT_WHATSAPP_COUNTRY_CODE);
+    let digits = normalizeDigits(els.applicantWhatsapp.value || '');
+    if (digits.startsWith(country.code) && digits.length > country.maxDigits) {
+      digits = digits.slice(country.code.length);
+    }
+    digits = digits.slice(0, country.maxDigits);
+    els.applicantWhatsapp.value = digits;
+    els.applicantWhatsapp.maxLength = country.maxDigits;
+    els.applicantWhatsapp.placeholder = `${country.placeholder} (${country.maxDigits} dígitos)`;
+  }
+
+  function bindMarketplaceWhatsappField() {
+    if (els.applicantWhatsappDdi && !els.applicantWhatsappDdi.dataset.marketplaceBound) {
+      els.applicantWhatsappDdi.dataset.marketplaceBound = '1';
+      els.applicantWhatsappDdi.addEventListener('change', syncMarketplaceWhatsappConstraints);
+    }
+    if (els.applicantWhatsapp && !els.applicantWhatsapp.dataset.marketplaceBound) {
+      els.applicantWhatsapp.dataset.marketplaceBound = '1';
+      els.applicantWhatsapp.addEventListener('input', syncMarketplaceWhatsappConstraints);
+      els.applicantWhatsapp.addEventListener('paste', () => setTimeout(syncMarketplaceWhatsappConstraints, 0));
+    }
+    syncMarketplaceWhatsappConstraints();
+  }
 
   function ensureMarketplaceRequestModal() {
     let dynamicModal = document.getElementById('request-modal-dynamic');
@@ -598,8 +669,9 @@ function bootMarketplaceMode() {
     const staticId = document.getElementById('applicant-id');
     const staticNick = document.getElementById('applicant-nick');
     const staticWhatsapp = document.getElementById('applicant-whatsapp');
+    const staticWhatsappDdi = document.getElementById('applicant-whatsapp-ddi');
 
-    const staticModalIsComplete = !!(staticModal && staticForm && staticModes && staticId && staticNick && staticWhatsapp);
+    const staticModalIsComplete = !!(staticModal && staticForm && staticModes && staticId && staticNick && staticWhatsapp && staticWhatsappDdi);
 
     if (!staticModalIsComplete && !dynamicModal) {
       const wrap = document.createElement('div');
@@ -632,7 +704,10 @@ function bootMarketplaceMode() {
               </div>
               <div>
                 <label for="applicant-whatsapp-dynamic" class="mb-2 block text-sm font-bold text-slate-700">WhatsApp</label>
-                <input id="applicant-whatsapp-dynamic" type="text" inputmode="tel" placeholder="Somente números com DDD" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">
+                <div class="grid grid-cols-[132px_minmax(0,1fr)] gap-2">
+                  <select id="applicant-whatsapp-ddi-dynamic" class="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceCountrySelectOptions()}</select>
+                  <input id="applicant-whatsapp-dynamic" type="text" inputmode="tel" placeholder="DDD + número" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">
+                </div>
               </div>
               <div>
                 <p class="mb-2 block text-sm font-bold text-slate-700">Modo de jogo</p>
@@ -660,6 +735,7 @@ function bootMarketplaceMode() {
     els.applicantId = staticModalIsComplete ? staticId : document.getElementById('applicant-id-dynamic');
     els.applicantNick = staticModalIsComplete ? staticNick : document.getElementById('applicant-nick-dynamic');
     els.applicantWhatsapp = staticModalIsComplete ? staticWhatsapp : document.getElementById('applicant-whatsapp-dynamic');
+    els.applicantWhatsappDdi = staticModalIsComplete ? staticWhatsappDdi : document.getElementById('applicant-whatsapp-ddi-dynamic');
 
     const modesWrap = staticModalIsComplete ? staticModes : document.getElementById('request-modes-dynamic');
     if (modesWrap && !modesWrap.id) modesWrap.id = 'request-modes-dynamic';
@@ -676,7 +752,7 @@ function bootMarketplaceMode() {
       });
     }
 
-    document.querySelectorAll('[data-close-marketplace-request]').forEach((btn) => {
+    document.querySelectorAll('[data-close-marketplace-request], [data-close-request]').forEach((btn) => {
       if (btn.dataset.marketplaceBound) return;
       btn.dataset.marketplaceBound = '1';
       btn.addEventListener('click', (event) => {
@@ -686,6 +762,7 @@ function bootMarketplaceMode() {
       });
     });
 
+    bindMarketplaceWhatsappField();
     initIcons();
   }
 
@@ -703,10 +780,12 @@ function bootMarketplaceMode() {
       wrap = document.getElementById('request-modes-dynamic');
     }
     if (!wrap) return;
-    const roles = Array.isArray(item?.roles) ? item.roles.filter(Boolean) : [];
-    wrap.innerHTML = roles.length ? roles.map((role, idx) => `
+    const recruitmentRoles = Array.isArray(item?.roles) ? item.roles.map((role) => String(role || '').trim()).filter(Boolean) : [];
+    const roleOptions = [...new Set([...MARKETPLACE_ROLE_OPTIONS, ...recruitmentRoles])];
+    const selectedRoles = new Set(recruitmentRoles.length ? recruitmentRoles : [roleOptions[0]].filter(Boolean));
+    wrap.innerHTML = roleOptions.length ? roleOptions.map((role) => `
       <label class="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer min-w-0">
-        <input type="checkbox" name="marketplace-roles" value="${escapeHtml(role)}" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" ${idx === 0 ? 'checked' : ''}>
+        <input type="checkbox" name="marketplace-roles" value="${escapeHtml(role)}" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" ${selectedRoles.has(role) ? 'checked' : ''}>
         <span>${escapeHtml(role)}</span>
       </label>`).join('') : '<div class="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-400">Esse recrutamento não informou modos de jogo.</div>';
   }
@@ -715,6 +794,8 @@ function bootMarketplaceMode() {
     ensureMarketplaceRequestModal();
     if (!els.modal || !els.form) return;
     els.form.reset();
+    if (els.applicantWhatsappDdi) els.applicantWhatsappDdi.value = DEFAULT_WHATSAPP_COUNTRY_CODE;
+    syncMarketplaceWhatsappConstraints();
     if (els.modalGuild) els.modalGuild.textContent = item?.guildName || 'Guilda';
     if (els.helper) els.helper.textContent = 'Preencha seus dados para enviar a solicitação para essa guilda.';
     renderMarketplaceModes(item);
@@ -735,11 +816,11 @@ function bootMarketplaceMode() {
     if (!activeRecruitment?.id) return;
     const applicantId = normalizeDigits(els.applicantId?.value || '');
     const applicantNick = String(els.applicantNick?.value || '').trim();
-    const applicantWhatsapp = normalizeDigits(els.applicantWhatsapp?.value || '');
+    const whatsappPayload = buildWhatsappPayload(els.applicantWhatsapp?.value || '', els.applicantWhatsappDdi?.value || DEFAULT_WHATSAPP_COUNTRY_CODE);
     const roles = [...document.querySelectorAll('input[name="marketplace-roles"]:checked')].map((el) => String(el.value || '').trim()).filter(Boolean);
     if (!applicantId) { showToast('error', 'Informe seu ID.'); return; }
     if (!applicantNick) { showToast('error', 'Informe seu nick.'); return; }
-    if (!applicantWhatsapp) { showToast('error', 'Informe seu WhatsApp.'); return; }
+    if (!whatsappPayload.localNumber) { showToast('error', 'Informe seu WhatsApp.'); return; }
     if (!roles.length) { showToast('error', 'Selecione pelo menos um modo de jogo.'); return; }
     try {
       const reqRef = doc(recDb, 'rec', activeRecruitment.id, 'pedidos', applicantId);
@@ -748,7 +829,8 @@ function bootMarketplaceMode() {
       await setDoc(reqRef, {
         id: applicantId,
         nick: applicantNick,
-        whatsapp: applicantWhatsapp,
+        whatsapp: whatsappPayload.localNumber,
+        whatsappCountryCode: whatsappPayload.countryCode,
         roles,
         status: 'pendente',
         guildId: activeRecruitment.id,
