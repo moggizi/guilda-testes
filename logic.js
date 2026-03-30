@@ -1212,6 +1212,11 @@ try {
       const isSettingsPage = path.endsWith("/ajustes") || path.endsWith("/ajustes.html") || path.includes("ajustes.html");
       const isLinesPage = path.endsWith("/lines") || path.endsWith("/lines.html") || path.includes("lines.html");
       const isChefePage = path.endsWith("/chefe") || path.endsWith("/chefe.html") || path.includes("chefe.html");
+      const isRecruitmentPage =
+        path.endsWith("/eventos") || path.endsWith("/eventos.html") || path.includes("eventos.html") ||
+        path.endsWith("/recrutamento") || path.endsWith("/recrutamento.html") || path.includes("recrutamento.html") ||
+        path.endsWith("/rec") || path.endsWith("/rec.html") || path.includes("rec.html") ||
+        path.endsWith("/camp") || path.endsWith("/camp.html") || path.includes("camp.html");
 
       // (Fix) Algumas versões antigas tinham uma tela "camp". Aqui garantimos que a variável exista
       // para não quebrar o fluxo quando o role for "Admin".
@@ -1249,12 +1254,12 @@ try {
       }
 
       if (role === "Admin") {
-        if (isAdminPage || isCampPage) {
+        if (isAdminPage) {
           window.location.href = "dashboard.html";
           resolve(null);
           return;
         }
-        if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage) {
+        if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage && !isRecruitmentPage) {
           window.location.href = "dashboard.html";
           resolve(null);
           return;
@@ -1273,7 +1278,6 @@ function normalizeVipTier(v) {
   if (s.includes('buss') || s.includes('business')) return 'business';
   if (s.includes('pro')) return 'pro';
   if (s.includes('plus')) return 'plus';
-   if (s.includes('vitalicio')) return 'vitalicio';
   return 'free';
 }
 
@@ -1335,7 +1339,7 @@ export function applyVipUiAndGates(tierRaw) {
   });
 
   const isPlusOrPro = tier !== "free";
-  const isPro = (tier === "pro" || tier === "business") || tier === "vitalicio");
+  const isPro = (tier === "pro" || tier === "business");
 
   __setDisabled(document.getElementById("btn-add-admin"), !isPlusOrPro, "Recurso PLUS");
   __setDisabled(document.getElementById("btn-add-leader"), !isPlusOrPro, "Recurso PLUS");

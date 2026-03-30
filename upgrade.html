@@ -229,14 +229,6 @@
         noAccess: [], 
         note: 'Equivalente a ~R$5,17/mês'
       },
-      {
-        id: 'business',
-        name: 'VITALÍCIO',
-        price: 499.99,
-        priceLabel: 'R$499,99',
-        access: ['Dashboard', 'Membros', 'Configuração de tag', 'Administradores + Líderes', 'Lines', 'Estatísticas', 'Eventos/Camp (BETA)', 'Acesso do jogador (Em BREVE)'],
-        noAccess: []
-      },
     ];
 
     return computeDiscounts(basePlans);
@@ -332,7 +324,7 @@
 
   function openPaymentModal(planId){
     const plan = (planId || '').toString().toLowerCase().trim();
-    if (!['plus','pro','business','vitalicio'].includes(plan)) {
+    if (!['plus','pro','business'].includes(plan)) {
       showToast('error', 'Plano inválido.');
       return;
     }
