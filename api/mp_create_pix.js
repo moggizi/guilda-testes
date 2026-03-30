@@ -81,6 +81,7 @@ const PLAN_PRICES = {
   plus: 5.99,
   pro: 8.99,
   business: 61.99,
+  vitalicio: 599.99,
 };
 
 // Normaliza e mapeia variações que o front pode enviar
@@ -118,6 +119,12 @@ function normalizePlan(input) {
     yearly: "business",
     year: "business",
     ano: "business",
+
+    vitalicio: "vitalicio",
+    vitalício: "vitalicio",
+    lifetime: "vitalicio",
+    life: "vitalicio",
+    permanente: "vitalicio",
   };
 
   return map[p] || p;

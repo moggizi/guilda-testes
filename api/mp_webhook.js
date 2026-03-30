@@ -39,14 +39,18 @@ function parseExternalReference(refStr) {
   return out;
 }
 
-function daysForPlan(plan){
+function getExpiresAtMsForPlan(plan){
   const p = String(plan || '').toLowerCase();
 
-  if (p === 'business') return 365;
-  if (p === 'pro') return 30;
-  if (p === 'plus') return 30;
+  if (p === 'vitalicio' || p === 'vitalício' || p.includes('vital') || p.includes('life')) {
+    return Date.UTC(9999, 11, 31, 23, 59, 59, 999);
+  }
 
-  return 30;
+  if (p === 'business') return Date.now() + (365 * 24 * 60 * 60 * 1000);
+  if (p === 'pro') return Date.now() + (30 * 24 * 60 * 60 * 1000);
+  if (p === 'plus') return Date.now() + (30 * 24 * 60 * 60 * 1000);
+
+  return Date.now() + (30 * 24 * 60 * 60 * 1000);
 }
 
 module.exports = async (req, res) => {
@@ -106,8 +110,7 @@ module.exports = async (req, res) => {
 
     // Se aprovado, aplica VIP
     if (label === 'aprovado' && plan) {
-      const days = daysForPlan(plan);
-      const expiresAtMs = Date.now() + (days * 24 * 60 * 60 * 1000);
+      const expiresAtMs = getExpiresAtMsForPlan(plan);
 
       if (guildId) {
         await admin.firestore().doc(`configGuilda/${guildId}`).set({
