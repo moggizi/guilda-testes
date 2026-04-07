@@ -9,7 +9,7 @@ import {
   collection,
   getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, getGuildAccessKeyConfig, getGuildMultiConfig, showToast, auth, db } from './logic.js';
+import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, getGuildAccessKeyConfig, showToast, auth, db } from './logic.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA6CETOXLO6yp4Gm1JY7fwiWlWo0pKqzqw",
@@ -192,12 +192,63 @@ function bootManagementMode() {
     requestsSection: qs('requests-section'), requestsView: qs('requests-view'), requestsBadge: qs('requests-badge'),
     requestModal: qs('request-detail-modal'), requestModalName: qs('request-detail-name'), requestModalId: qs('request-detail-id'),
     requestModalStatus: qs('request-detail-status'), requestModalDate: qs('request-detail-date'), requestModalModes: qs('request-detail-modes'),
-    requestModalWhatsapp: qs('request-detail-whatsapp'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject')
+    requestModalWhatsapp: qs('request-detail-whatsapp'), requestTargetSlot: qs('request-target-slot'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject'),
+    deleteRecModal: qs('delete-rec-modal'), cancelDeleteRecBtn: qs('btn-cancel-delete-rec'), confirmDeleteRecBtn: qs('btn-confirm-delete-rec')
   };
   let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [], activeRequest = null;
 
   const ctxGuildId = () => String(getGuildContext()?.guildId || '').trim();
   const ctxGuildName = () => String(getGuildContext()?.guildName || '').trim();
+  const getGuildContextData = () => getGuildContext() || {};
+  const getGuildConfigData = () => {
+    const ctx = getGuildContextData();
+    const nested = ctx?.configGuilda;
+    return nested && typeof nested === 'object' ? nested : ctx;
+  };
+  const pickGuildValue = (...keys) => {
+    const ctx = getGuildContextData();
+    const cfg = getGuildConfigData();
+    for (const key of keys) {
+      const direct = ctx?.[key];
+      if (direct != null && String(direct).trim()) return String(direct).trim();
+      const nested = cfg?.[key];
+      if (nested != null && String(nested).trim()) return String(nested).trim();
+    }
+    return '';
+  };
+  const getManagementGuildSlots = () => {
+    const slots = [
+      { value: '1', label: pickGuildValue('name', 'guildName') || ctxGuildName() || 'Guilda principal', collection: 'membros' },
+      { value: '2', label: pickGuildValue('name2', 'guildName2'), collection: 'membros2' },
+      { value: '3', label: pickGuildValue('name3', 'guildName3'), collection: 'membros3' },
+      { value: '4', label: pickGuildValue('name4', 'guildName4'), collection: 'membros4' }
+    ];
+    return slots.filter((slot, index) => index === 0 || !!String(slot.label || '').trim());
+  };
+  const getManagementMembersCollection = (slotValue) => {
+    const wanted = String(slotValue || '1').trim();
+    return getManagementGuildSlots().find((slot) => slot.value === wanted)?.collection || 'membros';
+  };
+  const refreshManagementCustomSelect = (select) => {
+    if (!select) return;
+    const wrap = select.closest('.rq-select-wrap') || select.parentElement;
+    if (!wrap) return;
+    wrap.classList.remove('rq-dd', 'rq-dd-open');
+    wrap.querySelectorAll('[data-rec-dd-trigger-for], [data-rec-dd-select-id]').forEach((node) => node.remove());
+    select.classList.remove('rq-dd-native');
+    delete select.dataset.recDdInit;
+    enhanceManagementCustomSelect(select);
+    syncManagementCustomSelect(select);
+  };
+  const populateRequestTargetSlotOptions = (preferredValue = '1') => {
+    const select = els.requestTargetSlot;
+    if (!select) return;
+    const slots = getManagementGuildSlots();
+    select.innerHTML = slots.map((slot) => `<option value="${escapeHtml(slot.value)}">${escapeHtml(slot.label)}</option>`).join('');
+    const hasPreferred = slots.some((slot) => slot.value === String(preferredValue || '1'));
+    select.value = hasPreferred ? String(preferredValue || '1') : String(slots[0]?.value || '1');
+    refreshManagementCustomSelect(select);
+  };
   const getNormalizedVipTier = () => {
     const raw = String(getGuildContext()?.vipTier || 'free').toLowerCase().trim();
     if (!raw) return 'free';
@@ -249,36 +300,101 @@ function bootManagementMode() {
     return allowed;
   }
 
-  async function renderManagementGuildCard() {
-    if (!els.currentGuildName) return;
 
-    let guildNames = [];
-    try {
-      const slots = await getGuildMultiConfig(4);
-      guildNames = (Array.isArray(slots) ? slots : [])
-        .filter((slot) => Number(slot?.slot) === 1 || !!String(slot?.name || '').trim())
-        .map((slot) => String(slot?.name || '').trim())
-        .filter(Boolean);
-    } catch (_) {
-      guildNames = [];
+  function closeManagementCustomSelects(exceptSelect = null) {
+    document.querySelectorAll('[data-rec-dd-select-id]').forEach((menu) => {
+      const selectId = menu.getAttribute('data-rec-dd-select-id') || '';
+      const trigger = document.querySelector(`[data-rec-dd-trigger-for="${selectId}"]`);
+      const wrap = menu.closest('.rq-dd');
+      if (exceptSelect && String(exceptSelect.id || '') === selectId) return;
+      menu.classList.add('hidden');
+      trigger?.classList.remove('is-open');
+      wrap?.classList.remove('rq-dd-open');
+    });
+  }
+  function syncManagementCustomSelect(select) {
+    if (!select) return;
+    const selectId = String(select.id || '');
+    const trigger = document.querySelector(`[data-rec-dd-trigger-for="${selectId}"]`);
+    const label = trigger?.querySelector('.rq-dd-label');
+    const selectedOption = select.options[select.selectedIndex] || select.options[0] || null;
+    const isPlaceholder = !String(select.value || '').trim();
+    if (label) {
+      label.textContent = selectedOption ? selectedOption.textContent : 'Selecione';
+      label.classList.toggle('is-placeholder', isPlaceholder);
     }
-
-    if (!guildNames.length) {
-      const fallback = String(ctxGuildName() || pickGuildValue('name', 'guildName') || '-').trim() || '-';
-      els.currentGuildName.textContent = fallback;
+    if (trigger) trigger.disabled = !!select.disabled;
+    document.querySelectorAll(`[data-rec-dd-option-for="${selectId}"]`).forEach((btn) => {
+      const active = String(btn.getAttribute('data-value') || '') === String(select.value || '');
+      btn.classList.toggle('is-selected', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+  function enhanceManagementCustomSelect(select) {
+    if (!select || select.dataset.recCustomSelect !== 'true') return;
+    if (select.dataset.recDdInit === '1') {
+      syncManagementCustomSelect(select);
       return;
     }
+    const wrap = select.closest('.rq-select-wrap') || select.parentElement;
+    if (!wrap) return;
 
-    const [primaryGuild, ...extraGuilds] = guildNames;
-    if (!extraGuilds.length) {
-      els.currentGuildName.textContent = primaryGuild;
-      return;
-    }
+    wrap.classList.add('rq-dd');
+    select.dataset.recDdInit = '1';
+    select.classList.add('rq-dd-native');
 
-    els.currentGuildName.innerHTML = `
-      <span class="block text-sm font-bold text-gray-900">${escapeHtml(primaryGuild)}</span>
-      <span class="mt-1 block text-xs font-semibold text-gray-500 break-words">${escapeHtml(extraGuilds.join(' • '))}</span>
-    `;
+    wrap.querySelectorAll('[data-rec-dd-trigger-for], [data-rec-dd-select-id]').forEach((node) => node.remove());
+    wrap.querySelectorAll('i[data-lucide="chevron-down"]').forEach((icon) => icon.remove());
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'rq-dd-btn';
+    trigger.setAttribute('data-rec-dd-trigger-for', select.id);
+    trigger.innerHTML = `<span class="rq-dd-label">Selecione</span><span class="rq-dd-arrow">▾</span>`;
+
+    const menu = document.createElement('div');
+    menu.className = 'rq-dd-menu hidden';
+    menu.setAttribute('data-rec-dd-select-id', select.id);
+
+    [...select.options].forEach((option) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'rq-dd-item';
+      item.setAttribute('data-rec-dd-option-for', select.id);
+      item.setAttribute('data-value', option.value);
+      item.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+      item.innerHTML = `<span class="rq-dd-item-text">${escapeHtml(option.textContent || '')}</span><span class="rq-dd-check">✓</span>`;
+      item.addEventListener('click', () => {
+        select.value = option.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        syncManagementCustomSelect(select);
+        wrap.classList.remove('rq-dd-open');
+        closeManagementCustomSelects();
+      });
+      menu.appendChild(item);
+    });
+
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (select.disabled) return;
+      const willOpen = menu.classList.contains('hidden');
+      closeManagementCustomSelects(willOpen ? select : null);
+      menu.classList.toggle('hidden', !willOpen);
+      trigger.classList.toggle('is-open', willOpen);
+      wrap.classList.toggle('rq-dd-open', willOpen);
+    });
+
+    select.addEventListener('change', () => syncManagementCustomSelect(select));
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    syncManagementCustomSelect(select);
+  }
+  function initManagementCustomSelects() {
+    document.querySelectorAll('select[data-rec-custom-select="true"]').forEach((select) => {
+      enhanceManagementCustomSelect(select);
+      syncManagementCustomSelect(select);
+    });
   }
 
   function setStatus(message, type='info') {
@@ -378,9 +494,21 @@ function bootManagementMode() {
       if (currentRecruitment.photoBase64) setPhotoPreview(currentRecruitment.photoBase64, currentRecruitment.photoBytes || dataUrlSizeBytes(currentRecruitment.photoBase64));
     }
     els.modal.classList.remove('hidden');
+    initManagementCustomSelects();
     initIcons();
   }
   function closeRequestModal() { activeRequest = null; els.requestModal?.classList.add('hidden'); }
+  function closeDeleteRecModal() {
+    if (!els.deleteRecModal) return;
+    els.deleteRecModal.classList.add('hidden');
+    els.deleteRecModal.classList.remove('flex');
+  }
+  function openDeleteRecModal() {
+    if (!linkedUid || !currentRecruitment || !els.deleteRecModal) return;
+    els.deleteRecModal.classList.remove('hidden');
+    els.deleteRecModal.classList.add('flex');
+    initIcons();
+  }
   function openRequestModal(item) {
     if (!item || !els.requestModal) return;
     activeRequest = item;
@@ -407,7 +535,9 @@ function bootManagementMode() {
       const label = formatWhatsappLabel(item.whatsapp || item.phone || '', item.whatsappCountryCode || item.phoneCountryCode || '');
       els.requestModalWhatsapp.innerHTML = href ? `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 font-semibold hover:underline break-all">${escapeHtml(label)}</a>` : '<span class="text-gray-400">Não informado</span>';
     }
+    populateRequestTargetSlotOptions('1');
     els.requestModal.classList.remove('hidden');
+    initManagementCustomSelects();
     initIcons();
   }
   async function removeRequest(requestId) {
@@ -417,6 +547,8 @@ function bootManagementMode() {
   async function acceptRequest(item) {
     const guildId = ctxGuildId() || String(linkedUid || '').trim();
     if (!guildId || !item?.id) throw new Error('Guilda ou pedido inválido.');
+    const targetSlot = String(els.requestTargetSlot?.value || '1').trim() || '1';
+    const targetCollection = getManagementMembersCollection(targetSlot);
     const requestPlayMode = Array.isArray(item.roles)
       ? item.roles.map(v => String(v || '').trim()).filter(Boolean)
       : [];
@@ -437,7 +569,7 @@ function bootManagementMode() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
-    await setDoc(doc(db, 'guildas', guildId, 'membros', String(item.id)), payload, { merge: true });
+    await setDoc(doc(db, 'guildas', guildId, targetCollection, String(item.id)), payload, { merge: true });
     await removeRequest(String(item.id));
   }
   async function rejectRequest(item) {
@@ -631,18 +763,53 @@ function bootManagementMode() {
       closeModal(); renderRecruitment(); await loadRequests(); setStatus('Seu recrutamento foi salvo com sucesso.','success'); showToast('success','Recrutamento salvo!');
     } catch (err) { console.error(err); showToast('error','Não foi possível salvar o recrutamento.'); }
   }
-  async function deleteRecruitment() {
+  function deleteRecruitment() {
     if (!linkedUid || !currentRecruitment) return;
-    if (!window.confirm('Excluir este recrutamento?')) return;
+    openDeleteRecModal();
+  }
+  async function confirmDeleteRecruitment() {
+    if (!linkedUid || !currentRecruitment) {
+      closeDeleteRecModal();
+      return;
+    }
+    if (els.confirmDeleteRecBtn) {
+      els.confirmDeleteRecBtn.disabled = true;
+      els.confirmDeleteRecBtn.classList.add('opacity-70', 'cursor-not-allowed');
+    }
     try {
       await deleteDoc(doc(recDb,'rec',linkedUid));
       currentRecruitment = null; currentRequests = [];
+      closeDeleteRecModal();
       renderRecruitment(); setStatus('Seu recrutamento foi excluído com sucesso.','success'); showToast('success','Recrutamento excluído!');
-    } catch (err) { console.error(err); showToast('error','Não foi possível excluir o recrutamento.'); }
+    } catch (err) {
+      console.error(err);
+      showToast('error','Não foi possível excluir o recrutamento.');
+    } finally {
+      if (els.confirmDeleteRecBtn) {
+        els.confirmDeleteRecBtn.disabled = false;
+        els.confirmDeleteRecBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+      }
+    }
   }
   function bindEvents() {
     document.querySelectorAll('[data-close-rec]').forEach(el => el.addEventListener('click', closeModal));
     document.querySelectorAll('[data-close-request-detail]').forEach(el => el.addEventListener('click', closeRequestModal));
+    document.querySelectorAll('[data-close-delete-rec]').forEach(el => el.addEventListener('click', closeDeleteRecModal));
+    els.cancelDeleteRecBtn?.addEventListener('click', closeDeleteRecModal);
+    els.confirmDeleteRecBtn?.addEventListener('click', confirmDeleteRecruitment);
+    if (!document.body.dataset.recManagementCustomSelectCloseBound) {
+      document.body.dataset.recManagementCustomSelectCloseBound = '1';
+      document.addEventListener('click', (event) => {
+        if (event.target.closest('.rq-dd')) return;
+        closeManagementCustomSelects();
+      });
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      closeModal();
+      closeRequestModal();
+      closeDeleteRecModal();
+    });
     els.newBtn?.addEventListener('click', () => openModal('create'));
     els.copyBtn?.addEventListener('click', copyRecruitmentLink);
     els.loadBtn?.addEventListener('click', () => resolveKeyAndLoad(true));
@@ -680,7 +847,7 @@ function bootManagementMode() {
     if (!user) return;
     const ctx = getGuildContext() || {};
     if (els.currentUid) els.currentUid.textContent = String(ctx.guildId || '-');
-    await renderManagementGuildCard();
+    if (els.currentGuildName) els.currentGuildName.textContent = String(ctx.guildName || '-');
     if (els.openedKey) els.openedKey.textContent = 'Nenhuma';
     const vipAllowed = applyRecruitmentVipGate();
     if (!vipAllowed) {
@@ -690,7 +857,8 @@ function bootManagementMode() {
       return;
     }
     await tryBootWithSavedKey();
-    resetPhotoState(); renderRecruitment(); updateCopyLinkVisibility(); initIcons();
+    populateRequestTargetSlotOptions('1');
+    resetPhotoState(); renderRecruitment(); updateCopyLinkVisibility(); initManagementCustomSelects(); initIcons();
   })();
 }
 
