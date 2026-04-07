@@ -391,6 +391,22 @@
     </div>
   </div>
 
+  <!-- MODAL DE CONFIRMAÇÃO (Para Excluir Membro) -->
+  <div id="delete-confirm-modal" class="fixed inset-0 z-[61] flex items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeleteConfirmModal()"></div>
+    <div class="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
+      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4 mx-auto">
+        <i data-lucide="trash-2" class="w-7 h-7 text-red-600"></i>
+      </div>
+      <h3 class="text-xl font-bold text-center text-gray-900 mb-2">Excluir membro?</h3>
+      <p class="text-sm text-center text-gray-500 mb-6 leading-relaxed">Essa ação irá remover este membro da guilda.<br><br><span class="text-red-500 font-bold">Atenção: É irreversível.</span></p>
+      <div class="flex gap-3">
+        <button type="button" onclick="closeDeleteConfirmModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
+        <button type="button" onclick="executeDeleteMember()" class="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-lg shadow-red-200 transition-all active:scale-95">Sim, Excluir</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildGoalsConfig, getGuildContext } from './logic.js';
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -409,6 +425,7 @@
     let hasTagManualOverride = false;
     let pendingEdits = {}; 
     let currentZeroAction = ''; 
+    let currentDeleteId = ''; 
 
     function __membersLsKey() {
       const gid = getGuildContext()?.guildId;
@@ -524,8 +541,8 @@
               </div>
             </div>
             <div class="flex gap-2 pt-2">
-              <button onclick="editMember('${m.id}')" class="flex-1 py-2.5 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50">Editar</button>
-              <button onclick="deleteMember('${m.id}')" class="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50">Excluir</button>
+              <button type="button" onclick="event.stopPropagation(); editMember('${m.id}'); return false;" class="flex-1 py-2.5 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50">Editar</button>
+              <button type="button" onclick="event.stopPropagation(); deleteMember('${m.id}'); return false;" class="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50">Excluir</button>
             </div>
           </div>
         </div>
@@ -1015,14 +1032,25 @@
       document.getElementById('modal').classList.remove('hidden');
     };
 
-    window.deleteMember = async (id) => {
-      if(!confirm('Tem certeza que deseja excluir?')) return;
+    window.closeDeleteConfirmModal = () => {
+      currentDeleteId = '';
+      document.getElementById('delete-confirm-modal').classList.add('hidden');
+    };
+
+    window.executeDeleteMember = async () => {
+      const id = String(currentDeleteId || '').trim();
+      if (!id) {
+        closeDeleteConfirmModal();
+        return;
+      }
+
       try {
         const m = membersCache.find(x => x.id === id);
         await deleteDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id));
 
-        membersCache = (membersCache || []).filter(m => m.id !== id);
+        membersCache = (membersCache || []).filter(member => member.id !== id);
         __setMembersCache(membersCache);
+        closeDeleteConfirmModal();
 
         // Aviso se era um usuário antigo que foi limpo
         if (m && m.id !== m.visibleId) {
@@ -1032,8 +1060,16 @@
         }
       } catch(e) {
         console.error(e);
+        closeDeleteConfirmModal();
         showToast('error', 'Erro ao excluir.');
       }
+    };
+
+    window.deleteMember = (id) => {
+      currentDeleteId = String(id || '').trim();
+      if (!currentDeleteId) return;
+      document.getElementById('delete-confirm-modal').classList.remove('hidden');
+      initIcons();
     };
 
     window.fetchNick = async () => {
