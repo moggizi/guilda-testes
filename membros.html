@@ -417,6 +417,23 @@
     </div>
   </div>
 
+  <!-- MODAL DE MOVER MEMBRO -->
+  <div id="move-member-modal" class="fixed inset-0 z-[62] flex items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeMoveMemberModal()"></div>
+    <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
+      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-emerald-100 mb-4 mx-auto">
+        <i data-lucide="arrow-right-left" class="w-7 h-7 text-emerald-600"></i>
+      </div>
+      <h3 class="text-xl font-bold text-center text-gray-900 mb-2">Mover membro</h3>
+      <p id="move-member-desc" class="text-sm text-center text-gray-500 mb-5 leading-relaxed">Escolha para qual guilda este membro deve ser movido.</p>
+      <div id="move-member-options" class="space-y-2 mb-6"></div>
+      <div class="flex gap-3">
+        <button type="button" onclick="closeMoveMemberModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
+        <button type="button" id="btn-confirm-move-member" onclick="executeMoveMember()" class="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-200 transition-all active:scale-95">Mover</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildGoalsConfig, getGuildContext, getGuildMultiConfig, getVipTier } from './logic.js';
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -436,6 +453,8 @@
     let pendingEdits = {}; 
     let currentZeroAction = ''; 
     let currentDeleteId = ''; 
+    let currentMoveId = ''; 
+    let currentMoveTargetSlot = null; 
     let currentGuildSlot = 1;
     let currentGuildSlotsMeta = [];
     let canUseMultiGuildMembers = false;
@@ -618,6 +637,92 @@
         localStorage.setItem(__membersLsKey(), JSON.stringify(list || []));
       } catch (_) {}
     }
+    function __membersLsKeyBySlot(slot) {
+      const gid = getGuildContext()?.guildId;
+      const collectionName = __membersCollectionName(slot);
+      return gid ? `membersList_${gid}_${collectionName}` : `membersList_${collectionName}`;
+    }
+
+    function __readMembersFromCacheBySlot(slot) {
+      try {
+        const raw = localStorage.getItem(__membersLsKeyBySlot(slot));
+        if (!raw) return null;
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function __writeMembersToCacheBySlot(slot, list) {
+      try {
+        localStorage.setItem(__membersLsKeyBySlot(slot), JSON.stringify(list || []));
+      } catch (_) {}
+    }
+
+    async function __findMemberAcrossGuildsByVisibleId(visibleId, excludeSlot = null) {
+      const searchId = String(visibleId || '').trim();
+      if (!searchId) return null;
+      const guildId = getGuildContext()?.guildId;
+      if (!guildId) return null;
+
+      for (let slot = 1; slot <= 4; slot++) {
+        if (excludeSlot != null && Number(excludeSlot) === slot) continue;
+        if (slot !== 1 && !__isGuildSlotAvailable(slot)) continue;
+        try {
+          const snap = await getDocs(query(
+            collection(db, 'guildas', guildId, __membersCollectionName(slot)),
+            where('visibleId', '==', searchId),
+            limit(1)
+          ));
+          if (!snap.empty) {
+            const found = snap.docs[0];
+            if (found.id === '__meta__') continue;
+            return { slot, docId: found.id, data: found.data() || {} };
+          }
+        } catch (_) {}
+      }
+      return null;
+    }
+    async function __findMemberInGuildSlotByVisibleId(slot, visibleId) {
+      const searchId = String(visibleId || '').trim();
+      const targetSlot = Math.max(1, Math.min(4, Math.floor(Number(slot) || 1)));
+      if (!searchId) return null;
+      const guildId = getGuildContext()?.guildId;
+      if (!guildId) return null;
+      try {
+        const snap = await getDocs(query(
+          collection(db, 'guildas', guildId, __membersCollectionName(targetSlot)),
+          where('visibleId', '==', searchId),
+          limit(1)
+        ));
+        if (snap.empty) return null;
+        const found = snap.docs[0];
+        if (found.id === '__meta__') return null;
+        return { slot: targetSlot, docId: found.id, data: found.data() || {} };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function __syncCacheAfterMove(member, fromSlot, toSlot) {
+      const moved = { ...member, id: member.visibleId, updatedAt: Date.now() };
+      delete moved.__name__;
+
+      try {
+        const fromList = (__readMembersFromCacheBySlot(fromSlot) || []).filter(item => String(item?.id || '') !== String(member.id || ''));
+        __writeMembersToCacheBySlot(fromSlot, fromList);
+      } catch (_) {}
+
+      try {
+        const toList = __readMembersFromCacheBySlot(toSlot) || [];
+        const idx = toList.findIndex(item => String(item?.visibleId || '') === String(member.visibleId || ''));
+        if (idx >= 0) toList[idx] = { ...toList[idx], ...moved };
+        else toList.push(moved);
+        toList.sort((a,b)=> String(a?.nick || '').localeCompare(String(b?.nick || '')));
+        __writeMembersToCacheBySlot(toSlot, toList);
+      } catch (_) {}
+    }
 
     function __setMembersCache(list) {
       membersCache = Array.isArray(list) ? list : [];
@@ -710,9 +815,10 @@
                 ${m.whatsapp ? `<a href="https://wa.me/55${m.whatsapp}" target="_blank" class="text-emerald-600 text-xs hover:underline">${m.whatsapp}</a>` : '<span class="text-xs text-gray-400">-</span>'}
               </div>
             </div>
-            <div class="flex gap-2 pt-2">
-              <button type="button" onclick="event.stopPropagation(); editMember('${m.id}'); return false;" class="flex-1 py-2.5 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50">Editar</button>
-              <button type="button" onclick="event.stopPropagation(); deleteMember('${m.id}'); return false;" class="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50">Excluir</button>
+            <div class="grid grid-cols-3 gap-2 pt-2">
+              <button type="button" onclick="event.stopPropagation(); editMember('${m.id}'); return false;" class="py-2.5 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50">Editar</button>
+              <button type="button" onclick="event.stopPropagation(); moveMember('${m.id}'); return false;" class="py-2.5 rounded-xl border border-blue-200 text-blue-600 text-sm font-medium hover:bg-blue-50">Mover</button>
+              <button type="button" onclick="event.stopPropagation(); deleteMember('${m.id}'); return false;" class="py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50">Excluir</button>
             </div>
           </div>
         </div>
@@ -1248,6 +1354,117 @@
       initIcons();
     };
 
+    window.closeMoveMemberModal = () => {
+      currentMoveId = '';
+      currentMoveTargetSlot = null;
+      document.getElementById('move-member-modal').classList.add('hidden');
+    };
+
+    window.moveMember = (id) => {
+      const member = membersCache.find(x => x.id === id);
+      if (!member) return;
+      if (!canUseMultiGuildMembers) {
+        showToast('info', 'Mover membros entre guildas é um recurso do plano PRO ou superior.');
+        return;
+      }
+
+      const destinations = [1, 2, 3, 4].filter(slot => slot !== Number(currentGuildSlot) && __isGuildSlotAvailable(slot));
+      if (!destinations.length) {
+        showToast('info', 'Nenhuma outra guilda disponível para mover este membro.');
+        return;
+      }
+
+      currentMoveId = String(id || '').trim();
+      currentMoveTargetSlot = destinations[0] || null;
+
+      const optionsEl = document.getElementById('move-member-options');
+      const descEl = document.getElementById('move-member-desc');
+      if (descEl) descEl.innerHTML = `Escolha para qual guilda <b>${member.nick || member.visibleId || 'este membro'}</b> deve ser movido.`;
+      if (optionsEl) {
+        optionsEl.innerHTML = destinations.map(slot => `
+          <button
+            type="button"
+            data-move-slot="${slot}"
+            class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="text-sm font-semibold text-gray-900">${__currentGuildDisplayName(slot)}</div>
+                <div class="text-[11px] text-gray-500 mt-0.5">Mover para a lista desta guilda</div>
+              </div>
+              <span class="w-4 h-4 rounded-full border-2 border-gray-300 inline-block" data-move-slot-dot="${slot}"></span>
+            </div>
+          </button>
+        `).join('');
+      }
+
+      const syncMoveSelection = () => {
+        document.querySelectorAll('[data-move-slot]').forEach((btn) => {
+          const slot = Number(btn.getAttribute('data-move-slot') || 0);
+          const active = slot === Number(currentMoveTargetSlot);
+          btn.classList.toggle('border-emerald-300', active);
+          btn.classList.toggle('bg-emerald-50', active);
+          btn.classList.toggle('border-gray-200', !active);
+          btn.classList.toggle('bg-white', !active);
+        });
+        document.querySelectorAll('[data-move-slot-dot]').forEach((dot) => {
+          const slot = Number(dot.getAttribute('data-move-slot-dot') || 0);
+          const active = slot === Number(currentMoveTargetSlot);
+          dot.classList.toggle('border-emerald-500', active);
+          dot.classList.toggle('bg-emerald-500', active);
+          dot.classList.toggle('border-gray-300', !active);
+          dot.classList.toggle('bg-white', !active);
+        });
+      };
+
+      optionsEl?.querySelectorAll('[data-move-slot]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          currentMoveTargetSlot = Number(btn.getAttribute('data-move-slot') || 0) || null;
+          syncMoveSelection();
+        });
+      });
+
+      syncMoveSelection();
+      document.getElementById('move-member-modal').classList.remove('hidden');
+      initIcons();
+    };
+
+    window.executeMoveMember = async () => {
+      const id = String(currentMoveId || '').trim();
+      const targetSlot = Math.max(1, Math.min(4, Math.floor(Number(currentMoveTargetSlot) || 0)));
+      const member = membersCache.find(x => String(x.id || '') === id);
+      if (!id || !member || !targetSlot || targetSlot === Number(currentGuildSlot)) {
+        closeMoveMemberModal();
+        return;
+      }
+
+      try {
+        const duplicate = await __findMemberInGuildSlotByVisibleId(targetSlot, member.visibleId);
+        if (duplicate) {
+          showToast('error', `Este ID já está em ${__currentGuildDisplayName(targetSlot)}.`);
+          return;
+        }
+
+        await __ensureMembersCollectionExists(targetSlot);
+
+        const guildId = getGuildContext().guildId;
+        const payload = { ...member, visibleId: member.visibleId, updatedAt: serverTimestamp() };
+        delete payload.id;
+
+        await setDoc(doc(db, 'guildas', guildId, __membersCollectionName(targetSlot), member.visibleId), payload, { merge: true });
+        await deleteDoc(doc(db, 'guildas', guildId, __membersCollectionName(currentGuildSlot), member.id));
+
+        membersCache = (membersCache || []).filter(item => String(item.id || '') !== id);
+        __setMembersCache(membersCache);
+        __syncCacheAfterMove(member, currentGuildSlot, targetSlot);
+        closeMoveMemberModal();
+        showToast('success', `Membro movido para ${__currentGuildDisplayName(targetSlot)}.`);
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Não foi possível mover o membro.');
+      }
+    };
+
     window.fetchNick = async () => {
       const uid = document.getElementById('visible-id').value.trim();
       const feedback = document.getElementById('api-feedback');
@@ -1319,6 +1536,14 @@
       };
 
       try {
+        if (!id || String(id || '').trim() !== visibleId) {
+          const duplicateInOtherGuild = await __findMemberAcrossGuildsByVisibleId(visibleId, currentGuildSlot);
+          if (duplicateInOtherGuild) {
+            showToast('error', `Este ID já está em ${__currentGuildDisplayName(duplicateInOtherGuild.slot)}.`);
+            return;
+          }
+        }
+
         if(id) {
           if (id !== visibleId) {
              // MIGRATION ON THE FLY (Edição de perfil)
