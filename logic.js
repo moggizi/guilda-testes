@@ -706,10 +706,16 @@ export async function setGuildNameConfig(name) {
   const clean = (name || '').toString().trim();
   if (!clean) throw new Error('Nome da guilda inválido.');
 
-  await setDoc(doc(db, "guildas", guildId), {
-    name: clean,
-    updatedAt: serverTimestamp()
-  }, { merge: true });
+  await Promise.all([
+    setDoc(doc(db, "guildas", guildId), {
+      name: clean,
+      updatedAt: serverTimestamp()
+    }, { merge: true }),
+    setDoc(doc(db, "configGuilda", guildId), {
+      name: clean,
+      updatedAt: serverTimestamp()
+    }, { merge: true })
+  ]);
 
   try {
     const key = `guildInfo_${guildId}`;
@@ -742,6 +748,129 @@ export async function setGuildNameConfig(name) {
   return true;
 }
 
+
+function __normalizeGuildSlot(slot) {
+  const n = Math.floor(Number(slot));
+  if (!Number.isFinite(n) || n < 1 || n > 4) throw new Error('Slot de guilda inválido.');
+  return n;
+}
+
+function __slotField(base, slot) {
+  return slot <= 1 ? base : `${base}${slot}`;
+}
+
+function __sanitizeOptionalText(value) {
+  const clean = (value ?? '').toString().trim();
+  return clean;
+}
+
+export async function getGuildMultiConfig(maxSlots = 4) {
+  const guildId = requireGuildId();
+  const safeMax = Math.max(1, Math.min(4, Math.floor(Number(maxSlots) || 4)));
+
+  let cfg = {};
+  try {
+    const snap = await getDoc(doc(db, "configGuilda", guildId));
+    cfg = snap.exists() ? (snap.data() || {}) : {};
+  } catch (_) {
+    cfg = {};
+  }
+
+  let primaryName = (cfg.name || '').toString().trim();
+  if (!primaryName) {
+    try {
+      const info = await getGuildInfoCached(guildId);
+      primaryName = (info?.name || '').toString().trim();
+    } catch (_) {
+      primaryName = '';
+    }
+  }
+
+  const primaryTag = (cfg.tagMembros || '').toString().trim();
+  const slots = [];
+
+  for (let slot = 1; slot <= safeMax; slot++) {
+    const nameField = __slotField('name', slot);
+    const tagField = __slotField('tagMembros', slot);
+    const nameValue = slot === 1 ? primaryName : __sanitizeOptionalText(cfg[nameField]);
+    const tagValue = slot === 1 ? primaryTag : __sanitizeOptionalText(cfg[tagField]);
+    slots.push({
+      slot,
+      nameField,
+      tagField,
+      name: nameValue,
+      tag: tagValue,
+      exists: slot === 1 ? true : !!nameValue
+    });
+  }
+
+  return slots;
+}
+
+export async function addGuildSlotConfig(maxSlots = 4) {
+  const guildId = requireGuildId();
+  const safeMax = Math.max(2, Math.min(4, Math.floor(Number(maxSlots) || 4)));
+  const existing = await getGuildMultiConfig(safeMax);
+
+  const target = existing.find((item) => item.slot >= 2 && !item.exists);
+  if (!target) throw new Error('Limite de guildas extras atingido.');
+
+  const defaultName = `Nova guilda ${target.slot}`;
+  const payload = {
+    [target.nameField]: defaultName,
+    [target.tagField]: '',
+    updatedAt: serverTimestamp()
+  };
+
+  await setDoc(doc(db, "configGuilda", guildId), payload, { merge: true });
+
+  return {
+    slot: target.slot,
+    nameField: target.nameField,
+    tagField: target.tagField,
+    name: defaultName,
+    tag: '',
+    exists: true
+  };
+}
+
+export async function setGuildSlotConfig(slot, { name, tag } = {}) {
+  const guildId = requireGuildId();
+  const safeSlot = __normalizeGuildSlot(slot);
+  const payload = { updatedAt: serverTimestamp() };
+
+  if (name !== undefined) {
+    const cleanName = __sanitizeOptionalText(name);
+    if (!cleanName) throw new Error('Nome da guilda inválido.');
+
+    if (safeSlot === 1) {
+      await setGuildNameConfig(cleanName);
+    } else {
+      payload[__slotField('name', safeSlot)] = cleanName;
+    }
+  }
+
+  if (tag !== undefined) {
+    const cleanTag = __sanitizeOptionalText(tag);
+    payload[__slotField('tagMembros', safeSlot)] = cleanTag;
+  }
+
+  if (Object.keys(payload).length > 1) {
+    await setDoc(doc(db, "configGuilda", guildId), payload, { merge: true });
+  }
+
+  if (safeSlot === 1 && tag !== undefined) {
+    try {
+      if (payload.tagMembros) {
+        localStorage.setItem(`tagMembros_${guildId}`, JSON.stringify({ value: payload.tagMembros, ts: Date.now() }));
+      } else {
+        localStorage.removeItem(`tagMembros_${guildId}`);
+      }
+    } catch (_) {}
+  }
+
+  return true;
+}
 
 const GUILD_ACCESS_KEY_PREFIX = 'guildAccessKey_';
 const HUB_PERFIS_CACHE_PREFIX = 'guildProfileExists_';

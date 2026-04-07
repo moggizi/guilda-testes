@@ -219,6 +219,25 @@
         <p id="guild-created" class="mt-1 text-sm font-bold text-gray-900">-</p>
       </div>
     </div>
+
+    <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <p class="text-[11px] text-gray-500 font-semibold">Guildas extras na mesma conta</p>
+          <p class="mt-1 text-xs text-gray-500">Cria até 3 slots extras, salvos como <b>name2..name4</b> e <b>tagMembros2..tagMembros4</b> em <code class="px-1 py-0.5 rounded bg-white border border-gray-200">configGuilda</code>.</p>
+        </div>
+        <button id="btn-add-guild-slot" class="px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95">
+          + Guilda
+        </button>
+      </div>
+
+      <p id="multi-guild-hint" class="mt-3 text-xs text-gray-500"></p>
+      <div id="extra-guilds-list" class="mt-3 space-y-3">
+        <div class="rounded-xl border border-dashed border-gray-300 bg-white/80 px-4 py-4 text-xs text-gray-500">
+          Nenhuma guilda extra criada ainda.
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -235,6 +254,7 @@
                 <li>O UID identifica a sua <code class="px-1 py-0.5 rounded bg-gray-100">Guilda</code> dentro da plataforma.</li>
                 <li>A chave da guilda serve para criar e acessar o perfil da guilda na tela "Estatísticas".</li>
                 <li>Guarde essa chave com segurança e não compartilhe com <b>NINGUÉM</b>.</li>
+                <li>No plano PRO ou superior você pode criar até <b>4 guildas no total</b> na mesma conta, usando os campos <code class="px-1 py-0.5 rounded bg-gray-100">name2..name4</code> e <code class="px-1 py-0.5 rounded bg-gray-100">tagMembros2..tagMembros4</code>.</li>
               </ul>
             </div>
           </div>
@@ -244,7 +264,7 @@
   </div>
 
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConfig, setMemberTagConfig, getGuildContext, getGuildInfoCached, getGuildAccessKeyConfig, generateGuildAccessKey, getCachedGuildProfileState, getGuildProfileExists, createGuildProfile, getGuildGoalsConfig, setGuildGoalsConfig, setGuildNameConfig } from './logic.js';
+    import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConfig, setMemberTagConfig, getGuildContext, getGuildInfoCached, getGuildAccessKeyConfig, generateGuildAccessKey, getCachedGuildProfileState, getGuildProfileExists, createGuildProfile, getGuildGoalsConfig, setGuildGoalsConfig, setGuildNameConfig, getVipTier, getGuildMultiConfig, addGuildSlotConfig, setGuildSlotConfig } from './logic.js';
 
     setupSidebar();
     initIcons();
@@ -269,6 +289,15 @@
     const btnGenerateGuildKey = document.getElementById('btn-generate-guild-key');
     const btnCopyGuildKey = document.getElementById('btn-copy-guild-key');
     const btnCreateGuildProfile = document.getElementById('btn-create-guild-profile');
+    const btnAddGuildSlot = document.getElementById('btn-add-guild-slot');
+    const multiGuildHint = document.getElementById('multi-guild-hint');
+    const extraGuildsList = document.getElementById('extra-guilds-list');
+
+    let currentCtx = null;
+    let currentIsLeader = false;
+    let currentIsAdmin = false;
+    let currentCanAddGuildSlot = false;
+    let multiGuildSlots = [];
 
     function fmtDate(ms) {
       try {
@@ -391,6 +420,173 @@
       return Math.floor(n);
     }
 
+    function normalizeVipTierClient(v) {
+      const s = (v || '').toString().toLowerCase().trim();
+      if (s.includes('vital') || s.includes('life')) return 'vitalicio';
+      if (s.includes('buss') || s.includes('business')) return 'business';
+      if (s.includes('pro')) return 'pro';
+      if (s.includes('plus')) return 'plus';
+      return 'free';
+    }
+
+    function escapeAttr(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function setAddGuildSlotState() {
+      if (!btnAddGuildSlot) return;
+      const usedExtraSlots = multiGuildSlots.filter((slot) => slot?.slot >= 2 && slot?.exists).length;
+      const reachedLimit = usedExtraSlots >= 3;
+
+      btnAddGuildSlot.disabled = !currentCanAddGuildSlot || reachedLimit;
+      btnAddGuildSlot.classList.toggle('opacity-50', btnAddGuildSlot.disabled);
+      btnAddGuildSlot.classList.toggle('cursor-not-allowed', btnAddGuildSlot.disabled);
+
+      if (multiGuildHint) {
+        if (!currentIsLeader) {
+          multiGuildHint.textContent = 'Apenas o Líder pode editar ou criar guildas extras.';
+        } else if (!currentCanAddGuildSlot) {
+          multiGuildHint.textContent = 'Criar novas guildas extras é um recurso do plano PRO ou superior.';
+        } else if (reachedLimit) {
+          multiGuildHint.textContent = 'Limite máximo atingido: esta conta já possui 4 guildas no total.';
+        } else {
+          multiGuildHint.textContent = 'Você pode manter até 4 guildas no total nesta conta, sem opção de excluir por aqui.';
+        }
+      }
+    }
+
+    function renderExtraGuildSlots() {
+      if (!extraGuildsList) return;
+      const extras = multiGuildSlots.filter((slot) => slot?.slot >= 2 && slot?.exists);
+
+      if (!extras.length) {
+        extraGuildsList.innerHTML = `
+          <div class="rounded-xl border border-dashed border-gray-300 bg-white/80 px-4 py-4 text-xs text-gray-500">
+            Nenhuma guilda extra criada ainda.
+          </div>
+        `;
+        return;
+      }
+
+      extraGuildsList.innerHTML = extras.map((slot) => `
+        <div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm" data-slot-card="${slot.slot}">
+          <div class="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <p class="text-sm font-semibold text-gray-900">Guilda ${slot.slot}</p>
+              <p class="text-[11px] text-gray-500">Campos salvos como <b>${slot.nameField}</b> e <b>${slot.tagField}</b>.</p>
+            </div>
+            <span class="text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">Extra</span>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-medium text-gray-700 mb-1 block">Nome da guilda</label>
+              <input
+                type="text"
+                data-slot-field="name"
+                value="${escapeAttr(slot.name || '')}"
+                placeholder="Nome da guilda ${slot.slot}"
+                ${currentIsLeader ? '' : 'disabled'}
+                class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm ${currentIsLeader ? '' : 'bg-gray-50'}"
+              />
+            </div>
+
+            <div>
+              <label class="text-xs font-medium text-gray-700 mb-1 block">Tag correspondente</label>
+              <input
+                type="text"
+                data-slot-field="tag"
+                value="${escapeAttr(slot.tag || '')}"
+                placeholder="Ex: ᵒᵗᵏ"
+                ${currentIsLeader ? '' : 'disabled'}
+                class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm ${currentIsLeader ? '' : 'bg-gray-50'}"
+              />
+            </div>
+          </div>
+
+          <div class="mt-3 flex justify-end">
+            <button
+              type="button"
+              data-action="save-slot"
+              data-slot="${slot.slot}"
+              ${currentIsLeader ? '' : 'disabled'}
+              class="px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95 ${currentIsLeader ? '' : 'opacity-50 cursor-not-allowed'}"
+            >
+              Salvar guilda ${slot.slot}
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function upsertMultiGuildSlot(slotNumber, payload = {}) {
+      const slot = Number(slotNumber);
+      const idx = multiGuildSlots.findIndex((item) => Number(item?.slot) === slot);
+      if (idx >= 0) {
+        multiGuildSlots[idx] = { ...multiGuildSlots[idx], ...payload, exists: true };
+      }
+    }
+
+    extraGuildsList?.addEventListener('click', async (event) => {
+      const btn = event.target.closest('[data-action="save-slot"]');
+      if (!btn || !currentIsLeader) return;
+
+      const slot = Number(btn.dataset.slot);
+      const card = btn.closest('[data-slot-card]');
+      if (!slot || !card) return;
+
+      const nameValue = (card.querySelector('[data-slot-field="name"]')?.value || '').trim();
+      const tagValue = (card.querySelector('[data-slot-field="tag"]')?.value || '').trim();
+
+      if (!nameValue) {
+        showToast('error', `Digite o nome da guilda ${slot} antes de salvar.`);
+        return;
+      }
+
+      try {
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        await setGuildSlotConfig(slot, { name: nameValue, tag: tagValue });
+        upsertMultiGuildSlot(slot, { name: nameValue, tag: tagValue });
+        renderExtraGuildSlots();
+        setAddGuildSlotState();
+        showToast('success', `Guilda ${slot} salva com sucesso!`);
+      } catch (e) {
+        console.error(e);
+        showToast('error', `Não foi possível salvar a guilda ${slot}.`);
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    });
+
+    btnAddGuildSlot?.addEventListener('click', async () => {
+      if (!currentCanAddGuildSlot) return;
+
+      try {
+        btnAddGuildSlot.disabled = true;
+        btnAddGuildSlot.classList.add('opacity-50', 'cursor-not-allowed');
+        const created = await addGuildSlotConfig(4);
+        multiGuildSlots.push(created);
+        multiGuildSlots.sort((a, b) => Number(a?.slot || 0) - Number(b?.slot || 0));
+        renderExtraGuildSlots();
+        setAddGuildSlotState();
+        showToast('success', `Guilda ${created.slot} criada com sucesso!`);
+      } catch (e) {
+        console.error(e);
+        showToast('error', e?.message || 'Não foi possível criar outra guilda.');
+      } finally {
+        btnAddGuildSlot.disabled = false;
+        btnAddGuildSlot.classList.remove('opacity-50', 'cursor-not-allowed');
+        setAddGuildSlotState();
+      }
+    });
+
     btnCopyGuildUid?.addEventListener('click', async () => {
       const value = (guildUidEl?.textContent || '').trim();
       if (!value) return;
@@ -399,12 +595,17 @@
 
     try {
       const ctx = getGuildContext();
+      currentCtx = ctx || null;
       if (ctx) {
         const isLeader = ctx.role === 'Líder';
         const isAdmin = ctx.role === 'Admin';
+        currentIsLeader = isLeader;
+        currentIsAdmin = isAdmin;
+        currentCanAddGuildSlot = isLeader && ['pro', 'business', 'vitalicio'].includes(normalizeVipTierClient(ctx?.vipTier || getVipTier()));
         setReadonly(!isLeader, isAdmin);
         setGoalsReadonly(!isLeader);
         setGuildNameReadonly(!isLeader);
+        setAddGuildSlotState();
 
         if (guildUidEl) guildUidEl.textContent = ctx.guildId || '';
 
@@ -473,11 +674,16 @@
       document.getElementById('btn-logout').onclick = logout;
 
       const ctx = getGuildContext();
+      currentCtx = ctx || null;
       const isLeader = ctx?.role === 'Líder';
       const isAdmin = ctx?.role === 'Admin';
+      currentIsLeader = !!isLeader;
+      currentIsAdmin = !!isAdmin;
+      currentCanAddGuildSlot = !!isLeader && ['pro', 'business', 'vitalicio'].includes(normalizeVipTierClient(ctx?.vipTier || getVipTier()));
       setReadonly(!isLeader, isAdmin);
       setGoalsReadonly(!isLeader);
       setGuildNameReadonly(!isLeader);
+      setAddGuildSlotState();
 
       try {
         const current = await getMemberTagConfig();
@@ -512,6 +718,21 @@
         if (guildNameInput) guildNameInput.value = ctx?.guildName || '';
         if (guildNameHint) guildNameHint.textContent = ctx?.guildName ? `Nome atual: ${ctx.guildName}` : 'Nenhum nome encontrado.';
       }
+
+      try {
+        multiGuildSlots = await getGuildMultiConfig(4);
+        const primarySlot = multiGuildSlots.find((slot) => Number(slot?.slot) === 1);
+        if (primarySlot?.name && guildNameInput) guildNameInput.value = primarySlot.name;
+        if (primarySlot?.name && guildNameHint) guildNameHint.textContent = `Nome atual: ${primarySlot.name}`;
+        if (primarySlot && typeof primarySlot.tag === 'string') {
+          tagInput.value = primarySlot.tag || '';
+          hint.textContent = primarySlot.tag ? `Tag configurada: "${primarySlot.tag}"` : 'Nenhuma tag configurada ainda.';
+        }
+      } catch (_) {
+        multiGuildSlots = [];
+      }
+      renderExtraGuildSlots();
+      setAddGuildSlotState();
 
       try {
         currentGuildKey = await getGuildAccessKeyConfig();
@@ -588,6 +809,7 @@
 
         try {
           await setMemberTagConfig(value);
+          upsertMultiGuildSlot(1, { tag: value });
           showToast('success', 'Tag salva com sucesso!');
           hint.textContent = `Tag configurada: "${value}"`;
         } catch (e) {
@@ -621,6 +843,7 @@
 
         try {
           await setGuildNameConfig(value);
+          upsertMultiGuildSlot(1, { name: value });
           guildNameHint.textContent = `Nome atual: ${value}`;
           showToast('success', 'Nome da guilda salvo com sucesso!');
         } catch (e) {
