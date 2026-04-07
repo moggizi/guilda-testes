@@ -550,6 +550,31 @@
       btn.setAttribute('aria-disabled', canUseMultiGuildMembers ? 'false' : 'true');
     }
 
+    function __positionGuildSlotDropdown() {
+      const box = document.getElementById('guild-slot-dropdown');
+      if (!box || box.classList.contains('hidden')) return;
+
+      box.style.left = '';
+      box.style.right = '0';
+      box.style.transform = 'translateX(0)';
+
+      requestAnimationFrame(() => {
+        const rect = box.getBoundingClientRect();
+        const margin = 12;
+        const maxRight = window.innerWidth - margin;
+        let shiftX = 0;
+
+        if (rect.right > maxRight) {
+          shiftX -= (rect.right - maxRight);
+        }
+        if ((rect.left + shiftX) < margin) {
+          shiftX += (margin - (rect.left + shiftX));
+        }
+
+        box.style.transform = `translateX(${shiftX}px)`;
+      });
+    }
+
     function __renderGuildSlotDropdown() {
       const box = document.getElementById('guild-slot-dropdown');
       if (!box) return;
@@ -1608,7 +1633,9 @@
         return;
       }
       __renderGuildSlotDropdown();
-      document.getElementById('guild-slot-dropdown')?.classList.toggle('hidden');
+      const dropdown = document.getElementById('guild-slot-dropdown');
+      dropdown?.classList.toggle('hidden');
+      __positionGuildSlotDropdown();
     });
 
     document.getElementById('guild-slot-dropdown')?.addEventListener('click', async (e) => {
@@ -1620,6 +1647,10 @@
       }
       const slot = Number(option.getAttribute('data-guild-slot-option') || 1);
       await __applyGuildSlot(slot, false);
+    });
+
+    window.addEventListener('resize', () => {
+      __positionGuildSlotDropdown();
     });
 
     // ==========================================
