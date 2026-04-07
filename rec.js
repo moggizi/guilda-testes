@@ -56,6 +56,25 @@ function tagChip(text, style='default') {
   };
   return `<span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-bold ${styles[style] || styles.default}">${escapeHtml(text)}</span>`;
 }
+function buildRecruitmentRequirements(data = {}) {
+  const items = [];
+  const pushItem = (label, value) => {
+    const clean = String(value || '').trim();
+    if (!clean) return;
+    items.push(`${label}: ${clean}`);
+  };
+  pushItem('Plataforma', data.platform);
+  pushItem('Idade', data.minimumAge);
+  pushItem('Troca nick', data.nickChangeRequired);
+  pushItem('Prazo nick', data.nickChangeDeadline);
+  pushItem('Equipe', data.teamPlay);
+  pushItem('Call', data.useCall);
+  return items;
+}
+function renderRequirementChips(data = {}) {
+  const items = buildRecruitmentRequirements(data);
+  return items.length ? items.map(v => tagChip(v, 'default')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
+}
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
 const MARKETPLACE_ROLE_OPTIONS = ['Rush', 'Full Gás', 'Curandeiro', 'Fuzileiro', 'Suporte'];
 const WHATSAPP_COUNTRY_OPTIONS = [
@@ -164,6 +183,7 @@ function bootManagementMode() {
     currentGuildName: qs('current-guild-name'), openedKey: qs('opened-key'), view: qs('recruitment-view'),
     keyLabel: document.querySelector('label[for="guild-access-key-input"]'),
     modal: qs('rec-modal'), modalTitle: qs('rec-modal-title'), form: qs('rec-form'), guildName: qs('rec-guild-name'),
+    platform: qs('rec-platform'), age: qs('rec-age'), nickRequired: qs('rec-nick-required'), nickDeadline: qs('rec-nick-deadline'), teamPlay: qs('rec-teamplay'), useCall: qs('rec-call'),
     desc: qs('rec-description'), descCount: qs('rec-desc-count'), photoInput: qs('rec-photo'),
     photoPreviewWrap: qs('rec-photo-preview-wrap'), photoPreview: qs('rec-photo-preview'), photoStatus: qs('rec-photo-status'),
     requestsSection: qs('requests-section'), requestsView: qs('requests-view'), requestsBadge: qs('requests-badge'),
@@ -310,6 +330,12 @@ function bootManagementMode() {
       setCheckedValues('contacts', currentRecruitment.contacts || []);
       setCheckedValues('guildType', currentRecruitment.guildType || []);
       setCheckedValues('focus', currentRecruitment.focus || []);
+      if (els.platform) els.platform.value = currentRecruitment.platform || '';
+      if (els.age) els.age.value = currentRecruitment.minimumAge || '';
+      if (els.nickRequired) els.nickRequired.value = currentRecruitment.nickChangeRequired || '';
+      if (els.nickDeadline) els.nickDeadline.value = currentRecruitment.nickChangeDeadline || '';
+      if (els.teamPlay) els.teamPlay.value = currentRecruitment.teamPlay || '';
+      if (els.useCall) els.useCall.value = currentRecruitment.useCall || '';
       if (els.desc) {
         els.desc.value = currentRecruitment.description || '';
         if (els.descCount) els.descCount.textContent = `${els.desc.value.length}/100`;
@@ -422,8 +448,9 @@ function bootManagementMode() {
     const contacts = Array.isArray(d.contacts) && d.contacts.length ? d.contacts.map(v => tagChip(v,'contact')).join(' ') : '<span class="text-sm text-gray-400">Nenhuma</span>';
     const types = Array.isArray(d.guildType) && d.guildType.length ? d.guildType.map(v => tagChip(v,'type')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
     const focuses = Array.isArray(d.focus) && d.focus.length ? d.focus.map(v => tagChip(v,'focus')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
+    const requirements = renderRequirementChips(d);
     const photo = d.photoBase64 ? `<img src="${d.photoBase64}" alt="Foto do recrutamento" class="w-full h-64 object-cover rounded-2xl border border-gray-200 bg-gray-50">` : '';
-    if (els.view) els.view.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div class="p-5 border-b border-gray-100 flex items-start justify-between gap-4"><div><div class="flex items-center gap-2 flex-wrap"><h4 class="text-xl font-bold text-gray-900">${escapeHtml(d.guildName || 'Sem nome')}</h4><span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2.5 py-1 text-[11px] font-extrabold">ATIVO</span></div><p class="text-sm text-gray-500 mt-1">Chave usada: <span class="font-semibold break-all">${escapeHtml(openedKey)}</span></p><p class="text-sm text-gray-500 mt-1">Publicado em: ${escapeHtml(formatDateBR(d.dateMs || d.createdAt || Date.now()))}</p></div><div class="flex items-center gap-2"><button id="btn-edit-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100">Editar</button><button id="btn-delete-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50">Excluir</button></div></div><div class="p-5 space-y-5">${photo}<div class="grid md:grid-cols-2 gap-5"><div><p class="text-xs font-semibold text-gray-500 mb-2">Funções</p><div class="flex flex-wrap gap-2">${roles}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Mais opções</p><div class="flex flex-wrap gap-2">${contacts}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Foco</p><div class="flex flex-wrap gap-2">${focuses}</div></div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Descrição</p><div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700 min-h-[84px] whitespace-pre-wrap">${escapeHtml(d.description || 'Sem descrição.')}</div></div></div></div>`;
+    if (els.view) els.view.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div class="p-5 border-b border-gray-100 flex items-start justify-between gap-4"><div><div class="flex items-center gap-2 flex-wrap"><h4 class="text-xl font-bold text-gray-900">${escapeHtml(d.guildName || 'Sem nome')}</h4><span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2.5 py-1 text-[11px] font-extrabold">ATIVO</span></div><p class="text-sm text-gray-500 mt-1">Chave usada: <span class="font-semibold break-all">${escapeHtml(openedKey)}</span></p><p class="text-sm text-gray-500 mt-1">Publicado em: ${escapeHtml(formatDateBR(d.dateMs || d.createdAt || Date.now()))}</p></div><div class="flex items-center gap-2"><button id="btn-edit-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100">Editar</button><button id="btn-delete-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50">Excluir</button></div></div><div class="p-5 space-y-5">${photo}<div class="grid md:grid-cols-2 gap-5"><div><p class="text-xs font-semibold text-gray-500 mb-2">Funções</p><div class="flex flex-wrap gap-2">${roles}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Mais opções</p><div class="flex flex-wrap gap-2">${contacts}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Foco</p><div class="flex flex-wrap gap-2">${focuses}</div></div><div class="md:col-span-2"><p class="text-xs font-semibold text-gray-500 mb-2">Requisitos</p><div class="flex flex-wrap gap-2">${requirements}</div></div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Descrição</p><div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700 min-h-[84px] whitespace-pre-wrap">${escapeHtml(d.description || 'Sem descrição.')}</div></div></div></div>`;
     updateCreateButtonVisibility(); renderRequests();
     qs('btn-edit-rec')?.addEventListener('click', () => openModal('edit'));
     qs('btn-delete-rec')?.addEventListener('click', deleteRecruitment);
@@ -539,6 +566,12 @@ function bootManagementMode() {
     const contacts = getCheckedValues('contacts');
     const guildType = getCheckedValues('guildType');
     const focus = getCheckedValues('focus');
+    const platform = String(els.platform?.value || '').trim();
+    const minimumAge = String(els.age?.value || '').trim();
+    const nickChangeRequired = String(els.nickRequired?.value || '').trim();
+    const nickChangeDeadline = String(els.nickDeadline?.value || '').trim();
+    const teamPlay = String(els.teamPlay?.value || '').trim();
+    const useCall = String(els.useCall?.value || '').trim();
     const description = String(els.desc?.value || '').trim().slice(0,100);
     if (!guildName) { showToast('error','O nome da guilda é obrigatório.'); return; }
     if (!roles.length) { showToast('error','Marque pelo menos uma função.'); return; }
@@ -546,6 +579,7 @@ function bootManagementMode() {
     try {
       const payload = {
         guildName, dateMs: currentRecruitment?.dateMs || Date.now(), roles, contacts, guildType, focus, description,
+        platform, minimumAge, nickChangeRequired, nickChangeDeadline, teamPlay, useCall,
         key: openedKey, ownerUid: ctxGuildId() || linkedUid, photoBase64: currentPhotoBase64 || currentRecruitment?.photoBase64 || '',
         photoBytes: currentPhotoBytes || currentRecruitment?.photoBytes || dataUrlSizeBytes(currentPhotoBase64 || currentRecruitment?.photoBase64 || ''),
         updatedAt: serverTimestamp(), guildId: linkedUid
@@ -996,7 +1030,7 @@ function bootMarketplaceMode() {
   function itemMatchesQuery(item, value) {
     const q = String(value || '').trim().toLowerCase();
     if (!q) return true;
-    const hay = [item.id, item.guildName, item.description, ...(item.roles || []), ...(item.contacts || []), ...(item.guildType || []), ...(item.focus || [])].join(' ').toLowerCase();
+    const hay = [item.id, item.guildName, item.description, item.platform, item.minimumAge, item.nickChangeRequired, item.nickChangeDeadline, item.teamPlay, item.useCall, ...(item.roles || []), ...(item.contacts || []), ...(item.guildType || []), ...(item.focus || [])].join(' ').toLowerCase();
     return hay.includes(q);
   }
   function syncUrl(){
@@ -1019,7 +1053,8 @@ function bootMarketplaceMode() {
       const types = (item.guildType || []).map(v => tagChip(v,'type')).join(' ');
       const focuses = (item.focus || []).map(v => tagChip(v,'focus')).join(' ');
       const contacts = (item.contacts || []).map(v => tagChip(v,'contact')).join(' ');
-      return `<article class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"><div class="flex items-start gap-3"><div class="shrink-0">${photo}</div><div class="min-w-0 flex-1"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><h3 class="truncate text-base font-black text-slate-900">${escapeHtml(item.guildName || 'Sem nome')}</h3><p class="mt-1 text-xs text-slate-500">${escapeHtml(formatDateBR(item.createdAt || item.updatedAt || item.dateMs || Date.now()))}</p></div><span class="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 ring-1 ring-emerald-200">ABERTO</span></div></div></div><div class="mt-4 space-y-3"><div><p class="mb-2 text-xs font-semibold text-slate-500">Descrição</p><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700 whitespace-pre-wrap">${escapeHtml(item.description || 'Sem descrição.')}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Modo de jogo</p><div class="flex flex-wrap gap-2">${roles || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Foco de meta</p><div class="flex flex-wrap gap-2">${focuses || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Contato</p><div class="flex flex-wrap gap-2">${contacts || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><button type="button" data-open-request="${escapeHtml(item.id)}" class="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800"><i data-lucide="send" class="h-4 w-4"></i>Enviar pedido</button></div></article>`;
+      const requirements = renderRequirementChips(item);
+      return `<article class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"><div class="flex items-start gap-3"><div class="shrink-0">${photo}</div><div class="min-w-0 flex-1"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><h3 class="truncate text-base font-black text-slate-900">${escapeHtml(item.guildName || 'Sem nome')}</h3><p class="mt-1 text-xs text-slate-500">${escapeHtml(formatDateBR(item.createdAt || item.updatedAt || item.dateMs || Date.now()))}</p></div><span class="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 ring-1 ring-emerald-200">ABERTO</span></div></div></div><div class="mt-4 space-y-3"><div><p class="mb-2 text-xs font-semibold text-slate-500">Descrição</p><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700 whitespace-pre-wrap">${escapeHtml(item.description || 'Sem descrição.')}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Modo de jogo</p><div class="flex flex-wrap gap-2">${roles || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Foco de meta</p><div class="flex flex-wrap gap-2">${focuses || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Contato</p><div class="flex flex-wrap gap-2">${contacts || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Requisitos</p><div class="flex flex-wrap gap-2">${requirements}</div></div><button type="button" data-open-request="${escapeHtml(item.id)}" class="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800"><i data-lucide="send" class="h-4 w-4"></i>Enviar pedido</button></div></article>`;
     }).join('');
     document.querySelectorAll('[data-open-request]').forEach(btn => btn.addEventListener('click', async () => {
       activeRecruitment = allItems.find(x => x.id === btn.getAttribute('data-open-request')) || null;
