@@ -119,6 +119,16 @@
           
           <div class="flex flex-wrap items-center justify-end gap-2 relative w-full sm:w-auto">
             
+            <!-- Seletor de Guilda -->
+            <div class="relative">
+              <button id="btn-guild-slot" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+                <i data-lucide="users" class="w-4 h-4 text-emerald-500"></i>
+                <span id="guild-slot-label" class="hidden sm:inline">Guilda 1</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
+              </button>
+              <div id="guild-slot-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
+            </div>
+
             <!-- Botão Edição Rápida Novo -->
             <button onclick="openQuickEditModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
               <i data-lucide="zap" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Edição Rápida</span>
@@ -408,7 +418,7 @@
   </div>
 
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildGoalsConfig, getGuildContext } from './logic.js';
+    import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildGoalsConfig, getGuildContext, getGuildMultiConfig, getVipTier } from './logic.js';
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     // CARREGA OS ÍCONES IMEDIATAMENTE INDEPENDENTE DE TER DADOS!
@@ -426,10 +436,168 @@
     let pendingEdits = {}; 
     let currentZeroAction = ''; 
     let currentDeleteId = ''; 
+    let currentGuildSlot = 1;
+    let currentGuildSlotsMeta = [];
+    let canUseMultiGuildMembers = false;
+
+    function normalizeVipTierClient(v) {
+      const s = (v || '').toString().toLowerCase().trim();
+      if (s.includes('vital') || s.includes('life')) return 'vitalicio';
+      if (s.includes('buss') || s.includes('business')) return 'business';
+      if (s.includes('pro')) return 'pro';
+      if (s.includes('plus')) return 'plus';
+      return 'free';
+    }
+
+    function __guildSlotSelectionKey() {
+      const gid = getGuildContext()?.guildId;
+      return gid ? `membersGuildSlot_${gid}` : 'membersGuildSlot';
+    }
+
+    function __membersCollectionName(slot = currentGuildSlot) {
+      const n = Math.max(1, Math.min(3, Math.floor(Number(slot) || 1)));
+      return n <= 1 ? 'membros' : `membros${n}`;
+    }
 
     function __membersLsKey() {
       const gid = getGuildContext()?.guildId;
-      return gid ? `membersList_${gid}` : 'membersList';
+      return gid ? `membersList_${gid}_${__membersCollectionName()}` : `membersList_${__membersCollectionName()}`;
+    }
+
+    function __readSelectedGuildSlot() {
+      try {
+        const raw = localStorage.getItem(__guildSlotSelectionKey());
+        const n = Math.floor(Number(raw) || 1);
+        return (n >= 1 && n <= 3) ? n : 1;
+      } catch (_) {
+        return 1;
+      }
+    }
+
+    function __writeSelectedGuildSlot(slot) {
+      try {
+        localStorage.setItem(__guildSlotSelectionKey(), String(Math.max(1, Math.min(3, Math.floor(Number(slot) || 1)))));
+      } catch (_) {}
+    }
+
+    function __getGuildSlotMeta(slot = currentGuildSlot) {
+      return (currentGuildSlotsMeta || []).find(item => Number(item?.slot) === Number(slot)) || null;
+    }
+
+    function __isGuildSlotAvailable(slot) {
+      const n = Number(slot);
+      if (n === 1) return true;
+      const meta = __getGuildSlotMeta(n);
+      return !!(meta && meta.exists);
+    }
+
+    function __currentGuildDisplayName(slot = currentGuildSlot) {
+      const meta = __getGuildSlotMeta(slot);
+      const name = (meta?.name || '').toString().trim();
+      return name || `Guilda ${slot}`;
+    }
+
+    function __updateCurrentMemberTag() {
+      const meta = __getGuildSlotMeta(currentGuildSlot);
+      const tag = (meta?.tag || '').toString().trim();
+      if (tag) {
+        memberTag = tag;
+        return;
+      }
+      if (currentGuildSlot === 1) return;
+      memberTag = null;
+    }
+
+    async function __ensureMembersCollectionExists(slot = currentGuildSlot) {
+      const n = Math.max(1, Math.min(3, Math.floor(Number(slot) || 1)));
+      if (n <= 1) return;
+      try {
+        await setDoc(doc(db, "guildas", getGuildContext().guildId, __membersCollectionName(n), "__meta__"), {
+          slot: n,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } catch (_) {}
+    }
+
+    function __syncGuildSlotButtonState() {
+      const btn = document.getElementById('btn-guild-slot');
+      const label = document.getElementById('guild-slot-label');
+      if (!btn || !label) return;
+      label.textContent = __currentGuildDisplayName();
+      btn.classList.toggle('opacity-60', !canUseMultiGuildMembers);
+      btn.classList.toggle('cursor-not-allowed', !canUseMultiGuildMembers);
+      btn.setAttribute('aria-disabled', canUseMultiGuildMembers ? 'false' : 'true');
+    }
+
+    function __renderGuildSlotDropdown() {
+      const box = document.getElementById('guild-slot-dropdown');
+      if (!box) return;
+
+      const rows = [1, 2, 3].map(slot => {
+        const available = __isGuildSlotAvailable(slot);
+        const name = __currentGuildDisplayName(slot);
+        const isActive = Number(currentGuildSlot) === slot;
+        const subtitle = slot === 1
+          ? 'Principal'
+          : (available ? 'Lista separada desta guilda' : 'Indisponível nesta conta');
+
+        return `
+          <button
+            type="button"
+            data-guild-slot-option="${slot}"
+            class="w-full text-left px-3 py-3 rounded-xl border transition-colors ${isActive ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-white hover:bg-gray-50'} ${(!available && slot !== 1) ? 'opacity-60' : ''}"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="text-sm font-semibold text-gray-900 truncate">${name}</div>
+                <div class="text-[11px] text-gray-500 mt-0.5">${subtitle}</div>
+              </div>
+              ${isActive ? '<span class="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">Ativa</span>' : ''}
+            </div>
+          </button>
+        `;
+      }).join('');
+
+      box.innerHTML = rows;
+      initIcons();
+    }
+
+    async function __applyGuildSlot(slot, forceRefresh = false) {
+      const nextSlot = Math.max(1, Math.min(3, Math.floor(Number(slot) || 1)));
+      if (!__isGuildSlotAvailable(nextSlot)) {
+        showToast('info', `A ${nextSlot === 1 ? 'guilda principal' : `guilda ${nextSlot}`} ainda não está disponível nesta conta.`);
+        return;
+      }
+
+      currentGuildSlot = nextSlot;
+      __writeSelectedGuildSlot(nextSlot);
+      __updateCurrentMemberTag();
+      __syncGuildSlotButtonState();
+      __renderGuildSlotDropdown();
+      document.getElementById('guild-slot-dropdown')?.classList.add('hidden');
+
+      await __ensureMembersCollectionExists(nextSlot);
+
+      const cached = __readMembersFromCache();
+      if (cached && cached.length) {
+        __setMembersCache(cached);
+        if (forceRefresh) await loadMembers(true);
+        else await loadMembers(false);
+        return;
+      }
+
+      membersCache = [];
+      document.getElementById('member-count').textContent = `Carregando ${__currentGuildDisplayName(nextSlot)}...`;
+      document.getElementById('members-list').innerHTML = `
+        <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
+          <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
+          <div class="flex-1 space-y-2">
+            <div class="h-4 bg-gray-200 rounded w-1/3"></div>
+            <div class="h-3 bg-gray-100 rounded w-1/4"></div>
+          </div>
+        </div>
+      `;
+      await loadMembers(false);
     }
 
     function __readMembersFromCache() {
@@ -455,7 +623,7 @@
       __writeMembersToCache(membersCache);
       applyFiltersAndRender();
       const countEl = document.getElementById('member-count');
-      if (countEl) countEl.textContent = `${membersCache.length} membros na guilda`;
+      if (countEl) countEl.textContent = `${membersCache.length} membros • ${__currentGuildDisplayName()}`;
     }
 
     // ==========================================
@@ -583,9 +751,9 @@
       if (forceRefresh) showToast('info', 'Sincronizando com a base de dados...');
 
       try {
-        const snap = await getDocs(collection(db, "guildas", getGuildContext().guildId, "membros"));
+        const snap = await getDocs(collection(db, "guildas", getGuildContext().guildId, __membersCollectionName()));
         const fresh = [];
-        snap.forEach(d => fresh.push({ id: d.id, ...d.data() }));
+        snap.forEach(d => { if (d.id === "__meta__") return; fresh.push({ id: d.id, ...d.data() }); });
         fresh.sort((a,b)=> String(a.nick || '').localeCompare(String(b.nick || '')));
 
         const cachedJSON = JSON.stringify(cached || []);
@@ -703,15 +871,15 @@
            // MIGRATION ON THE FLY (Edição rápida)
            if (m.id !== m.visibleId) {
                didMigrate = true;
-               const newRef = doc(db, "guildas", guildId, "membros", m.visibleId);
-               const oldRef = doc(db, "guildas", guildId, "membros", m.id);
+               const newRef = doc(db, "guildas", guildId, __membersCollectionName(), m.visibleId);
+               const oldRef = doc(db, "guildas", guildId, __membersCollectionName(), m.id);
                
                const fullObj = { ...m, ...updates };
                delete fullObj.id; // remove o campo id para não sujar o documento
                batch.set(newRef, fullObj);
                batch.delete(oldRef);
            } else {
-               const ref = doc(db, "guildas", guildId, "membros", id);
+               const ref = doc(db, "guildas", guildId, __membersCollectionName(), id);
                batch.update(ref, updates);
            }
        });
@@ -788,14 +956,14 @@
            // MIGRATION ON THE FLY (Ao Zerar)
            if (m.id !== m.visibleId) {
                didMigrate = true;
-               const newRef = doc(db, "guildas", guildId, "membros", m.visibleId);
-               const oldRef = doc(db, "guildas", guildId, "membros", m.id);
+               const newRef = doc(db, "guildas", guildId, __membersCollectionName(), m.visibleId);
+               const oldRef = doc(db, "guildas", guildId, __membersCollectionName(), m.id);
                const fullObj = { ...m, ...updateData };
                delete fullObj.id;
                batch.set(newRef, fullObj);
                batch.delete(oldRef);
            } else {
-               const ref = doc(db, "guildas", guildId, "membros", m.id);
+               const ref = doc(db, "guildas", guildId, __membersCollectionName(), m.id);
                batch.update(ref, updateData);
            }
        });
@@ -861,6 +1029,12 @@
       const dropdown = document.getElementById('filter-dropdown');
       if (btn && dropdown && !btn.contains(e.target) && !dropdown.contains(e.target)) {
         dropdown.classList.add('hidden');
+      }
+
+      const guildBtn = document.getElementById('btn-guild-slot');
+      const guildDropdown = document.getElementById('guild-slot-dropdown');
+      if (guildBtn && guildDropdown && !guildBtn.contains(e.target) && !guildDropdown.contains(e.target)) {
+        guildDropdown.classList.add('hidden');
       }
     });
 
@@ -1046,7 +1220,7 @@
 
       try {
         const m = membersCache.find(x => x.id === id);
-        await deleteDoc(doc(db, "guildas", getGuildContext().guildId, "membros", id));
+        await deleteDoc(doc(db, "guildas", getGuildContext().guildId, __membersCollectionName(), id));
 
         membersCache = (membersCache || []).filter(member => member.id !== id);
         __setMembersCache(membersCache);
@@ -1146,8 +1320,8 @@
         if(id) {
           if (id !== visibleId) {
              // MIGRATION ON THE FLY (Edição de perfil)
-             await setDoc(doc(db, "guildas", guildId, "membros", visibleId), payload);
-             await deleteDoc(doc(db, "guildas", guildId, "membros", id));
+             await setDoc(doc(db, "guildas", guildId, __membersCollectionName(), visibleId), payload);
+             await deleteDoc(doc(db, "guildas", guildId, __membersCollectionName(), id));
              showToast('info', 'Usuário foi migrado para o novo sistema!');
              
              // Update cache
@@ -1155,7 +1329,7 @@
              if (idx >= 0) membersCache[idx] = { ...membersCache[idx], ...payload, id: visibleId, updatedAt: Date.now() };
           } else {
              // NORMAL UPDATE
-             await setDoc(doc(db, "guildas", guildId, "membros", id), payload, { merge: true });
+             await setDoc(doc(db, "guildas", guildId, __membersCollectionName(), id), payload, { merge: true });
              showToast('success', 'Membro Atualizado!');
              
              // Update cache
@@ -1164,7 +1338,7 @@
           }
         } else {
           // CREATE NEW OR OVERWRITE (Usando sempre o ID do jogo)
-          await setDoc(doc(db, "guildas", guildId, "membros", visibleId), payload);
+          await setDoc(doc(db, "guildas", guildId, __membersCollectionName(), visibleId), payload);
           showToast('success', 'Adicionado (ou sobrescrito)!');
           
           // Tratamento no cache caso tenha sobrescrito
@@ -1200,6 +1374,27 @@
       }
     });
 
+
+    document.getElementById('btn-guild-slot')?.addEventListener('click', () => {
+      if (!canUseMultiGuildMembers) {
+        showToast('info', 'Trocar entre guildas nesta tela é um recurso do plano PRO ou superior.');
+        return;
+      }
+      __renderGuildSlotDropdown();
+      document.getElementById('guild-slot-dropdown')?.classList.toggle('hidden');
+    });
+
+    document.getElementById('guild-slot-dropdown')?.addEventListener('click', async (e) => {
+      const option = e.target.closest('[data-guild-slot-option]');
+      if (!option) return;
+      if (!canUseMultiGuildMembers) {
+        showToast('info', 'Trocar entre guildas nesta tela é um recurso do plano PRO ou superior.');
+        return;
+      }
+      const slot = Number(option.getAttribute('data-guild-slot-option') || 1);
+      await __applyGuildSlot(slot, false);
+    });
+
     // ==========================================
     // FINALIZAÇÃO DE BOOT E AUTENTICAÇÃO
     // ==========================================
@@ -1209,7 +1404,17 @@
       if(!user) return;
       document.getElementById('btn-logout').onclick = logout;
 
+      currentGuildSlotsMeta = await getGuildMultiConfig(3).catch(() => ([{ slot: 1, name: '', tag: '', exists: true }]));
+      const vipTier = normalizeVipTierClient(getGuildContext()?.vipTier || getVipTier());
+      canUseMultiGuildMembers = ['pro', 'business', 'vitalicio'].includes(vipTier);
+      currentGuildSlot = canUseMultiGuildMembers ? __readSelectedGuildSlot() : 1;
+      if (!__isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
+      __writeSelectedGuildSlot(currentGuildSlot);
+      __syncGuildSlotButtonState();
+      __renderGuildSlotDropdown();
+
       memberTag = await getMemberTagConfig();
+      __updateCurrentMemberTag();
       guildGoals = await getGuildGoalsConfig();
 
       const hasTagEl = document.getElementById('has-tag');
@@ -1240,8 +1445,8 @@
       }
       syncGoalTogglesFromValues();
       
-      // Chama loadMembers para verificar se precisamos baixar algo (se não precisarmos, ele finaliza mudo)
-      loadMembers(false);
+      // Carrega a lista da guilda selecionada nesta tela
+      await __applyGuildSlot(currentGuildSlot, false);
       
       const searchInput = document.getElementById('search-input');
       if (searchInput) {
