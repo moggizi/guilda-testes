@@ -77,6 +77,9 @@ function renderRequirementChips(data = {}) {
 }
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
 const MARKETPLACE_ROLE_OPTIONS = ['Rush', 'Full Gás', 'Curandeiro', 'Fuzileiro', 'Suporte'];
+const MARKETPLACE_AGE_OPTIONS = ['+10', '+11', '+12', '+13', '+14', '+15', '+16', '+17', '+18'];
+const MARKETPLACE_AVAILABILITY_OPTIONS = ['Manhã', 'Tarde', 'Noite'];
+const MARKETPLACE_BOOLEAN_OPTIONS = ['Sim', 'Não'];
 const WHATSAPP_COUNTRY_OPTIONS = [
   { code: '55', flag: '🇧🇷', label: 'Brasil', maxDigits: 11, placeholder: 'DDD + número' },
   { code: '1', flag: '🇺🇸', label: 'Estados Unidos', maxDigits: 10, placeholder: 'Área + número' },
@@ -358,8 +361,14 @@ function bootManagementMode() {
     }
     if (els.requestModalDate) els.requestModalDate.textContent = formatDateBR(item.createdAt || item.dateMs || item.date || Date.now());
     if (els.requestModalModes) {
-      const roles = Array.isArray(item.roles) && item.roles.length ? item.roles.map(v => tagChip(v,'role')).join(' ') : '<span class="text-xs text-gray-400">Modo não informado</span>';
-      els.requestModalModes.innerHTML = roles;
+      const chips = [];
+      if (Array.isArray(item.roles) && item.roles.length) chips.push(...item.roles.map(v => tagChip(v,'role')));
+      if (item.age) chips.push(tagChip(`Idade: ${item.age}`,'default'));
+      if (item.availableTime) chips.push(tagChip(`Horário: ${item.availableTime}`,'default'));
+      if (item.availableFridaySaturday) chips.push(tagChip(`Sex/Sáb: ${item.availableFridaySaturday}`,'default'));
+      if (item.playedGg) chips.push(tagChip(`Já jogou GG: ${item.playedGg}`,'default'));
+      if (item.hasNickChange) chips.push(tagChip(`Troca nick: ${item.hasNickChange}`,'default'));
+      els.requestModalModes.innerHTML = chips.length ? chips.join(' ') : '<span class="text-xs text-gray-400">Modo não informado</span>';
     }
     if (els.requestModalWhatsapp) {
       const href = formatWhatsappHref(item.whatsapp || item.phone || '', item.whatsappCountryCode || item.phoneCountryCode || '');
@@ -658,11 +667,17 @@ function bootMarketplaceMode() {
   const els = {
     grid: qs('grid'), status: qs('status'), q: qs('q'), filter: qs('filter'), filterBtn: qs('filterBtn'), filterMenu: qs('filterMenu'), filterLabel: qs('filterLabel'),
     modal: qs('request-modal'), modalGuild: qs('request-modal-guild'), helper: qs('request-helper'), form: qs('request-form'),
-    applicantId: qs('applicant-id'), applicantNick: qs('applicant-nick'), applicantWhatsapp: qs('applicant-whatsapp'), applicantWhatsappDdi: qs('applicant-whatsapp-ddi')
+    applicantId: qs('applicant-id'), applicantNick: qs('applicant-nick'), applicantWhatsapp: qs('applicant-whatsapp'), applicantWhatsappDdi: qs('applicant-whatsapp-ddi'),
+    applicantAge: qs('applicant-age'), applicantAvailability: qs('applicant-availability'), applicantWeekend: qs('applicant-weekend'), applicantGg: qs('applicant-gg'), applicantNickChange: qs('applicant-nick-change')
   };
   if (!els.grid || !els.q || !els.filter) return;
   let allItems = [], activeRecruitment = null;
   const params = new URLSearchParams(window.location.search);
+
+  function getMarketplaceSimpleOptions(options = [], placeholder = 'Selecione') {
+    const list = Array.isArray(options) ? options : [];
+    return [`<option value="">${placeholder}</option>`].concat(list.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)).join('');
+  }
 
   function getMarketplaceCountrySelectOptions() {
     return WHATSAPP_COUNTRY_OPTIONS.map((country) => `<option value="${country.code}" ${country.code === DEFAULT_WHATSAPP_COUNTRY_CODE ? 'selected' : ''}>${country.flag} +${country.code}</option>`).join('');
@@ -888,6 +903,43 @@ function bootMarketplaceMode() {
                 <p class="mb-2 block text-sm font-bold text-slate-700">Modo de jogo</p>
                 <div id="request-modes-dynamic" class="grid grid-cols-2 gap-2"></div>
               </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label for="applicant-age-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Idade</label>
+                  <div class="relative">
+                    <select id="applicant-age-dynamic" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_AGE_OPTIONS, 'Selecione sua idade')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div>
+                  <label for="applicant-availability-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Horário disponível</label>
+                  <div class="relative">
+                    <select id="applicant-availability-dynamic" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_AVAILABILITY_OPTIONS, 'Selecione um horário')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div>
+                  <label for="applicant-weekend-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Disponível sexta e sábado?</label>
+                  <div class="relative">
+                    <select id="applicant-weekend-dynamic" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div>
+                  <label for="applicant-gg-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Já jogou GG?</label>
+                  <div class="relative">
+                    <select id="applicant-gg-dynamic" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div class="sm:col-span-2">
+                  <label for="applicant-nick-change-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Possui troca nick?</label>
+                  <div class="relative">
+                    <select id="applicant-nick-change-dynamic" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+              </div>
               <div class="flex items-center justify-end gap-3 pt-2">
                 <button type="button" data-close-marketplace-request class="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
                 <button type="submit" class="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-extrabold text-white hover:bg-slate-800">Enviar pedido</button>
@@ -911,6 +963,11 @@ function bootMarketplaceMode() {
     els.applicantNick = staticModalIsComplete ? staticNick : document.getElementById('applicant-nick-dynamic');
     els.applicantWhatsapp = staticModalIsComplete ? staticWhatsapp : document.getElementById('applicant-whatsapp-dynamic');
     els.applicantWhatsappDdi = staticModalIsComplete ? staticWhatsappDdi : document.getElementById('applicant-whatsapp-ddi-dynamic');
+    els.applicantAge = staticModalIsComplete ? document.getElementById('applicant-age') : document.getElementById('applicant-age-dynamic');
+    els.applicantAvailability = staticModalIsComplete ? document.getElementById('applicant-availability') : document.getElementById('applicant-availability-dynamic');
+    els.applicantWeekend = staticModalIsComplete ? document.getElementById('applicant-weekend') : document.getElementById('applicant-weekend-dynamic');
+    els.applicantGg = staticModalIsComplete ? document.getElementById('applicant-gg') : document.getElementById('applicant-gg-dynamic');
+    els.applicantNickChange = staticModalIsComplete ? document.getElementById('applicant-nick-change') : document.getElementById('applicant-nick-change-dynamic');
 
     const modesWrap = staticModalIsComplete ? staticModes : document.getElementById('request-modes-dynamic');
     if (modesWrap && !modesWrap.id) modesWrap.id = 'request-modes-dynamic';
@@ -970,6 +1027,11 @@ function bootMarketplaceMode() {
     if (!els.modal || !els.form) return;
     els.form.reset();
     if (els.applicantWhatsappDdi) els.applicantWhatsappDdi.value = DEFAULT_WHATSAPP_COUNTRY_CODE;
+    if (els.applicantAge) els.applicantAge.value = '';
+    if (els.applicantAvailability) els.applicantAvailability.value = '';
+    if (els.applicantWeekend) els.applicantWeekend.value = '';
+    if (els.applicantGg) els.applicantGg.value = '';
+    if (els.applicantNickChange) els.applicantNickChange.value = '';
     syncMarketplaceWhatsappConstraints();
     resetMarketplaceNickLookupState();
     if (els.modalGuild) els.modalGuild.textContent = item?.guildName || 'Guilda';
@@ -994,6 +1056,11 @@ function bootMarketplaceMode() {
     const applicantNick = String(els.applicantNick?.value || '').trim();
     const whatsappPayload = buildWhatsappPayload(els.applicantWhatsapp?.value || '', els.applicantWhatsappDdi?.value || DEFAULT_WHATSAPP_COUNTRY_CODE);
     const roles = [...document.querySelectorAll('input[name="marketplace-roles"]:checked')].map((el) => String(el.value || '').trim()).filter(Boolean);
+    const applicantAge = String(els.applicantAge?.value || '').trim();
+    const applicantAvailability = String(els.applicantAvailability?.value || '').trim();
+    const applicantWeekend = String(els.applicantWeekend?.value || '').trim();
+    const applicantGg = String(els.applicantGg?.value || '').trim();
+    const applicantNickChange = String(els.applicantNickChange?.value || '').trim();
     if (!applicantId) { showToast('error', 'Informe seu ID.'); return; }
     if (!applicantNick) { showToast('error', 'Informe seu nick.'); return; }
     if (!whatsappPayload.localNumber) { showToast('error', 'Informe seu WhatsApp.'); return; }
@@ -1008,6 +1075,11 @@ function bootMarketplaceMode() {
         whatsapp: whatsappPayload.localNumber,
         whatsappCountryCode: whatsappPayload.countryCode,
         roles,
+        age: applicantAge,
+        availableTime: applicantAvailability,
+        availableFridaySaturday: applicantWeekend,
+        playedGg: applicantGg,
+        hasNickChange: applicantNickChange,
         status: 'pendente',
         guildId: activeRecruitment.id,
         guildName: activeRecruitment.guildName || '',
