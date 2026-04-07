@@ -192,13 +192,63 @@ function bootManagementMode() {
     requestsSection: qs('requests-section'), requestsView: qs('requests-view'), requestsBadge: qs('requests-badge'),
     requestModal: qs('request-detail-modal'), requestModalName: qs('request-detail-name'), requestModalId: qs('request-detail-id'),
     requestModalStatus: qs('request-detail-status'), requestModalDate: qs('request-detail-date'), requestModalModes: qs('request-detail-modes'),
-    requestModalWhatsapp: qs('request-detail-whatsapp'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject'),
+    requestModalWhatsapp: qs('request-detail-whatsapp'), requestTargetSlot: qs('request-target-slot'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject'),
     deleteRecModal: qs('delete-rec-modal'), cancelDeleteRecBtn: qs('btn-cancel-delete-rec'), confirmDeleteRecBtn: qs('btn-confirm-delete-rec')
   };
   let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [], activeRequest = null;
 
   const ctxGuildId = () => String(getGuildContext()?.guildId || '').trim();
   const ctxGuildName = () => String(getGuildContext()?.guildName || '').trim();
+  const getGuildContextData = () => getGuildContext() || {};
+  const getGuildConfigData = () => {
+    const ctx = getGuildContextData();
+    const nested = ctx?.configGuilda;
+    return nested && typeof nested === 'object' ? nested : ctx;
+  };
+  const pickGuildValue = (...keys) => {
+    const ctx = getGuildContextData();
+    const cfg = getGuildConfigData();
+    for (const key of keys) {
+      const direct = ctx?.[key];
+      if (direct != null && String(direct).trim()) return String(direct).trim();
+      const nested = cfg?.[key];
+      if (nested != null && String(nested).trim()) return String(nested).trim();
+    }
+    return '';
+  };
+  const getManagementGuildSlots = () => {
+    const slots = [
+      { value: '1', label: pickGuildValue('name', 'guildName') || ctxGuildName() || 'Guilda principal', collection: 'membros' },
+      { value: '2', label: pickGuildValue('name2', 'guildName2'), collection: 'membros2' },
+      { value: '3', label: pickGuildValue('name3', 'guildName3'), collection: 'membros3' },
+      { value: '4', label: pickGuildValue('name4', 'guildName4'), collection: 'membros4' }
+    ];
+    return slots.filter((slot, index) => index === 0 || !!String(slot.label || '').trim());
+  };
+  const getManagementMembersCollection = (slotValue) => {
+    const wanted = String(slotValue || '1').trim();
+    return getManagementGuildSlots().find((slot) => slot.value === wanted)?.collection || 'membros';
+  };
+  const refreshManagementCustomSelect = (select) => {
+    if (!select) return;
+    const wrap = select.closest('.rq-select-wrap') || select.parentElement;
+    if (!wrap) return;
+    wrap.classList.remove('rq-dd', 'rq-dd-open');
+    wrap.querySelectorAll('[data-rec-dd-trigger-for], [data-rec-dd-select-id]').forEach((node) => node.remove());
+    select.classList.remove('rq-dd-native');
+    delete select.dataset.recDdInit;
+    enhanceManagementCustomSelect(select);
+    syncManagementCustomSelect(select);
+  };
+  const populateRequestTargetSlotOptions = (preferredValue = '1') => {
+    const select = els.requestTargetSlot;
+    if (!select) return;
+    const slots = getManagementGuildSlots();
+    select.innerHTML = slots.map((slot) => `<option value="${escapeHtml(slot.value)}">${escapeHtml(slot.label)}</option>`).join('');
+    const hasPreferred = slots.some((slot) => slot.value === String(preferredValue || '1'));
+    select.value = hasPreferred ? String(preferredValue || '1') : String(slots[0]?.value || '1');
+    refreshManagementCustomSelect(select);
+  };
   const getNormalizedVipTier = () => {
     const raw = String(getGuildContext()?.vipTier || 'free').toLowerCase().trim();
     if (!raw) return 'free';
@@ -485,6 +535,7 @@ function bootManagementMode() {
       const label = formatWhatsappLabel(item.whatsapp || item.phone || '', item.whatsappCountryCode || item.phoneCountryCode || '');
       els.requestModalWhatsapp.innerHTML = href ? `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 font-semibold hover:underline break-all">${escapeHtml(label)}</a>` : '<span class="text-gray-400">Não informado</span>';
     }
+    populateRequestTargetSlotOptions('1');
     els.requestModal.classList.remove('hidden');
     initManagementCustomSelects();
     initIcons();
@@ -496,6 +547,8 @@ function bootManagementMode() {
   async function acceptRequest(item) {
     const guildId = ctxGuildId() || String(linkedUid || '').trim();
     if (!guildId || !item?.id) throw new Error('Guilda ou pedido inválido.');
+    const targetSlot = String(els.requestTargetSlot?.value || '1').trim() || '1';
+    const targetCollection = getManagementMembersCollection(targetSlot);
     const requestPlayMode = Array.isArray(item.roles)
       ? item.roles.map(v => String(v || '').trim()).filter(Boolean)
       : [];
@@ -516,7 +569,7 @@ function bootManagementMode() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
-    await setDoc(doc(db, 'guildas', guildId, 'membros', String(item.id)), payload, { merge: true });
+    await setDoc(doc(db, 'guildas', guildId, targetCollection, String(item.id)), payload, { merge: true });
     await removeRequest(String(item.id));
   }
   async function rejectRequest(item) {
@@ -804,6 +857,7 @@ function bootManagementMode() {
       return;
     }
     await tryBootWithSavedKey();
+    populateRequestTargetSlotOptions('1');
     resetPhotoState(); renderRecruitment(); updateCopyLinkVisibility(); initManagementCustomSelects(); initIcons();
   })();
 }
