@@ -455,7 +455,7 @@
     }
 
     function __membersCollectionName(slot = currentGuildSlot) {
-      const n = Math.max(1, Math.min(3, Math.floor(Number(slot) || 1)));
+      const n = Math.max(1, Math.min(4, Math.floor(Number(slot) || 1)));
       return n <= 1 ? 'membros' : `membros${n}`;
     }
 
@@ -468,7 +468,7 @@
       try {
         const raw = localStorage.getItem(__guildSlotSelectionKey());
         const n = Math.floor(Number(raw) || 1);
-        return (n >= 1 && n <= 3) ? n : 1;
+        return (n >= 1 && n <= 4) ? n : 1;
       } catch (_) {
         return 1;
       }
@@ -476,7 +476,7 @@
 
     function __writeSelectedGuildSlot(slot) {
       try {
-        localStorage.setItem(__guildSlotSelectionKey(), String(Math.max(1, Math.min(3, Math.floor(Number(slot) || 1)))));
+        localStorage.setItem(__guildSlotSelectionKey(), String(Math.max(1, Math.min(4, Math.floor(Number(slot) || 1)))));
       } catch (_) {}
     }
 
@@ -509,9 +509,11 @@
     }
 
     async function __ensureMembersCollectionExists(slot = currentGuildSlot) {
-      const n = Math.max(1, Math.min(3, Math.floor(Number(slot) || 1)));
+      const n = Math.max(1, Math.min(4, Math.floor(Number(slot) || 1)));
       if (n <= 1) return;
       try {
+        const snap = await getDocs(query(collection(db, "guildas", getGuildContext().guildId, __membersCollectionName(n)), limit(1)));
+        if (!snap.empty) return;
         await setDoc(doc(db, "guildas", getGuildContext().guildId, __membersCollectionName(n), "__meta__"), {
           slot: n,
           updatedAt: serverTimestamp()
@@ -533,7 +535,7 @@
       const box = document.getElementById('guild-slot-dropdown');
       if (!box) return;
 
-      const rows = [1, 2, 3].map(slot => {
+      const rows = [1, 2, 3, 4].map(slot => {
         const available = __isGuildSlotAvailable(slot);
         const name = __currentGuildDisplayName(slot);
         const isActive = Number(currentGuildSlot) === slot;
@@ -563,7 +565,7 @@
     }
 
     async function __applyGuildSlot(slot, forceRefresh = false) {
-      const nextSlot = Math.max(1, Math.min(3, Math.floor(Number(slot) || 1)));
+      const nextSlot = Math.max(1, Math.min(4, Math.floor(Number(slot) || 1)));
       if (!__isGuildSlotAvailable(nextSlot)) {
         showToast('info', `A ${nextSlot === 1 ? 'guilda principal' : `guilda ${nextSlot}`} ainda não está disponível nesta conta.`);
         return;
@@ -1404,7 +1406,7 @@
       if(!user) return;
       document.getElementById('btn-logout').onclick = logout;
 
-      currentGuildSlotsMeta = await getGuildMultiConfig(3).catch(() => ([{ slot: 1, name: '', tag: '', exists: true }]));
+      currentGuildSlotsMeta = await getGuildMultiConfig(4).catch(() => ([{ slot: 1, name: '', tag: '', exists: true }]));
       const vipTier = normalizeVipTierClient(getGuildContext()?.vipTier || getVipTier());
       canUseMultiGuildMembers = ['pro', 'business', 'vitalicio'].includes(vipTier);
       currentGuildSlot = canUseMultiGuildMembers ? __readSelectedGuildSlot() : 1;
