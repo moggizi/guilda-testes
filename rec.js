@@ -9,7 +9,7 @@ import {
   collection,
   getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, getGuildAccessKeyConfig, getGuildMultiConfig, showToast, auth, db } from './logic.js';
+import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, getGuildAccessKeyConfig, showToast, auth, db } from './logic.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA6CETOXLO6yp4Gm1JY7fwiWlWo0pKqzqw",
@@ -56,8 +56,30 @@ function tagChip(text, style='default') {
   };
   return `<span class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-bold ${styles[style] || styles.default}">${escapeHtml(text)}</span>`;
 }
+function buildRecruitmentRequirements(data = {}) {
+  const items = [];
+  const pushItem = (label, value) => {
+    const clean = String(value || '').trim();
+    if (!clean) return;
+    items.push(`${label}: ${clean}`);
+  };
+  pushItem('Plataforma', data.platform);
+  pushItem('Idade', data.minimumAge);
+  pushItem('Troca nick', data.nickChangeRequired);
+  pushItem('Prazo nick', data.nickChangeDeadline);
+  pushItem('Equipe', data.teamPlay);
+  pushItem('Call', data.useCall);
+  return items;
+}
+function renderRequirementChips(data = {}) {
+  const items = buildRecruitmentRequirements(data);
+  return items.length ? items.map(v => tagChip(v, 'default')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
+}
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
 const MARKETPLACE_ROLE_OPTIONS = ['Rush', 'Full Gás', 'Curandeiro', 'Fuzileiro', 'Suporte'];
+const MARKETPLACE_AGE_OPTIONS = ['+10', '+11', '+12', '+13', '+14', '+15', '+16', '+17', '+18'];
+const MARKETPLACE_AVAILABILITY_OPTIONS = ['Manhã', 'Tarde', 'Noite'];
+const MARKETPLACE_BOOLEAN_OPTIONS = ['Sim', 'Não'];
 const WHATSAPP_COUNTRY_OPTIONS = [
   { code: '55', flag: '🇧🇷', label: 'Brasil', maxDigits: 11, placeholder: 'DDD + número' },
   { code: '1', flag: '🇺🇸', label: 'Estados Unidos', maxDigits: 10, placeholder: 'Área + número' },
@@ -164,15 +186,15 @@ function bootManagementMode() {
     currentGuildName: qs('current-guild-name'), openedKey: qs('opened-key'), view: qs('recruitment-view'),
     keyLabel: document.querySelector('label[for="guild-access-key-input"]'),
     modal: qs('rec-modal'), modalTitle: qs('rec-modal-title'), form: qs('rec-form'), guildName: qs('rec-guild-name'),
+    platform: qs('rec-platform'), age: qs('rec-age'), nickRequired: qs('rec-nick-required'), nickDeadline: qs('rec-nick-deadline'), teamPlay: qs('rec-teamplay'), useCall: qs('rec-call'),
     desc: qs('rec-description'), descCount: qs('rec-desc-count'), photoInput: qs('rec-photo'),
     photoPreviewWrap: qs('rec-photo-preview-wrap'), photoPreview: qs('rec-photo-preview'), photoStatus: qs('rec-photo-status'),
     requestsSection: qs('requests-section'), requestsView: qs('requests-view'), requestsBadge: qs('requests-badge'),
     requestModal: qs('request-detail-modal'), requestModalName: qs('request-detail-name'), requestModalId: qs('request-detail-id'),
     requestModalStatus: qs('request-detail-status'), requestModalDate: qs('request-detail-date'), requestModalModes: qs('request-detail-modes'),
-    requestModalWhatsapp: qs('request-detail-whatsapp'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject'),
-    requestTargetSlot: qs('request-target-slot'), deleteRecModal: qs('delete-rec-modal'), btnConfirmDeleteRec: qs('btn-confirm-delete-rec'), btnCancelDeleteRec: qs('btn-cancel-delete-rec')
+    requestModalWhatsapp: qs('request-detail-whatsapp'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject')
   };
-  let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [], activeRequest = null, currentGuildSlotsMeta = [];
+  let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [], activeRequest = null;
 
   const ctxGuildId = () => String(getGuildContext()?.guildId || '').trim();
   const ctxGuildName = () => String(getGuildContext()?.guildName || '').trim();
@@ -189,125 +211,6 @@ function bootManagementMode() {
     const tier = getNormalizedVipTier();
     return tier === 'pro' || tier === 'business' || tier === 'vitalicio';
   };
-  function __membersCollectionName(slot = 1) {
-    const n = Math.max(1, Math.min(4, Math.floor(Number(slot) || 1)));
-    return n <= 1 ? 'membros' : `membros${n}`;
-  }
-  function __currentGuildDisplayName(slot = 1) {
-    const meta = (currentGuildSlotsMeta || []).find((item) => Number(item?.slot) === Number(slot)) || null;
-    const name = String(meta?.name || '').trim();
-    return name || `Guilda ${slot}`;
-  }
-  async function loadManagementGuildSlots() {
-    try {
-      currentGuildSlotsMeta = await getGuildMultiConfig(4);
-    } catch (_) {
-      currentGuildSlotsMeta = [{ slot: 1, name: ctxGuildName() || '', tag: '', exists: true }];
-    }
-    if (!Array.isArray(currentGuildSlotsMeta) || !currentGuildSlotsMeta.length) {
-      currentGuildSlotsMeta = [{ slot: 1, name: ctxGuildName() || '', tag: '', exists: true }];
-    }
-  }
-  function closeManagementCustomSelects(exceptSelect = null) {
-    document.querySelectorAll('[data-rq-dd-select-id]').forEach((menu) => {
-      const selectId = menu.getAttribute('data-rq-dd-select-id') || '';
-      const trigger = document.querySelector(`[data-rq-dd-trigger-for="${selectId}"]`);
-      if (exceptSelect && String(exceptSelect.id || '') === selectId) return;
-      menu.classList.add('hidden');
-      trigger?.classList.remove('is-open');
-    });
-  }
-  function syncManagementCustomSelect(select) {
-    if (!select) return;
-    const selectId = String(select.id || '');
-    const trigger = document.querySelector(`[data-rq-dd-trigger-for="${selectId}"]`);
-    const label = trigger?.querySelector('.rq-dd-label');
-    const selectedOption = select.options[select.selectedIndex] || select.options[0] || null;
-    if (label) label.textContent = selectedOption ? selectedOption.textContent : 'Selecione';
-    document.querySelectorAll(`[data-rq-dd-option-for="${selectId}"]`).forEach((btn) => {
-      const active = String(btn.getAttribute('data-value') || '') === String(select.value || '');
-      btn.classList.toggle('is-selected', active);
-      btn.setAttribute('aria-selected', active ? 'true' : 'false');
-    });
-  }
-  function enhanceManagementCustomSelect(select) {
-    if (!select || select.dataset.rqDdInit === '1') {
-      if (select) syncManagementCustomSelect(select);
-      return;
-    }
-    const wrap = select.closest('.rq-select-wrap') || select.parentElement;
-    if (!wrap) return;
-    wrap.classList.add('rq-dd');
-    select.dataset.rqDdInit = '1';
-    select.classList.add('rq-dd-native');
-    wrap.querySelectorAll('[data-rq-dd-trigger-for], [data-rq-dd-select-id], .rq-dd-menu, .rq-dd-btn').forEach((node) => node.remove());
-    wrap.querySelectorAll('i[data-lucide="chevron-down"]').forEach((icon) => icon.remove());
-    const trigger = document.createElement('button');
-    trigger.type = 'button';
-    trigger.className = 'rq-dd-btn';
-    trigger.setAttribute('data-rq-dd-trigger-for', select.id);
-    trigger.innerHTML = `<span class="rq-dd-label">Selecione</span><span class="rq-dd-arrow">▾</span>`;
-    const menu = document.createElement('div');
-    menu.className = 'rq-dd-menu hidden';
-    menu.setAttribute('data-rq-dd-select-id', select.id);
-    [...select.options].forEach((option) => {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'rq-dd-item';
-      item.setAttribute('data-rq-dd-option-for', select.id);
-      item.setAttribute('data-value', option.value);
-      item.setAttribute('aria-selected', option.selected ? 'true' : 'false');
-      item.textContent = option.textContent || '';
-      item.addEventListener('click', () => {
-        select.value = option.value;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        syncManagementCustomSelect(select);
-        closeManagementCustomSelects();
-      });
-      menu.appendChild(item);
-    });
-    trigger.addEventListener('click', (event) => {
-      event.preventDefault();
-      const willOpen = menu.classList.contains('hidden');
-      closeManagementCustomSelects(wrap.contains(menu) ? select : null);
-      menu.classList.toggle('hidden', !willOpen);
-      trigger.classList.toggle('is-open', willOpen);
-    });
-    select.addEventListener('change', () => syncManagementCustomSelect(select));
-    wrap.appendChild(trigger);
-    wrap.appendChild(menu);
-    syncManagementCustomSelect(select);
-  }
-  function initManagementCustomSelects() {
-    ['rec-platform', 'rec-age', 'rec-nick-required', 'rec-nick-deadline', 'rec-teamplay', 'rec-call', 'request-target-slot'].forEach((id) => {
-      const select = document.getElementById(id);
-      if (select) enhanceManagementCustomSelect(select);
-    });
-    initIcons();
-  }
-  function renderRequestTargetSlotOptions(preferredSlot = 1) {
-    if (!els.requestTargetSlot) return;
-    const options = (Array.isArray(currentGuildSlotsMeta) ? currentGuildSlotsMeta : [])
-      .filter((item) => Number(item?.slot) === 1 || !!item?.exists)
-      .sort((a, b) => Number(a?.slot || 0) - Number(b?.slot || 0));
-    els.requestTargetSlot.innerHTML = options.map((item) => `<option value="${item.slot}">${escapeHtml(__currentGuildDisplayName(item.slot))}</option>`).join('') || '<option value="1">Guilda 1</option>';
-    const wanted = String(preferredSlot || 1);
-    const hasWanted = [...els.requestTargetSlot.options].some((option) => option.value === wanted);
-    els.requestTargetSlot.value = hasWanted ? wanted : (els.requestTargetSlot.options[0]?.value || '1');
-    initManagementCustomSelects();
-    syncManagementCustomSelect(els.requestTargetSlot);
-  }
-  function openDeleteRecruitmentModal() {
-    if (!els.deleteRecModal) return;
-    els.deleteRecModal.classList.remove('hidden');
-    els.deleteRecModal.classList.add('flex');
-    initIcons();
-  }
-  function closeDeleteRecruitmentModal() {
-    if (!els.deleteRecModal) return;
-    els.deleteRecModal.classList.add('hidden');
-    els.deleteRecModal.classList.remove('flex');
-  }
   function setManualKeyMode(showManual = true) {
     const method = showManual ? 'remove' : 'add';
     [els.keyInput, els.loadBtn, els.keyLabel].forEach((el) => {
@@ -430,14 +333,18 @@ function bootManagementMode() {
       setCheckedValues('contacts', currentRecruitment.contacts || []);
       setCheckedValues('guildType', currentRecruitment.guildType || []);
       setCheckedValues('focus', currentRecruitment.focus || []);
+      if (els.platform) els.platform.value = currentRecruitment.platform || '';
+      if (els.age) els.age.value = currentRecruitment.minimumAge || '';
+      if (els.nickRequired) els.nickRequired.value = currentRecruitment.nickChangeRequired || '';
+      if (els.nickDeadline) els.nickDeadline.value = currentRecruitment.nickChangeDeadline || '';
+      if (els.teamPlay) els.teamPlay.value = currentRecruitment.teamPlay || '';
+      if (els.useCall) els.useCall.value = currentRecruitment.useCall || '';
       if (els.desc) {
         els.desc.value = currentRecruitment.description || '';
         if (els.descCount) els.descCount.textContent = `${els.desc.value.length}/100`;
       }
       if (currentRecruitment.photoBase64) setPhotoPreview(currentRecruitment.photoBase64, currentRecruitment.photoBytes || dataUrlSizeBytes(currentRecruitment.photoBase64));
     }
-    initManagementCustomSelects();
-    ['rec-platform','rec-age','rec-nick-required','rec-nick-deadline','rec-teamplay','rec-call'].forEach((id) => { const select = document.getElementById(id); if (select) syncManagementCustomSelect(select); });
     els.modal.classList.remove('hidden');
     initIcons();
   }
@@ -454,15 +361,20 @@ function bootManagementMode() {
     }
     if (els.requestModalDate) els.requestModalDate.textContent = formatDateBR(item.createdAt || item.dateMs || item.date || Date.now());
     if (els.requestModalModes) {
-      const roles = Array.isArray(item.roles) && item.roles.length ? item.roles.map(v => tagChip(v,'role')).join(' ') : '<span class="text-xs text-gray-400">Modo não informado</span>';
-      els.requestModalModes.innerHTML = roles;
+      const chips = [];
+      if (Array.isArray(item.roles) && item.roles.length) chips.push(...item.roles.map(v => tagChip(v,'role')));
+      if (item.age) chips.push(tagChip(`Idade: ${item.age}`,'default'));
+      if (item.availableTime) chips.push(tagChip(`Horário: ${item.availableTime}`,'default'));
+      if (item.availableFridaySaturday) chips.push(tagChip(`Sex/Sáb: ${item.availableFridaySaturday}`,'default'));
+      if (item.playedGg) chips.push(tagChip(`Já jogou GG: ${item.playedGg}`,'default'));
+      if (item.hasNickChange) chips.push(tagChip(`Troca nick: ${item.hasNickChange}`,'default'));
+      els.requestModalModes.innerHTML = chips.length ? chips.join(' ') : '<span class="text-xs text-gray-400">Modo não informado</span>';
     }
     if (els.requestModalWhatsapp) {
       const href = formatWhatsappHref(item.whatsapp || item.phone || '', item.whatsappCountryCode || item.phoneCountryCode || '');
       const label = formatWhatsappLabel(item.whatsapp || item.phone || '', item.whatsappCountryCode || item.phoneCountryCode || '');
       els.requestModalWhatsapp.innerHTML = href ? `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 font-semibold hover:underline break-all">${escapeHtml(label)}</a>` : '<span class="text-gray-400">Não informado</span>';
     }
-    renderRequestTargetSlotOptions(1);
     els.requestModal.classList.remove('hidden');
     initIcons();
   }
@@ -473,7 +385,6 @@ function bootManagementMode() {
   async function acceptRequest(item) {
     const guildId = ctxGuildId() || String(linkedUid || '').trim();
     if (!guildId || !item?.id) throw new Error('Guilda ou pedido inválido.');
-    const targetSlot = Math.max(1, Math.min(4, Math.floor(Number(els.requestTargetSlot?.value || 1) || 1)));
     const requestPlayMode = Array.isArray(item.roles)
       ? item.roles.map(v => String(v || '').trim()).filter(Boolean)
       : [];
@@ -494,7 +405,7 @@ function bootManagementMode() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
-    await setDoc(doc(db, 'guildas', guildId, __membersCollectionName(targetSlot), String(item.id)), payload, { merge: true });
+    await setDoc(doc(db, 'guildas', guildId, 'membros', String(item.id)), payload, { merge: true });
     await removeRequest(String(item.id));
   }
   async function rejectRequest(item) {
@@ -546,11 +457,12 @@ function bootManagementMode() {
     const contacts = Array.isArray(d.contacts) && d.contacts.length ? d.contacts.map(v => tagChip(v,'contact')).join(' ') : '<span class="text-sm text-gray-400">Nenhuma</span>';
     const types = Array.isArray(d.guildType) && d.guildType.length ? d.guildType.map(v => tagChip(v,'type')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
     const focuses = Array.isArray(d.focus) && d.focus.length ? d.focus.map(v => tagChip(v,'focus')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
+    const requirements = renderRequirementChips(d);
     const photo = d.photoBase64 ? `<img src="${d.photoBase64}" alt="Foto do recrutamento" class="w-full h-64 object-cover rounded-2xl border border-gray-200 bg-gray-50">` : '';
-    if (els.view) els.view.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div class="p-5 border-b border-gray-100 flex items-start justify-between gap-4"><div><div class="flex items-center gap-2 flex-wrap"><h4 class="text-xl font-bold text-gray-900">${escapeHtml(d.guildName || 'Sem nome')}</h4><span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2.5 py-1 text-[11px] font-extrabold">ATIVO</span></div><p class="text-sm text-gray-500 mt-1">Chave usada: <span class="font-semibold break-all">${escapeHtml(openedKey)}</span></p><p class="text-sm text-gray-500 mt-1">Publicado em: ${escapeHtml(formatDateBR(d.dateMs || d.createdAt || Date.now()))}</p></div><div class="flex items-center gap-2"><button id="btn-edit-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100">Editar</button><button id="btn-delete-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50">Excluir</button></div></div><div class="p-5 space-y-5">${photo}<div class="grid md:grid-cols-2 gap-5"><div><p class="text-xs font-semibold text-gray-500 mb-2">Funções</p><div class="flex flex-wrap gap-2">${roles}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Mais opções</p><div class="flex flex-wrap gap-2">${contacts}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Foco</p><div class="flex flex-wrap gap-2">${focuses}</div></div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Descrição</p><div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700 min-h-[84px] whitespace-pre-wrap">${escapeHtml(d.description || 'Sem descrição.')}</div></div></div></div>`;
+    if (els.view) els.view.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div class="p-5 border-b border-gray-100 flex items-start justify-between gap-4"><div><div class="flex items-center gap-2 flex-wrap"><h4 class="text-xl font-bold text-gray-900">${escapeHtml(d.guildName || 'Sem nome')}</h4><span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2.5 py-1 text-[11px] font-extrabold">ATIVO</span></div><p class="text-sm text-gray-500 mt-1">Chave usada: <span class="font-semibold break-all">${escapeHtml(openedKey)}</span></p><p class="text-sm text-gray-500 mt-1">Publicado em: ${escapeHtml(formatDateBR(d.dateMs || d.createdAt || Date.now()))}</p></div><div class="flex items-center gap-2"><button id="btn-edit-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100">Editar</button><button id="btn-delete-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50">Excluir</button></div></div><div class="p-5 space-y-5">${photo}<div class="grid md:grid-cols-2 gap-5"><div><p class="text-xs font-semibold text-gray-500 mb-2">Funções</p><div class="flex flex-wrap gap-2">${roles}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Mais opções</p><div class="flex flex-wrap gap-2">${contacts}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Foco</p><div class="flex flex-wrap gap-2">${focuses}</div></div><div class="md:col-span-2"><p class="text-xs font-semibold text-gray-500 mb-2">Requisitos</p><div class="flex flex-wrap gap-2">${requirements}</div></div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Descrição</p><div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700 min-h-[84px] whitespace-pre-wrap">${escapeHtml(d.description || 'Sem descrição.')}</div></div></div></div>`;
     updateCreateButtonVisibility(); renderRequests();
     qs('btn-edit-rec')?.addEventListener('click', () => openModal('edit'));
-    qs('btn-delete-rec')?.addEventListener('click', openDeleteRecruitmentModal);
+    qs('btn-delete-rec')?.addEventListener('click', deleteRecruitment);
     initIcons();
   }
   async function loadRequests() {
@@ -687,12 +599,12 @@ function bootManagementMode() {
       closeModal(); renderRecruitment(); await loadRequests(); setStatus('Seu recrutamento foi salvo com sucesso.','success'); showToast('success','Recrutamento salvo!');
     } catch (err) { console.error(err); showToast('error','Não foi possível salvar o recrutamento.'); }
   }
-  async function confirmDeleteRecruitment() {
+  async function deleteRecruitment() {
     if (!linkedUid || !currentRecruitment) return;
+    if (!window.confirm('Excluir este recrutamento?')) return;
     try {
       await deleteDoc(doc(recDb,'rec',linkedUid));
       currentRecruitment = null; currentRequests = [];
-      closeDeleteRecruitmentModal();
       renderRecruitment(); setStatus('Seu recrutamento foi excluído com sucesso.','success'); showToast('success','Recrutamento excluído!');
     } catch (err) { console.error(err); showToast('error','Não foi possível excluir o recrutamento.'); }
   }
@@ -721,7 +633,7 @@ function bootManagementMode() {
     });
     els.requestAcceptBtn?.addEventListener('click', async () => {
       if (!activeRequest) return;
-      try { const acceptedGuildName = __currentGuildDisplayName(Number(els.requestTargetSlot?.value || 1) || 1); await acceptRequest(activeRequest); closeRequestModal(); await loadRequests(); showToast('success',`Pedido aceito e membro adicionado em ${acceptedGuildName}!`); }
+      try { await acceptRequest(activeRequest); closeRequestModal(); await loadRequests(); showToast('success','Pedido aceito e membro adicionado!'); }
       catch (err) { console.error(err); showToast('error', err?.message || 'Não foi possível aceitar o pedido.'); }
     });
     els.requestRejectBtn?.addEventListener('click', async () => {
@@ -729,27 +641,12 @@ function bootManagementMode() {
       try { await rejectRequest(activeRequest); closeRequestModal(); await loadRequests(); showToast('success','Pedido recusado!'); }
       catch (err) { console.error(err); showToast('error', err?.message || 'Não foi possível recusar o pedido.'); }
     });
-    els.btnCancelDeleteRec?.addEventListener('click', closeDeleteRecruitmentModal);
-    els.btnConfirmDeleteRec?.addEventListener('click', confirmDeleteRecruitment);
-    document.querySelectorAll('[data-close-delete-rec]').forEach((el) => el.addEventListener('click', closeDeleteRecruitmentModal));
-    if (!document.body.dataset.recCustomSelectCloseBound) {
-      document.body.dataset.recCustomSelectCloseBound = '1';
-      document.addEventListener('click', (event) => {
-        if (event.target.closest('.rq-dd')) return;
-        closeManagementCustomSelects();
-      });
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') closeManagementCustomSelects();
-      });
-    }
   }
   (async function boot(){
     bindEvents();
     const user = await checkAuth(true);
     if (!user) return;
     const ctx = getGuildContext() || {};
-    await loadManagementGuildSlots();
-    initManagementCustomSelects();
     if (els.currentUid) els.currentUid.textContent = String(ctx.guildId || '-');
     if (els.currentGuildName) els.currentGuildName.textContent = String(ctx.guildName || '-');
     if (els.openedKey) els.openedKey.textContent = 'Nenhuma';
@@ -770,11 +667,17 @@ function bootMarketplaceMode() {
   const els = {
     grid: qs('grid'), status: qs('status'), q: qs('q'), filter: qs('filter'), filterBtn: qs('filterBtn'), filterMenu: qs('filterMenu'), filterLabel: qs('filterLabel'),
     modal: qs('request-modal'), modalGuild: qs('request-modal-guild'), helper: qs('request-helper'), form: qs('request-form'),
-    applicantId: qs('applicant-id'), applicantNick: qs('applicant-nick'), applicantWhatsapp: qs('applicant-whatsapp'), applicantWhatsappDdi: qs('applicant-whatsapp-ddi')
+    applicantId: qs('applicant-id'), applicantNick: qs('applicant-nick'), applicantWhatsapp: qs('applicant-whatsapp'), applicantWhatsappDdi: qs('applicant-whatsapp-ddi'),
+    applicantAge: qs('applicant-age'), applicantAvailability: qs('applicant-availability'), applicantWeekend: qs('applicant-weekend'), applicantGg: qs('applicant-gg'), applicantNickChange: qs('applicant-nick-change')
   };
   if (!els.grid || !els.q || !els.filter) return;
   let allItems = [], activeRecruitment = null;
   const params = new URLSearchParams(window.location.search);
+
+  function getMarketplaceSimpleOptions(options = [], placeholder = 'Selecione') {
+    const list = Array.isArray(options) ? options : [];
+    return [`<option value="">${placeholder}</option>`].concat(list.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)).join('');
+  }
 
   function getMarketplaceCountrySelectOptions() {
     return WHATSAPP_COUNTRY_OPTIONS.map((country) => `<option value="${country.code}" ${country.code === DEFAULT_WHATSAPP_COUNTRY_CODE ? 'selected' : ''}>${country.flag} +${country.code}</option>`).join('');
@@ -947,6 +850,98 @@ function bootMarketplaceMode() {
     }
   }
 
+  function closeMarketplaceCustomSelects(exceptSelect = null) {
+    document.querySelectorAll('[data-rq-dd-select-id]').forEach((menu) => {
+      const selectId = menu.getAttribute('data-rq-dd-select-id') || '';
+      const trigger = document.querySelector(`[data-rq-dd-trigger-for="${selectId}"]`);
+      if (exceptSelect && String(exceptSelect.id || '') === selectId) return;
+      menu.classList.add('hidden');
+      trigger?.classList.remove('is-open');
+    });
+  }
+
+  function syncMarketplaceCustomSelect(select) {
+    if (!select) return;
+    const selectId = String(select.id || '');
+    const trigger = document.querySelector(`[data-rq-dd-trigger-for="${selectId}"]`);
+    const label = trigger?.querySelector('.rq-dd-label');
+    const selectedOption = select.options[select.selectedIndex] || select.options[0] || null;
+    if (label) label.textContent = selectedOption ? selectedOption.textContent : 'Selecione';
+    document.querySelectorAll(`[data-rq-dd-option-for="${selectId}"]`).forEach((btn) => {
+      const active = String(btn.getAttribute('data-value') || '') === String(select.value || '');
+      btn.classList.toggle('is-selected', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+
+  function enhanceMarketplaceCustomSelect(select) {
+    if (!select || select.dataset.rqDdInit === '1') {
+      if (select) syncMarketplaceCustomSelect(select);
+      return;
+    }
+    const wrap = select.closest('.rq-select-wrap') || select.parentElement;
+    if (!wrap) return;
+
+    wrap.classList.add('rq-dd');
+    select.dataset.rqDdInit = '1';
+    select.classList.add('rq-dd-native');
+
+    wrap.querySelectorAll('[data-rq-dd-trigger-for], [data-rq-dd-select-id], .rq-dd-menu, .rq-dd-btn').forEach((node) => node.remove());
+    wrap.querySelectorAll('i[data-lucide="chevron-down"]').forEach((icon) => icon.remove());
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'rq-dd-btn';
+    trigger.setAttribute('data-rq-dd-trigger-for', select.id);
+    trigger.innerHTML = `<span class="rq-dd-label">Selecione</span><span class="rq-dd-arrow">▾</span>`;
+
+    const menu = document.createElement('div');
+    menu.className = 'rq-dd-menu hidden';
+    menu.setAttribute('data-rq-dd-select-id', select.id);
+
+    [...select.options].forEach((option) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'rq-dd-item';
+      item.setAttribute('data-rq-dd-option-for', select.id);
+      item.setAttribute('data-value', option.value);
+      item.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+      item.textContent = option.textContent || '';
+      item.addEventListener('click', () => {
+        select.value = option.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        syncMarketplaceCustomSelect(select);
+        closeMarketplaceCustomSelects();
+      });
+      menu.appendChild(item);
+    });
+
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      const willOpen = menu.classList.contains('hidden');
+      closeMarketplaceCustomSelects(wrap.contains(menu) ? select : null);
+      menu.classList.toggle('hidden', !willOpen);
+      trigger.classList.toggle('is-open', willOpen);
+    });
+
+    select.addEventListener('change', () => syncMarketplaceCustomSelect(select));
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    syncMarketplaceCustomSelect(select);
+  }
+
+  function initMarketplaceCustomSelects() {
+    const ids = [
+      'applicant-age', 'applicant-availability', 'applicant-weekend', 'applicant-gg', 'applicant-nick-change',
+      'applicant-age-dynamic', 'applicant-availability-dynamic', 'applicant-weekend-dynamic', 'applicant-gg-dynamic', 'applicant-nick-change-dynamic'
+    ];
+    ids.forEach((id) => {
+      const select = document.getElementById(id);
+      if (select) enhanceMarketplaceCustomSelect(select);
+    });
+  }
+
   function ensureMarketplaceRequestModal() {
     let dynamicModal = document.getElementById('request-modal-dynamic');
 
@@ -963,8 +958,8 @@ function bootMarketplaceMode() {
     if (!staticModalIsComplete && !dynamicModal) {
       const wrap = document.createElement('div');
       wrap.innerHTML = `
-        <div id="request-modal-dynamic" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/60 px-4 py-5">
-          <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+        <div id="request-modal-dynamic" class="fixed inset-0 z-[70] hidden items-center justify-center overflow-y-auto bg-black/60 px-4 py-5">
+          <div class="w-full max-w-md max-h-[calc(100dvh-2.5rem)] rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
             <div class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
               <div class="min-w-0">
                 <p class="text-[11px] font-extrabold uppercase tracking-[0.14em] text-emerald-600">Pedido de recrutamento</p>
@@ -978,7 +973,7 @@ function bootMarketplaceMode() {
                 <i data-lucide="x" class="h-4 w-4"></i>
               </button>
             </div>
-            <form id="request-form-dynamic" class="space-y-3.5 px-5 py-4">
+            <form id="request-form-dynamic" class="space-y-3.5 px-5 py-4 overflow-y-auto overscroll-contain min-h-0">
               <div class="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label for="applicant-id-dynamic" class="mb-2 block text-sm font-bold text-slate-700">ID</label>
@@ -999,6 +994,43 @@ function bootMarketplaceMode() {
               <div>
                 <p class="mb-2 block text-sm font-bold text-slate-700">Modo de jogo</p>
                 <div id="request-modes-dynamic" class="grid grid-cols-2 gap-2"></div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label for="applicant-age-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Idade</label>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-age-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_AGE_OPTIONS, 'Selecione sua idade')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div>
+                  <label for="applicant-availability-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Horário disponível</label>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-availability-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_AVAILABILITY_OPTIONS, 'Selecione um horário')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div>
+                  <label for="applicant-weekend-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Disponível sexta e sábado?</label>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-weekend-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div>
+                  <label for="applicant-gg-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Já jogou GG?</label>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-gg-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div class="sm:col-span-2">
+                  <label for="applicant-nick-change-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Possui troca nick?</label>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-nick-change-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
               </div>
               <div class="flex items-center justify-end gap-3 pt-2">
                 <button type="button" data-close-marketplace-request class="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
@@ -1023,6 +1055,11 @@ function bootMarketplaceMode() {
     els.applicantNick = staticModalIsComplete ? staticNick : document.getElementById('applicant-nick-dynamic');
     els.applicantWhatsapp = staticModalIsComplete ? staticWhatsapp : document.getElementById('applicant-whatsapp-dynamic');
     els.applicantWhatsappDdi = staticModalIsComplete ? staticWhatsappDdi : document.getElementById('applicant-whatsapp-ddi-dynamic');
+    els.applicantAge = staticModalIsComplete ? document.getElementById('applicant-age') : document.getElementById('applicant-age-dynamic');
+    els.applicantAvailability = staticModalIsComplete ? document.getElementById('applicant-availability') : document.getElementById('applicant-availability-dynamic');
+    els.applicantWeekend = staticModalIsComplete ? document.getElementById('applicant-weekend') : document.getElementById('applicant-weekend-dynamic');
+    els.applicantGg = staticModalIsComplete ? document.getElementById('applicant-gg') : document.getElementById('applicant-gg-dynamic');
+    els.applicantNickChange = staticModalIsComplete ? document.getElementById('applicant-nick-change') : document.getElementById('applicant-nick-change-dynamic');
 
     const modesWrap = staticModalIsComplete ? staticModes : document.getElementById('request-modes-dynamic');
     if (modesWrap && !modesWrap.id) modesWrap.id = 'request-modes-dynamic';
@@ -1049,8 +1086,20 @@ function bootMarketplaceMode() {
       });
     });
 
+    if (!document.body.dataset.marketplaceCustomSelectCloseBound) {
+      document.body.dataset.marketplaceCustomSelectCloseBound = '1';
+      document.addEventListener('click', (event) => {
+        if (event.target.closest('.rq-dd')) return;
+        closeMarketplaceCustomSelects();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeMarketplaceCustomSelects();
+      });
+    }
+
     bindMarketplaceWhatsappField();
     bindMarketplaceNickLookup();
+    initMarketplaceCustomSelects();
     initIcons();
   }
 
@@ -1082,7 +1131,14 @@ function bootMarketplaceMode() {
     if (!els.modal || !els.form) return;
     els.form.reset();
     if (els.applicantWhatsappDdi) els.applicantWhatsappDdi.value = DEFAULT_WHATSAPP_COUNTRY_CODE;
+    if (els.applicantAge) els.applicantAge.value = '';
+    if (els.applicantAvailability) els.applicantAvailability.value = '';
+    if (els.applicantWeekend) els.applicantWeekend.value = '';
+    if (els.applicantGg) els.applicantGg.value = '';
+    if (els.applicantNickChange) els.applicantNickChange.value = '';
     syncMarketplaceWhatsappConstraints();
+    initMarketplaceCustomSelects();
+    [els.applicantAge, els.applicantAvailability, els.applicantWeekend, els.applicantGg, els.applicantNickChange].forEach((select) => { if (select) syncMarketplaceCustomSelect(select); });
     resetMarketplaceNickLookupState();
     if (els.modalGuild) els.modalGuild.textContent = item?.guildName || 'Guilda';
     if (els.helper) els.helper.textContent = 'Preencha seus dados para enviar a solicitação para essa guilda.';
@@ -1096,6 +1152,7 @@ function bootMarketplaceMode() {
     if (!els.modal) return;
     els.modal.classList.add('hidden');
     els.modal.classList.remove('flex');
+    closeMarketplaceCustomSelects();
     activeRecruitment = null;
   }
 
@@ -1106,10 +1163,20 @@ function bootMarketplaceMode() {
     const applicantNick = String(els.applicantNick?.value || '').trim();
     const whatsappPayload = buildWhatsappPayload(els.applicantWhatsapp?.value || '', els.applicantWhatsappDdi?.value || DEFAULT_WHATSAPP_COUNTRY_CODE);
     const roles = [...document.querySelectorAll('input[name="marketplace-roles"]:checked')].map((el) => String(el.value || '').trim()).filter(Boolean);
+    const applicantAge = String(els.applicantAge?.value || '').trim();
+    const applicantAvailability = String(els.applicantAvailability?.value || '').trim();
+    const applicantWeekend = String(els.applicantWeekend?.value || '').trim();
+    const applicantGg = String(els.applicantGg?.value || '').trim();
+    const applicantNickChange = String(els.applicantNickChange?.value || '').trim();
     if (!applicantId) { showToast('error', 'Informe seu ID.'); return; }
     if (!applicantNick) { showToast('error', 'Informe seu nick.'); return; }
     if (!whatsappPayload.localNumber) { showToast('error', 'Informe seu WhatsApp.'); return; }
     if (!roles.length) { showToast('error', 'Selecione pelo menos um modo de jogo.'); return; }
+    if (!applicantAge) { showToast('error', 'Selecione sua idade.'); return; }
+    if (!applicantAvailability) { showToast('error', 'Selecione seu horário disponível.'); return; }
+    if (!applicantWeekend) { showToast('error', 'Selecione se está disponível sexta e sábado.'); return; }
+    if (!applicantGg) { showToast('error', 'Selecione se já jogou GG.'); return; }
+    if (!applicantNickChange) { showToast('error', 'Selecione se possui troca nick.'); return; }
     try {
       const reqRef = doc(recDb, 'rec', activeRecruitment.id, 'pedidos', applicantId);
       const existing = await getDoc(reqRef);
@@ -1120,6 +1187,11 @@ function bootMarketplaceMode() {
         whatsapp: whatsappPayload.localNumber,
         whatsappCountryCode: whatsappPayload.countryCode,
         roles,
+        age: applicantAge,
+        availableTime: applicantAvailability,
+        availableFridaySaturday: applicantWeekend,
+        playedGg: applicantGg,
+        hasNickChange: applicantNickChange,
         status: 'pendente',
         guildId: activeRecruitment.id,
         guildName: activeRecruitment.guildName || '',
@@ -1142,7 +1214,7 @@ function bootMarketplaceMode() {
   function itemMatchesQuery(item, value) {
     const q = String(value || '').trim().toLowerCase();
     if (!q) return true;
-    const hay = [item.id, item.guildName, item.description, ...(item.roles || []), ...(item.contacts || []), ...(item.guildType || []), ...(item.focus || [])].join(' ').toLowerCase();
+    const hay = [item.id, item.guildName, item.description, item.platform, item.minimumAge, item.nickChangeRequired, item.nickChangeDeadline, item.teamPlay, item.useCall, ...(item.roles || []), ...(item.contacts || []), ...(item.guildType || []), ...(item.focus || [])].join(' ').toLowerCase();
     return hay.includes(q);
   }
   function syncUrl(){
@@ -1165,7 +1237,8 @@ function bootMarketplaceMode() {
       const types = (item.guildType || []).map(v => tagChip(v,'type')).join(' ');
       const focuses = (item.focus || []).map(v => tagChip(v,'focus')).join(' ');
       const contacts = (item.contacts || []).map(v => tagChip(v,'contact')).join(' ');
-      return `<article class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"><div class="flex items-start gap-3"><div class="shrink-0">${photo}</div><div class="min-w-0 flex-1"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><h3 class="truncate text-base font-black text-slate-900">${escapeHtml(item.guildName || 'Sem nome')}</h3><p class="mt-1 text-xs text-slate-500">${escapeHtml(formatDateBR(item.createdAt || item.updatedAt || item.dateMs || Date.now()))}</p></div><span class="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 ring-1 ring-emerald-200">ABERTO</span></div></div></div><div class="mt-4 space-y-3"><div><p class="mb-2 text-xs font-semibold text-slate-500">Descrição</p><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700 whitespace-pre-wrap">${escapeHtml(item.description || 'Sem descrição.')}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Modo de jogo</p><div class="flex flex-wrap gap-2">${roles || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Foco de meta</p><div class="flex flex-wrap gap-2">${focuses || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Contato</p><div class="flex flex-wrap gap-2">${contacts || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><button type="button" data-open-request="${escapeHtml(item.id)}" class="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800"><i data-lucide="send" class="h-4 w-4"></i>Enviar pedido</button></div></article>`;
+      const requirements = renderRequirementChips(item);
+      return `<article class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"><div class="flex items-start gap-3"><div class="shrink-0">${photo}</div><div class="min-w-0 flex-1"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><h3 class="truncate text-base font-black text-slate-900">${escapeHtml(item.guildName || 'Sem nome')}</h3><p class="mt-1 text-xs text-slate-500">${escapeHtml(formatDateBR(item.createdAt || item.updatedAt || item.dateMs || Date.now()))}</p></div><span class="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 ring-1 ring-emerald-200">ABERTO</span></div></div></div><div class="mt-4 space-y-3"><div><p class="mb-2 text-xs font-semibold text-slate-500">Descrição</p><div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700 whitespace-pre-wrap">${escapeHtml(item.description || 'Sem descrição.')}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Modo de jogo</p><div class="flex flex-wrap gap-2">${roles || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Foco de meta</p><div class="flex flex-wrap gap-2">${focuses || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Contato</p><div class="flex flex-wrap gap-2">${contacts || '<span class="text-xs text-slate-400">Não informado</span>'}</div></div><div><p class="mb-2 text-xs font-semibold text-slate-500">Requisitos</p><div class="flex flex-wrap gap-2">${requirements}</div></div><button type="button" data-open-request="${escapeHtml(item.id)}" class="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white hover:bg-slate-800"><i data-lucide="send" class="h-4 w-4"></i>Enviar pedido</button></div></article>`;
     }).join('');
     document.querySelectorAll('[data-open-request]').forEach(btn => btn.addEventListener('click', async () => {
       activeRecruitment = allItems.find(x => x.id === btn.getAttribute('data-open-request')) || null;
