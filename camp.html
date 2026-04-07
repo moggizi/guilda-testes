@@ -21,7 +21,7 @@
   </script>
   <link rel="stylesheet" href="./style.css" />
 </head>
-<body class="bg-gray-50/80">
+<body class="bg-gray-50/80 rec-management-screen">
   <div class="flex min-h-screen">
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
     <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:static">
@@ -400,20 +400,59 @@
       box-shadow: 0 0 0 1px rgba(16,185,129,.08) inset;
     }
     .select-chip input:checked + span i { color: rgb(16 185 129); }
-    .rq-select-wrap { position:relative; }
+    .rq-select-wrap {
+      position:relative;
+      border-radius:1rem;
+      transition:transform .16s ease, box-shadow .18s ease;
+    }
+    .rq-select-wrap:hover {
+      transform:translateY(-1px);
+    }
     .rq-select {
       width:100%; appearance:none; -webkit-appearance:none; -moz-appearance:none;
-      border:1px solid rgb(229 231 235); background:#fff; color:#111827;
-      border-radius:1rem; padding:.82rem 2.9rem .82rem 1rem; font-size:.875rem; font-weight:700;
-      outline:none; box-shadow:0 1px 2px rgba(2,6,23,.04);
+      border:1px solid rgba(16,24,40,.08);
+      background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);
+      color:#111827;
+      border-radius:1rem;
+      padding:.9rem 3rem .9rem 1rem;
+      font-size:.875rem;
+      font-weight:800;
+      letter-spacing:.01em;
+      outline:none;
+      box-shadow:0 1px 2px rgba(2,6,23,.04), 0 10px 24px rgba(15,23,42,.04);
+      transition:border-color .18s ease, box-shadow .18s ease, background .18s ease, transform .16s ease;
+      cursor:pointer;
+    }
+    .rq-select:hover {
+      border-color:rgba(16,185,129,.32);
+      background:linear-gradient(180deg,#ffffff 0%,#f0fdf4 100%);
+      box-shadow:0 1px 2px rgba(2,6,23,.04), 0 14px 28px rgba(16,185,129,.08);
     }
     .rq-select:focus {
       border-color: rgb(16 185 129);
-      box-shadow: 0 0 0 4px rgba(16,185,129,.12);
+      background:#fff;
+      box-shadow: 0 0 0 4px rgba(16,185,129,.12), 0 16px 30px rgba(16,185,129,.10);
+    }
+    .rq-select:disabled {
+      cursor:not-allowed;
+      opacity:.7;
+      background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);
+    }
+    .rq-select option {
+      color:#111827;
+      background:#ffffff;
+      font-weight:700;
     }
     .rq-select-wrap > i {
       position:absolute; right:1rem; top:50%; transform:translateY(-50%);
-      color:#6b7280; pointer-events:none;
+      color:#059669; pointer-events:none; opacity:.9;
+      transition:transform .18s ease, opacity .18s ease;
+    }
+    .rq-select-wrap:hover > i,
+    .rq-select:focus + i,
+    .rq-select-wrap:focus-within > i {
+      transform:translateY(-50%) rotate(180deg);
+      opacity:1;
     }
     .rq-dd { position:relative; }
     .rq-dd-native { position:absolute !important; opacity:0 !important; pointer-events:none !important; width:0 !important; height:0 !important; }

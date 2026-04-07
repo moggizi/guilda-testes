@@ -192,7 +192,8 @@ function bootManagementMode() {
     requestsSection: qs('requests-section'), requestsView: qs('requests-view'), requestsBadge: qs('requests-badge'),
     requestModal: qs('request-detail-modal'), requestModalName: qs('request-detail-name'), requestModalId: qs('request-detail-id'),
     requestModalStatus: qs('request-detail-status'), requestModalDate: qs('request-detail-date'), requestModalModes: qs('request-detail-modes'),
-    requestModalWhatsapp: qs('request-detail-whatsapp'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject')
+    requestModalWhatsapp: qs('request-detail-whatsapp'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject'),
+    deleteRecModal: qs('delete-rec-modal'), cancelDeleteRecBtn: qs('btn-cancel-delete-rec'), confirmDeleteRecBtn: qs('btn-confirm-delete-rec')
   };
   let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [], activeRequest = null;
 
@@ -349,6 +350,17 @@ function bootManagementMode() {
     initIcons();
   }
   function closeRequestModal() { activeRequest = null; els.requestModal?.classList.add('hidden'); }
+  function closeDeleteRecModal() {
+    if (!els.deleteRecModal) return;
+    els.deleteRecModal.classList.add('hidden');
+    els.deleteRecModal.classList.remove('flex');
+  }
+  function openDeleteRecModal() {
+    if (!linkedUid || !currentRecruitment || !els.deleteRecModal) return;
+    els.deleteRecModal.classList.remove('hidden');
+    els.deleteRecModal.classList.add('flex');
+    initIcons();
+  }
   function openRequestModal(item) {
     if (!item || !els.requestModal) return;
     activeRequest = item;
@@ -599,18 +611,46 @@ function bootManagementMode() {
       closeModal(); renderRecruitment(); await loadRequests(); setStatus('Seu recrutamento foi salvo com sucesso.','success'); showToast('success','Recrutamento salvo!');
     } catch (err) { console.error(err); showToast('error','Não foi possível salvar o recrutamento.'); }
   }
-  async function deleteRecruitment() {
+  function deleteRecruitment() {
     if (!linkedUid || !currentRecruitment) return;
-    if (!window.confirm('Excluir este recrutamento?')) return;
+    openDeleteRecModal();
+  }
+  async function confirmDeleteRecruitment() {
+    if (!linkedUid || !currentRecruitment) {
+      closeDeleteRecModal();
+      return;
+    }
+    if (els.confirmDeleteRecBtn) {
+      els.confirmDeleteRecBtn.disabled = true;
+      els.confirmDeleteRecBtn.classList.add('opacity-70', 'cursor-not-allowed');
+    }
     try {
       await deleteDoc(doc(recDb,'rec',linkedUid));
       currentRecruitment = null; currentRequests = [];
+      closeDeleteRecModal();
       renderRecruitment(); setStatus('Seu recrutamento foi excluído com sucesso.','success'); showToast('success','Recrutamento excluído!');
-    } catch (err) { console.error(err); showToast('error','Não foi possível excluir o recrutamento.'); }
+    } catch (err) {
+      console.error(err);
+      showToast('error','Não foi possível excluir o recrutamento.');
+    } finally {
+      if (els.confirmDeleteRecBtn) {
+        els.confirmDeleteRecBtn.disabled = false;
+        els.confirmDeleteRecBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+      }
+    }
   }
   function bindEvents() {
     document.querySelectorAll('[data-close-rec]').forEach(el => el.addEventListener('click', closeModal));
     document.querySelectorAll('[data-close-request-detail]').forEach(el => el.addEventListener('click', closeRequestModal));
+    document.querySelectorAll('[data-close-delete-rec]').forEach(el => el.addEventListener('click', closeDeleteRecModal));
+    els.cancelDeleteRecBtn?.addEventListener('click', closeDeleteRecModal);
+    els.confirmDeleteRecBtn?.addEventListener('click', confirmDeleteRecruitment);
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      closeModal();
+      closeRequestModal();
+      closeDeleteRecModal();
+    });
     els.newBtn?.addEventListener('click', () => openModal('create'));
     els.copyBtn?.addEventListener('click', copyRecruitmentLink);
     els.loadBtn?.addEventListener('click', () => resolveKeyAndLoad(true));
