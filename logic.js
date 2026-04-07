@@ -745,6 +745,20 @@ export async function setGuildNameConfig(name) {
     }
   } catch (_) {}
 
+  try {
+    const cached = __readGuildMultiCache(guildId) || [];
+    const slot1 = {
+      slot: 1,
+      nameField: 'name',
+      tagField: 'tagMembros',
+      name: clean,
+      tag: Array.isArray(cached) ? ((cached.find((item) => Number(item?.slot) === 1)?.tag) || '') : '',
+      exists: true
+    };
+    const rest = (Array.isArray(cached) ? cached : []).filter((item) => Number(item?.slot) !== 1);
+    __writeGuildMultiCache(guildId, [slot1, ...rest].sort((a, b) => Number(a?.slot || 0) - Number(b?.slot || 0)));
+  } catch (_) {}
+
   return true;
 }
 
@@ -764,16 +778,50 @@ function __sanitizeOptionalText(value) {
   return clean;
 }
 
+function __guildMultiCacheKey(guildId) {
+  const gid = (guildId || '').toString().trim();
+  return gid ? `guildMulti_${gid}` : '';
+}
+
+function __readGuildMultiCache(guildId) {
+  try {
+    const key = __guildMultiCacheKey(guildId);
+    if (!key) return null;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function __writeGuildMultiCache(guildId, slots) {
+  try {
+    const key = __guildMultiCacheKey(guildId);
+    if (!key) return;
+    localStorage.setItem(key, JSON.stringify(Array.isArray(slots) ? slots : []));
+  } catch (_) {}
+}
+
+
 export async function getGuildMultiConfig(maxSlots = 4) {
   const guildId = requireGuildId();
   const safeMax = Math.max(1, Math.min(4, Math.floor(Number(maxSlots) || 4)));
 
   let cfg = {};
+  let usedCacheFallback = false;
   try {
     const snap = await getDoc(doc(db, "configGuilda", guildId));
     cfg = snap.exists() ? (snap.data() || {}) : {};
   } catch (_) {
     cfg = {};
+    usedCacheFallback = true;
+  }
+
+  if (usedCacheFallback) {
+    const cached = __readGuildMultiCache(guildId);
+    if (cached && cached.length) return cached.filter(Boolean).slice(0, safeMax);
   }
 
   let primaryName = (cfg.name || '').toString().trim();
@@ -804,6 +852,7 @@ export async function getGuildMultiConfig(maxSlots = 4) {
     });
   }
 
+  __writeGuildMultiCache(guildId, slots);
   return slots;
 }
 
@@ -824,7 +873,7 @@ export async function addGuildSlotConfig(maxSlots = 4) {
 
   await setDoc(doc(db, "configGuilda", guildId), payload, { merge: true });
 
-  return {
+  const created = {
     slot: target.slot,
     nameField: target.nameField,
     tagField: target.tagField,
@@ -832,16 +881,26 @@ export async function addGuildSlotConfig(maxSlots = 4) {
     tag: '',
     exists: true
   };
+
+  try {
+    const next = existing.map((item) => Number(item?.slot) === target.slot ? created : item);
+    __writeGuildMultiCache(guildId, next);
+  } catch (_) {}
+
+  return created;
 }
 
 export async function setGuildSlotConfig(slot, { name, tag } = {}) {
   const guildId = requireGuildId();
   const safeSlot = __normalizeGuildSlot(slot);
   const payload = { updatedAt: serverTimestamp() };
+  let cleanNameForCache;
+  let cleanTagForCache;
 
   if (name !== undefined) {
     const cleanName = __sanitizeOptionalText(name);
     if (!cleanName) throw new Error('Nome da guilda inválido.');
+    cleanNameForCache = cleanName;
 
     if (safeSlot === 1) {
       await setGuildNameConfig(cleanName);
@@ -852,6 +911,7 @@ export async function setGuildSlotConfig(slot, { name, tag } = {}) {
 
   if (tag !== undefined) {
     const cleanTag = __sanitizeOptionalText(tag);
+    cleanTagForCache = cleanTag;
     payload[__slotField('tagMembros', safeSlot)] = cleanTag;
   }
 
@@ -868,6 +928,20 @@ export async function setGuildSlotConfig(slot, { name, tag } = {}) {
       }
     } catch (_) {}
   }
+
+  try {
+    const cached = await getGuildMultiConfig(4);
+    const next = cached.map((item) => {
+      if (Number(item?.slot) !== safeSlot) return item;
+      return {
+        ...item,
+        name: cleanNameForCache !== undefined ? cleanNameForCache : item.name,
+        tag: cleanTagForCache !== undefined ? cleanTagForCache : item.tag,
+        exists: true
+      };
+    });
+    __writeGuildMultiCache(guildId, next);
+  } catch (_) {}
 
   return true;
 }
