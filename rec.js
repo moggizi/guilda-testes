@@ -250,6 +250,103 @@ function bootManagementMode() {
     return allowed;
   }
 
+
+  function closeManagementCustomSelects(exceptSelect = null) {
+    document.querySelectorAll('[data-rec-dd-select-id]').forEach((menu) => {
+      const selectId = menu.getAttribute('data-rec-dd-select-id') || '';
+      const trigger = document.querySelector(`[data-rec-dd-trigger-for="${selectId}"]`);
+      const wrap = menu.closest('.rq-dd');
+      if (exceptSelect && String(exceptSelect.id || '') === selectId) return;
+      menu.classList.add('hidden');
+      trigger?.classList.remove('is-open');
+      wrap?.classList.remove('rq-dd-open');
+    });
+  }
+  function syncManagementCustomSelect(select) {
+    if (!select) return;
+    const selectId = String(select.id || '');
+    const trigger = document.querySelector(`[data-rec-dd-trigger-for="${selectId}"]`);
+    const label = trigger?.querySelector('.rq-dd-label');
+    const selectedOption = select.options[select.selectedIndex] || select.options[0] || null;
+    const isPlaceholder = !String(select.value || '').trim();
+    if (label) {
+      label.textContent = selectedOption ? selectedOption.textContent : 'Selecione';
+      label.classList.toggle('is-placeholder', isPlaceholder);
+    }
+    if (trigger) trigger.disabled = !!select.disabled;
+    document.querySelectorAll(`[data-rec-dd-option-for="${selectId}"]`).forEach((btn) => {
+      const active = String(btn.getAttribute('data-value') || '') === String(select.value || '');
+      btn.classList.toggle('is-selected', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+  function enhanceManagementCustomSelect(select) {
+    if (!select || select.dataset.recCustomSelect !== 'true') return;
+    if (select.dataset.recDdInit === '1') {
+      syncManagementCustomSelect(select);
+      return;
+    }
+    const wrap = select.closest('.rq-select-wrap') || select.parentElement;
+    if (!wrap) return;
+
+    wrap.classList.add('rq-dd');
+    select.dataset.recDdInit = '1';
+    select.classList.add('rq-dd-native');
+
+    wrap.querySelectorAll('[data-rec-dd-trigger-for], [data-rec-dd-select-id]').forEach((node) => node.remove());
+    wrap.querySelectorAll('i[data-lucide="chevron-down"]').forEach((icon) => icon.remove());
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'rq-dd-btn';
+    trigger.setAttribute('data-rec-dd-trigger-for', select.id);
+    trigger.innerHTML = `<span class="rq-dd-label">Selecione</span><span class="rq-dd-arrow">▾</span>`;
+
+    const menu = document.createElement('div');
+    menu.className = 'rq-dd-menu hidden';
+    menu.setAttribute('data-rec-dd-select-id', select.id);
+
+    [...select.options].forEach((option) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'rq-dd-item';
+      item.setAttribute('data-rec-dd-option-for', select.id);
+      item.setAttribute('data-value', option.value);
+      item.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+      item.innerHTML = `<span class="rq-dd-item-text">${escapeHtml(option.textContent || '')}</span><span class="rq-dd-check">✓</span>`;
+      item.addEventListener('click', () => {
+        select.value = option.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        syncManagementCustomSelect(select);
+        wrap.classList.remove('rq-dd-open');
+        closeManagementCustomSelects();
+      });
+      menu.appendChild(item);
+    });
+
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (select.disabled) return;
+      const willOpen = menu.classList.contains('hidden');
+      closeManagementCustomSelects(willOpen ? select : null);
+      menu.classList.toggle('hidden', !willOpen);
+      trigger.classList.toggle('is-open', willOpen);
+      wrap.classList.toggle('rq-dd-open', willOpen);
+    });
+
+    select.addEventListener('change', () => syncManagementCustomSelect(select));
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    syncManagementCustomSelect(select);
+  }
+  function initManagementCustomSelects() {
+    document.querySelectorAll('select[data-rec-custom-select="true"]').forEach((select) => {
+      enhanceManagementCustomSelect(select);
+      syncManagementCustomSelect(select);
+    });
+  }
+
   function setStatus(message, type='info') {
     const map = { info:'hidden', success:'border-emerald-200 bg-emerald-50 text-emerald-700', error:'border-red-200 bg-red-50 text-red-700', warn:'border-amber-200 bg-amber-50 text-amber-700' };
     if (!els.keyStatus) return;
@@ -316,103 +413,7 @@ function bootManagementMode() {
       showToast('error', 'Não foi possível copiar o link.');
     }
   }
-
-  // LÓGICA DE CUSTOM SELECTS PARA O MANAGEMENT
-  function closeManagementCustomSelects(exceptSelect = null) {
-    document.querySelectorAll('[data-rec-dd-select-id]').forEach((menu) => {
-      const selectId = menu.getAttribute('data-rec-dd-select-id') || '';
-      const trigger = document.querySelector(`[data-rec-dd-trigger-for="${selectId}"]`);
-      if (exceptSelect && String(exceptSelect.id || '') === selectId) return;
-      menu.classList.add('hidden');
-      trigger?.classList.remove('is-open');
-    });
-  }
-
-  function syncManagementCustomSelect(select) {
-    if (!select) return;
-    const selectId = String(select.id || '');
-    const trigger = document.querySelector(`[data-rec-dd-trigger-for="${selectId}"]`);
-    const label = trigger?.querySelector('.rq-dd-label');
-    const selectedOption = select.options[select.selectedIndex] || select.options[0] || null;
-    if (label) label.textContent = selectedOption ? selectedOption.textContent : 'Selecione';
-    document.querySelectorAll(`[data-rec-dd-option-for="${selectId}"]`).forEach((btn) => {
-      const active = String(btn.getAttribute('data-value') || '') === String(select.value || '');
-      btn.classList.toggle('is-selected', active);
-      btn.setAttribute('aria-selected', active ? 'true' : 'false');
-    });
-  }
-
-  function enhanceManagementCustomSelect(select) {
-    if (!select || select.dataset.recDdInit === '1') {
-      if (select) syncManagementCustomSelect(select);
-      return;
-    }
-    const wrap = select.closest('.rq-select-wrap') || select.parentElement;
-    if (!wrap) return;
-
-    wrap.classList.add('rq-dd');
-    select.dataset.recDdInit = '1';
-    select.classList.add('rq-dd-native');
-
-    wrap.querySelectorAll('[data-rec-dd-trigger-for], [data-rec-dd-select-id], .rq-dd-menu, .rq-dd-btn').forEach((node) => node.remove());
-    wrap.querySelectorAll('i[data-lucide="chevron-down"]').forEach((icon) => icon.remove());
-
-    const trigger = document.createElement('button');
-    trigger.type = 'button';
-    trigger.className = 'rq-dd-btn';
-    trigger.setAttribute('data-rec-dd-trigger-for', select.id);
-    trigger.innerHTML = `<span class="rq-dd-label">Selecione</span><span class="rq-dd-arrow">▾</span>`;
-
-    const menu = document.createElement('div');
-    menu.className = 'rq-dd-menu hidden';
-    menu.setAttribute('data-rec-dd-select-id', select.id);
-
-    [...select.options].forEach((option) => {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'rq-dd-item';
-      item.setAttribute('data-rec-dd-option-for', select.id);
-      item.setAttribute('data-value', option.value);
-      item.setAttribute('aria-selected', option.selected ? 'true' : 'false');
-      item.textContent = option.textContent || '';
-      item.addEventListener('click', () => {
-        select.value = option.value;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        syncManagementCustomSelect(select);
-        closeManagementCustomSelects();
-      });
-      menu.appendChild(item);
-    });
-
-    trigger.addEventListener('click', (event) => {
-      event.preventDefault();
-      const willOpen = menu.classList.contains('hidden');
-      closeManagementCustomSelects(wrap.contains(menu) ? select : null);
-      menu.classList.toggle('hidden', !willOpen);
-      trigger.classList.toggle('is-open', willOpen);
-    });
-
-    select.addEventListener('change', () => syncManagementCustomSelect(select));
-
-    wrap.appendChild(trigger);
-    wrap.appendChild(menu);
-    syncManagementCustomSelect(select);
-  }
-
-  function initManagementCustomSelects() {
-    const ids = [
-      'rec-platform', 'rec-age', 'rec-nick-required', 'rec-nick-deadline', 'rec-teamplay', 'rec-call', 'request-target-slot'
-    ];
-    ids.forEach((id) => {
-      const select = document.getElementById(id);
-      if (select) enhanceManagementCustomSelect(select);
-    });
-  }
-
-  function closeModal(){ 
-    els.modal?.classList.add('hidden'); 
-    closeManagementCustomSelects();
-  }
+  function closeModal(){ els.modal?.classList.add('hidden'); }
   function openModal(mode='create') {
     if (!els.form || !els.modal) return;
     if (!canOpenRecruitment()) {
@@ -425,24 +426,17 @@ function bootManagementMode() {
     if (els.modalTitle) els.modalTitle.textContent = mode === 'edit' ? 'Editar recrutamento' : 'Novo recrutamento';
     if (els.guildName) els.guildName.value = currentRecruitment?.guildName || ctxGuildName() || '';
     resetPhotoState();
-    
-    if (mode === 'create') {
-      [els.platform, els.age, els.nickRequired, els.nickDeadline, els.teamPlay, els.useCall].forEach(select => {
-        if(select) syncManagementCustomSelect(select);
-      });
-    }
-
     if (mode === 'edit' && currentRecruitment) {
       setCheckedValues('roles', currentRecruitment.roles || []);
       setCheckedValues('contacts', currentRecruitment.contacts || []);
       setCheckedValues('guildType', currentRecruitment.guildType || []);
       setCheckedValues('focus', currentRecruitment.focus || []);
-      if (els.platform) { els.platform.value = currentRecruitment.platform || ''; syncManagementCustomSelect(els.platform); }
-      if (els.age) { els.age.value = currentRecruitment.minimumAge || ''; syncManagementCustomSelect(els.age); }
-      if (els.nickRequired) { els.nickRequired.value = currentRecruitment.nickChangeRequired || ''; syncManagementCustomSelect(els.nickRequired); }
-      if (els.nickDeadline) { els.nickDeadline.value = currentRecruitment.nickChangeDeadline || ''; syncManagementCustomSelect(els.nickDeadline); }
-      if (els.teamPlay) { els.teamPlay.value = currentRecruitment.teamPlay || ''; syncManagementCustomSelect(els.teamPlay); }
-      if (els.useCall) { els.useCall.value = currentRecruitment.useCall || ''; syncManagementCustomSelect(els.useCall); }
+      if (els.platform) els.platform.value = currentRecruitment.platform || '';
+      if (els.age) els.age.value = currentRecruitment.minimumAge || '';
+      if (els.nickRequired) els.nickRequired.value = currentRecruitment.nickChangeRequired || '';
+      if (els.nickDeadline) els.nickDeadline.value = currentRecruitment.nickChangeDeadline || '';
+      if (els.teamPlay) els.teamPlay.value = currentRecruitment.teamPlay || '';
+      if (els.useCall) els.useCall.value = currentRecruitment.useCall || '';
       if (els.desc) {
         els.desc.value = currentRecruitment.description || '';
         if (els.descCount) els.descCount.textContent = `${els.desc.value.length}/100`;
@@ -450,13 +444,10 @@ function bootManagementMode() {
       if (currentRecruitment.photoBase64) setPhotoPreview(currentRecruitment.photoBase64, currentRecruitment.photoBytes || dataUrlSizeBytes(currentRecruitment.photoBase64));
     }
     els.modal.classList.remove('hidden');
+    initManagementCustomSelects();
     initIcons();
   }
-  function closeRequestModal() { 
-    activeRequest = null; 
-    els.requestModal?.classList.add('hidden'); 
-    closeManagementCustomSelects();
-  }
+  function closeRequestModal() { activeRequest = null; els.requestModal?.classList.add('hidden'); }
   function closeDeleteRecModal() {
     if (!els.deleteRecModal) return;
     els.deleteRecModal.classList.add('hidden');
@@ -494,17 +485,8 @@ function bootManagementMode() {
       const label = formatWhatsappLabel(item.whatsapp || item.phone || '', item.whatsappCountryCode || item.phoneCountryCode || '');
       els.requestModalWhatsapp.innerHTML = href ? `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-emerald-600 font-semibold hover:underline break-all">${escapeHtml(label)}</a>` : '<span class="text-gray-400">Não informado</span>';
     }
-    
-    const guildSelect = qs('request-target-slot');
-    if (guildSelect) {
-       const guildNameStr = escapeHtml(ctxGuildName() || 'Sua guilda');
-       guildSelect.innerHTML = `<option value="1">${guildNameStr}</option>`;
-       guildSelect.value = "1";
-       enhanceManagementCustomSelect(guildSelect);
-       syncManagementCustomSelect(guildSelect);
-    }
-
     els.requestModal.classList.remove('hidden');
+    initManagementCustomSelects();
     initIcons();
   }
   async function removeRequest(requestId) {
@@ -760,24 +742,20 @@ function bootManagementMode() {
     document.querySelectorAll('[data-close-rec]').forEach(el => el.addEventListener('click', closeModal));
     document.querySelectorAll('[data-close-request-detail]').forEach(el => el.addEventListener('click', closeRequestModal));
     document.querySelectorAll('[data-close-delete-rec]').forEach(el => el.addEventListener('click', closeDeleteRecModal));
-    
-    if (!document.body.dataset.managementCustomSelectCloseBound) {
-      document.body.dataset.managementCustomSelectCloseBound = '1';
-      document.addEventListener('click', (event) => {
-        if (event.target && event.target.closest && !event.target.closest('.rq-dd')) {
-          closeManagementCustomSelects();
-        }
-      });
-    }
-
     els.cancelDeleteRecBtn?.addEventListener('click', closeDeleteRecModal);
     els.confirmDeleteRecBtn?.addEventListener('click', confirmDeleteRecruitment);
+    if (!document.body.dataset.recManagementCustomSelectCloseBound) {
+      document.body.dataset.recManagementCustomSelectCloseBound = '1';
+      document.addEventListener('click', (event) => {
+        if (event.target.closest('.rq-dd')) return;
+        closeManagementCustomSelects();
+      });
+    }
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       closeModal();
       closeRequestModal();
       closeDeleteRecModal();
-      closeManagementCustomSelects();
     });
     els.newBtn?.addEventListener('click', () => openModal('create'));
     els.copyBtn?.addEventListener('click', copyRecruitmentLink);
@@ -812,7 +790,6 @@ function bootManagementMode() {
   }
   (async function boot(){
     bindEvents();
-    initManagementCustomSelects();
     const user = await checkAuth(true);
     if (!user) return;
     const ctx = getGuildContext() || {};
@@ -827,7 +804,7 @@ function bootManagementMode() {
       return;
     }
     await tryBootWithSavedKey();
-    resetPhotoState(); renderRecruitment(); updateCopyLinkVisibility(); initIcons();
+    resetPhotoState(); renderRecruitment(); updateCopyLinkVisibility(); initManagementCustomSelects(); initIcons();
   })();
 }
 
