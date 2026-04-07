@@ -457,32 +457,44 @@
     .rq-dd { position:relative; }
     .rq-dd-native { position:absolute !important; opacity:0 !important; pointer-events:none !important; width:0 !important; height:0 !important; }
     .rq-dd-btn {
-      width:100%; display:flex; align-items:center; justify-content:space-between; gap:.75rem;
-      border:1px solid rgb(229 231 235); background:#fff; color:#111827;
-      border-radius:1rem; padding:.82rem 1rem; font-size:.875rem; font-weight:700;
-      box-shadow:0 1px 2px rgba(2,6,23,.04); outline:none; transition:all .18s ease;
+      width:100%; display:flex; align-items:center; justify-content:space-between; gap:.85rem;
+      border:1px solid rgba(16,24,40,.08);
+      background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);
+      color:#111827; border-radius:1rem; padding:.9rem 1rem; font-size:.875rem; font-weight:800;
+      box-shadow:0 1px 2px rgba(2,6,23,.04), 0 12px 24px rgba(15,23,42,.05);
+      outline:none; transition:all .18s ease;
     }
-    .rq-dd-btn:hover { border-color: rgb(209 213 219); background:#f9fafb; }
+    .rq-dd-btn:hover {
+      border-color: rgba(16,185,129,.28);
+      background:linear-gradient(180deg,#ffffff 0%,#f0fdf4 100%);
+      box-shadow:0 1px 2px rgba(2,6,23,.04), 0 16px 30px rgba(16,185,129,.09);
+      transform:translateY(-1px);
+    }
     .rq-dd-btn.is-open, .rq-dd-btn:focus {
       border-color: rgb(16 185 129);
-      box-shadow: 0 0 0 4px rgba(16,185,129,.12);
+      box-shadow: 0 0 0 4px rgba(16,185,129,.12), 0 18px 34px rgba(16,185,129,.12);
       background:#fff;
     }
     .rq-dd-btn .rq-dd-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .rq-dd-btn .rq-dd-arrow { flex:0 0 auto; color:#6b7280; transition:transform .18s ease; }
+    .rq-dd-btn .rq-dd-label.is-placeholder { color:#94a3b8; }
+    .rq-dd-btn .rq-dd-arrow { flex:0 0 auto; color:#059669; transition:transform .18s ease; }
     .rq-dd-btn.is-open .rq-dd-arrow { transform:rotate(180deg); }
     .rq-dd-menu {
       position:absolute; left:0; right:0; top:calc(100% + .5rem); z-index:120;
-      background:#fff; border:1px solid rgba(17,24,39,.08); border-radius:1rem;
-      box-shadow:0 20px 60px rgba(2,6,23,.18); max-height:240px; overflow-y:auto; padding:.35rem;
+      background:rgba(255,255,255,.98); backdrop-filter:blur(12px);
+      border:1px solid rgba(17,24,39,.08); border-radius:1.1rem;
+      box-shadow:0 22px 60px rgba(2,6,23,.18); max-height:260px; overflow-y:auto; padding:.4rem;
     }
     .rq-dd-item {
-      width:100%; text-align:left; display:flex; align-items:center; gap:.6rem;
-      border-radius:.85rem; padding:.75rem .85rem; font-size:.875rem; font-weight:700; color:#374151;
+      width:100%; text-align:left; display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+      border-radius:.9rem; padding:.82rem .9rem; font-size:.875rem; font-weight:700; color:#374151;
       transition:all .15s ease;
     }
-    .rq-dd-item:hover { background:#f9fafb; }
+    .rq-dd-item:hover { background:#f8fafc; }
     .rq-dd-item.is-selected { background:#ecfdf5; color:#047857; }
+    .rq-dd-item-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .rq-dd-check { flex:0 0 auto; color:#10b981; opacity:0; transform:scale(.88); transition:all .15s ease; }
+    .rq-dd-item.is-selected .rq-dd-check { opacity:1; transform:scale(1); }
   </style>
 
   <script type="module" src="./rec.js"></script>
