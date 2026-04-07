@@ -77,6 +77,9 @@ function renderRequirementChips(data = {}) {
 }
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
 const MARKETPLACE_ROLE_OPTIONS = ['Rush', 'Full Gás', 'Curandeiro', 'Fuzileiro', 'Suporte'];
+const MARKETPLACE_AGE_OPTIONS = ['+10', '+11', '+12', '+13', '+14', '+15', '+16', '+17', '+18'];
+const MARKETPLACE_AVAILABILITY_OPTIONS = ['Manhã', 'Tarde', 'Noite'];
+const MARKETPLACE_BOOLEAN_OPTIONS = ['Sim', 'Não'];
 const WHATSAPP_COUNTRY_OPTIONS = [
   { code: '55', flag: '🇧🇷', label: 'Brasil', maxDigits: 11, placeholder: 'DDD + número' },
   { code: '1', flag: '🇺🇸', label: 'Estados Unidos', maxDigits: 10, placeholder: 'Área + número' },
@@ -358,8 +361,14 @@ function bootManagementMode() {
     }
     if (els.requestModalDate) els.requestModalDate.textContent = formatDateBR(item.createdAt || item.dateMs || item.date || Date.now());
     if (els.requestModalModes) {
-      const roles = Array.isArray(item.roles) && item.roles.length ? item.roles.map(v => tagChip(v,'role')).join(' ') : '<span class="text-xs text-gray-400">Modo não informado</span>';
-      els.requestModalModes.innerHTML = roles;
+      const chips = [];
+      if (Array.isArray(item.roles) && item.roles.length) chips.push(...item.roles.map(v => tagChip(v,'role')));
+      if (item.age) chips.push(tagChip(`Idade: ${item.age}`,'default'));
+      if (item.availableTime) chips.push(tagChip(`Horário: ${item.availableTime}`,'default'));
+      if (item.availableFridaySaturday) chips.push(tagChip(`Sex/Sáb: ${item.availableFridaySaturday}`,'default'));
+      if (item.playedGg) chips.push(tagChip(`Já jogou GG: ${item.playedGg}`,'default'));
+      if (item.hasNickChange) chips.push(tagChip(`Troca nick: ${item.hasNickChange}`,'default'));
+      els.requestModalModes.innerHTML = chips.length ? chips.join(' ') : '<span class="text-xs text-gray-400">Modo não informado</span>';
     }
     if (els.requestModalWhatsapp) {
       const href = formatWhatsappHref(item.whatsapp || item.phone || '', item.whatsappCountryCode || item.phoneCountryCode || '');
@@ -658,11 +667,17 @@ function bootMarketplaceMode() {
   const els = {
     grid: qs('grid'), status: qs('status'), q: qs('q'), filter: qs('filter'), filterBtn: qs('filterBtn'), filterMenu: qs('filterMenu'), filterLabel: qs('filterLabel'),
     modal: qs('request-modal'), modalGuild: qs('request-modal-guild'), helper: qs('request-helper'), form: qs('request-form'),
-    applicantId: qs('applicant-id'), applicantNick: qs('applicant-nick'), applicantWhatsapp: qs('applicant-whatsapp'), applicantWhatsappDdi: qs('applicant-whatsapp-ddi')
+    applicantId: qs('applicant-id'), applicantNick: qs('applicant-nick'), applicantWhatsapp: qs('applicant-whatsapp'), applicantWhatsappDdi: qs('applicant-whatsapp-ddi'),
+    applicantAge: qs('applicant-age'), applicantAvailability: qs('applicant-availability'), applicantWeekend: qs('applicant-weekend'), applicantGg: qs('applicant-gg'), applicantNickChange: qs('applicant-nick-change')
   };
   if (!els.grid || !els.q || !els.filter) return;
   let allItems = [], activeRecruitment = null;
   const params = new URLSearchParams(window.location.search);
+
+  function getMarketplaceSimpleOptions(options = [], placeholder = 'Selecione') {
+    const list = Array.isArray(options) ? options : [];
+    return [`<option value="">${placeholder}</option>`].concat(list.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)).join('');
+  }
 
   function getMarketplaceCountrySelectOptions() {
     return WHATSAPP_COUNTRY_OPTIONS.map((country) => `<option value="${country.code}" ${country.code === DEFAULT_WHATSAPP_COUNTRY_CODE ? 'selected' : ''}>${country.flag} +${country.code}</option>`).join('');
@@ -835,6 +850,98 @@ function bootMarketplaceMode() {
     }
   }
 
+  function closeMarketplaceCustomSelects(exceptSelect = null) {
+    document.querySelectorAll('[data-rq-dd-select-id]').forEach((menu) => {
+      const selectId = menu.getAttribute('data-rq-dd-select-id') || '';
+      const trigger = document.querySelector(`[data-rq-dd-trigger-for="${selectId}"]`);
+      if (exceptSelect && String(exceptSelect.id || '') === selectId) return;
+      menu.classList.add('hidden');
+      trigger?.classList.remove('is-open');
+    });
+  }
+
+  function syncMarketplaceCustomSelect(select) {
+    if (!select) return;
+    const selectId = String(select.id || '');
+    const trigger = document.querySelector(`[data-rq-dd-trigger-for="${selectId}"]`);
+    const label = trigger?.querySelector('.rq-dd-label');
+    const selectedOption = select.options[select.selectedIndex] || select.options[0] || null;
+    if (label) label.textContent = selectedOption ? selectedOption.textContent : 'Selecione';
+    document.querySelectorAll(`[data-rq-dd-option-for="${selectId}"]`).forEach((btn) => {
+      const active = String(btn.getAttribute('data-value') || '') === String(select.value || '');
+      btn.classList.toggle('is-selected', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+
+  function enhanceMarketplaceCustomSelect(select) {
+    if (!select || select.dataset.rqDdInit === '1') {
+      if (select) syncMarketplaceCustomSelect(select);
+      return;
+    }
+    const wrap = select.closest('.rq-select-wrap') || select.parentElement;
+    if (!wrap) return;
+
+    wrap.classList.add('rq-dd');
+    select.dataset.rqDdInit = '1';
+    select.classList.add('rq-dd-native');
+
+    wrap.querySelectorAll('[data-rq-dd-trigger-for], [data-rq-dd-select-id], .rq-dd-menu, .rq-dd-btn').forEach((node) => node.remove());
+    wrap.querySelectorAll('i[data-lucide="chevron-down"]').forEach((icon) => icon.remove());
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'rq-dd-btn';
+    trigger.setAttribute('data-rq-dd-trigger-for', select.id);
+    trigger.innerHTML = `<span class="rq-dd-label">Selecione</span><span class="rq-dd-arrow">▾</span>`;
+
+    const menu = document.createElement('div');
+    menu.className = 'rq-dd-menu hidden';
+    menu.setAttribute('data-rq-dd-select-id', select.id);
+
+    [...select.options].forEach((option) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'rq-dd-item';
+      item.setAttribute('data-rq-dd-option-for', select.id);
+      item.setAttribute('data-value', option.value);
+      item.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+      item.textContent = option.textContent || '';
+      item.addEventListener('click', () => {
+        select.value = option.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        syncMarketplaceCustomSelect(select);
+        closeMarketplaceCustomSelects();
+      });
+      menu.appendChild(item);
+    });
+
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      const willOpen = menu.classList.contains('hidden');
+      closeMarketplaceCustomSelects(wrap.contains(menu) ? select : null);
+      menu.classList.toggle('hidden', !willOpen);
+      trigger.classList.toggle('is-open', willOpen);
+    });
+
+    select.addEventListener('change', () => syncMarketplaceCustomSelect(select));
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    syncMarketplaceCustomSelect(select);
+  }
+
+  function initMarketplaceCustomSelects() {
+    const ids = [
+      'applicant-age', 'applicant-availability', 'applicant-weekend', 'applicant-gg', 'applicant-nick-change',
+      'applicant-age-dynamic', 'applicant-availability-dynamic', 'applicant-weekend-dynamic', 'applicant-gg-dynamic', 'applicant-nick-change-dynamic'
+    ];
+    ids.forEach((id) => {
+      const select = document.getElementById(id);
+      if (select) enhanceMarketplaceCustomSelect(select);
+    });
+  }
+
   function ensureMarketplaceRequestModal() {
     let dynamicModal = document.getElementById('request-modal-dynamic');
 
@@ -851,8 +958,8 @@ function bootMarketplaceMode() {
     if (!staticModalIsComplete && !dynamicModal) {
       const wrap = document.createElement('div');
       wrap.innerHTML = `
-        <div id="request-modal-dynamic" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/60 px-4 py-5">
-          <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+        <div id="request-modal-dynamic" class="fixed inset-0 z-[70] hidden items-center justify-center overflow-y-auto bg-black/60 px-4 py-5">
+          <div class="w-full max-w-md max-h-[calc(100dvh-2.5rem)] rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
             <div class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
               <div class="min-w-0">
                 <p class="text-[11px] font-extrabold uppercase tracking-[0.14em] text-emerald-600">Pedido de recrutamento</p>
@@ -866,7 +973,7 @@ function bootMarketplaceMode() {
                 <i data-lucide="x" class="h-4 w-4"></i>
               </button>
             </div>
-            <form id="request-form-dynamic" class="space-y-3.5 px-5 py-4">
+            <form id="request-form-dynamic" class="space-y-3.5 px-5 py-4 overflow-y-auto overscroll-contain min-h-0">
               <div class="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label for="applicant-id-dynamic" class="mb-2 block text-sm font-bold text-slate-700">ID</label>
@@ -887,6 +994,43 @@ function bootMarketplaceMode() {
               <div>
                 <p class="mb-2 block text-sm font-bold text-slate-700">Modo de jogo</p>
                 <div id="request-modes-dynamic" class="grid grid-cols-2 gap-2"></div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label for="applicant-age-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Idade</label>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-age-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_AGE_OPTIONS, 'Selecione sua idade')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div>
+                  <label for="applicant-availability-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Horário disponível</label>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-availability-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_AVAILABILITY_OPTIONS, 'Selecione um horário')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div>
+                  <label for="applicant-weekend-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Disponível sexta e sábado?</label>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-weekend-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div>
+                  <label for="applicant-gg-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Já jogou GG?</label>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-gg-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
+                <div class="sm:col-span-2">
+                  <label for="applicant-nick-change-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Possui troca nick?</label>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-nick-change-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                    <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
+                  </div>
+                </div>
               </div>
               <div class="flex items-center justify-end gap-3 pt-2">
                 <button type="button" data-close-marketplace-request class="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
@@ -911,6 +1055,11 @@ function bootMarketplaceMode() {
     els.applicantNick = staticModalIsComplete ? staticNick : document.getElementById('applicant-nick-dynamic');
     els.applicantWhatsapp = staticModalIsComplete ? staticWhatsapp : document.getElementById('applicant-whatsapp-dynamic');
     els.applicantWhatsappDdi = staticModalIsComplete ? staticWhatsappDdi : document.getElementById('applicant-whatsapp-ddi-dynamic');
+    els.applicantAge = staticModalIsComplete ? document.getElementById('applicant-age') : document.getElementById('applicant-age-dynamic');
+    els.applicantAvailability = staticModalIsComplete ? document.getElementById('applicant-availability') : document.getElementById('applicant-availability-dynamic');
+    els.applicantWeekend = staticModalIsComplete ? document.getElementById('applicant-weekend') : document.getElementById('applicant-weekend-dynamic');
+    els.applicantGg = staticModalIsComplete ? document.getElementById('applicant-gg') : document.getElementById('applicant-gg-dynamic');
+    els.applicantNickChange = staticModalIsComplete ? document.getElementById('applicant-nick-change') : document.getElementById('applicant-nick-change-dynamic');
 
     const modesWrap = staticModalIsComplete ? staticModes : document.getElementById('request-modes-dynamic');
     if (modesWrap && !modesWrap.id) modesWrap.id = 'request-modes-dynamic';
@@ -937,8 +1086,20 @@ function bootMarketplaceMode() {
       });
     });
 
+    if (!document.body.dataset.marketplaceCustomSelectCloseBound) {
+      document.body.dataset.marketplaceCustomSelectCloseBound = '1';
+      document.addEventListener('click', (event) => {
+        if (event.target.closest('.rq-dd')) return;
+        closeMarketplaceCustomSelects();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeMarketplaceCustomSelects();
+      });
+    }
+
     bindMarketplaceWhatsappField();
     bindMarketplaceNickLookup();
+    initMarketplaceCustomSelects();
     initIcons();
   }
 
@@ -970,7 +1131,14 @@ function bootMarketplaceMode() {
     if (!els.modal || !els.form) return;
     els.form.reset();
     if (els.applicantWhatsappDdi) els.applicantWhatsappDdi.value = DEFAULT_WHATSAPP_COUNTRY_CODE;
+    if (els.applicantAge) els.applicantAge.value = '';
+    if (els.applicantAvailability) els.applicantAvailability.value = '';
+    if (els.applicantWeekend) els.applicantWeekend.value = '';
+    if (els.applicantGg) els.applicantGg.value = '';
+    if (els.applicantNickChange) els.applicantNickChange.value = '';
     syncMarketplaceWhatsappConstraints();
+    initMarketplaceCustomSelects();
+    [els.applicantAge, els.applicantAvailability, els.applicantWeekend, els.applicantGg, els.applicantNickChange].forEach((select) => { if (select) syncMarketplaceCustomSelect(select); });
     resetMarketplaceNickLookupState();
     if (els.modalGuild) els.modalGuild.textContent = item?.guildName || 'Guilda';
     if (els.helper) els.helper.textContent = 'Preencha seus dados para enviar a solicitação para essa guilda.';
@@ -984,6 +1152,7 @@ function bootMarketplaceMode() {
     if (!els.modal) return;
     els.modal.classList.add('hidden');
     els.modal.classList.remove('flex');
+    closeMarketplaceCustomSelects();
     activeRecruitment = null;
   }
 
@@ -994,22 +1163,20 @@ function bootMarketplaceMode() {
     const applicantNick = String(els.applicantNick?.value || '').trim();
     const whatsappPayload = buildWhatsappPayload(els.applicantWhatsapp?.value || '', els.applicantWhatsappDdi?.value || DEFAULT_WHATSAPP_COUNTRY_CODE);
     const roles = [...document.querySelectorAll('input[name="marketplace-roles"]:checked')].map((el) => String(el.value || '').trim()).filter(Boolean);
-    const applicantAge = String(qs('applicant-age')?.value || '').trim();
-    const applicantAvailability = String(qs('applicant-availability')?.value || '').trim();
-    const applicantWeekend = String(qs('applicant-weekend')?.value || '').trim();
-    const applicantGg = String(qs('applicant-gg')?.value || '').trim();
-    const applicantNickChange = String(qs('applicant-nick-change')?.value || '').trim();
-
+    const applicantAge = String(els.applicantAge?.value || '').trim();
+    const applicantAvailability = String(els.applicantAvailability?.value || '').trim();
+    const applicantWeekend = String(els.applicantWeekend?.value || '').trim();
+    const applicantGg = String(els.applicantGg?.value || '').trim();
+    const applicantNickChange = String(els.applicantNickChange?.value || '').trim();
     if (!applicantId) { showToast('error', 'Informe seu ID.'); return; }
     if (!applicantNick) { showToast('error', 'Informe seu nick.'); return; }
     if (!whatsappPayload.localNumber) { showToast('error', 'Informe seu WhatsApp.'); return; }
     if (!roles.length) { showToast('error', 'Selecione pelo menos um modo de jogo.'); return; }
-    if (!applicantAge) { showToast('error', 'Informe sua idade.'); return; }
-    if (!applicantAvailability) { showToast('error', 'Informe seu horário disponível.'); return; }
-    if (!applicantWeekend) { showToast('error', 'Informe se está disponível sexta e sábado.'); return; }
-    if (!applicantGg) { showToast('error', 'Informe se você já jogou GG.'); return; }
-    if (!applicantNickChange) { showToast('error', 'Informe se possui troca nick.'); return; }
-
+    if (!applicantAge) { showToast('error', 'Selecione sua idade.'); return; }
+    if (!applicantAvailability) { showToast('error', 'Selecione seu horário disponível.'); return; }
+    if (!applicantWeekend) { showToast('error', 'Selecione se está disponível sexta e sábado.'); return; }
+    if (!applicantGg) { showToast('error', 'Selecione se já jogou GG.'); return; }
+    if (!applicantNickChange) { showToast('error', 'Selecione se possui troca nick.'); return; }
     try {
       const reqRef = doc(recDb, 'rec', activeRecruitment.id, 'pedidos', applicantId);
       const existing = await getDoc(reqRef);
@@ -1021,7 +1188,7 @@ function bootMarketplaceMode() {
         whatsappCountryCode: whatsappPayload.countryCode,
         roles,
         age: applicantAge,
-        availability: applicantAvailability,
+        availableTime: applicantAvailability,
         availableFridaySaturday: applicantWeekend,
         playedGg: applicantGg,
         hasNickChange: applicantNickChange,
