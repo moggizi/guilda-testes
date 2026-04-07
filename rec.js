@@ -193,16 +193,53 @@ function bootManagementMode() {
     const n = Math.max(1, Math.min(4, Math.floor(Number(slot) || 1)));
     return n <= 1 ? 'membros' : `membros${n}`;
   }
+  function __guildMultiCacheKey(guildId) {
+    const gid = String(guildId || ctxGuildId() || '').trim();
+    return gid ? `guildMulti_${gid}` : '';
+  }
+  function __readGuildMultiCache(guildId) {
+    try {
+      const key = __guildMultiCacheKey(guildId);
+      if (!key) return [];
+      const raw = localStorage.getItem(key);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  function __normalizeGuildSlots(list) {
+    const map = new Map();
+    (Array.isArray(list) ? list : []).forEach((slot) => {
+      const n = Number(slot?.slot);
+      if (!Number.isFinite(n) || n < 1 || n > 4) return;
+      map.set(n, {
+        slot: n,
+        nameField: slot?.nameField || (n <= 1 ? 'name' : `name${n}`),
+        tagField: slot?.tagField || (n <= 1 ? 'tagMembros' : `tagMembros${n}`),
+        name: String(slot?.name || ''),
+        tag: String(slot?.tag || ''),
+        exists: slot?.exists !== false
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => Number(a?.slot || 0) - Number(b?.slot || 0));
+  }
   function __currentGuildDisplayName(slot = 1) {
     const meta = (currentGuildSlotsMeta || []).find((item) => Number(item?.slot) === Number(slot)) || null;
     const name = String(meta?.name || '').trim();
     return name || `Guilda ${slot}`;
   }
   async function loadManagementGuildSlots() {
+    const cachedSlots = __normalizeGuildSlots(__readGuildMultiCache(ctxGuildId()));
+    if (cachedSlots.length) {
+      currentGuildSlotsMeta = cachedSlots;
+      return;
+    }
     try {
-      currentGuildSlotsMeta = await getGuildMultiConfig(4);
+      currentGuildSlotsMeta = __normalizeGuildSlots(await getGuildMultiConfig(4));
     } catch (_) {
-      currentGuildSlotsMeta = [{ slot: 1, name: ctxGuildName() || '', tag: '', exists: true }];
+      currentGuildSlotsMeta = [];
     }
     if (!Array.isArray(currentGuildSlotsMeta) || !currentGuildSlotsMeta.length) {
       currentGuildSlotsMeta = [{ slot: 1, name: ctxGuildName() || '', tag: '', exists: true }];
