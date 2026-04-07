@@ -850,6 +850,98 @@ function bootMarketplaceMode() {
     }
   }
 
+  function closeMarketplaceCustomSelects(exceptSelect = null) {
+    document.querySelectorAll('[data-rq-dd-select-id]').forEach((menu) => {
+      const selectId = menu.getAttribute('data-rq-dd-select-id') || '';
+      const trigger = document.querySelector(`[data-rq-dd-trigger-for="${selectId}"]`);
+      if (exceptSelect && String(exceptSelect.id || '') === selectId) return;
+      menu.classList.add('hidden');
+      trigger?.classList.remove('is-open');
+    });
+  }
+
+  function syncMarketplaceCustomSelect(select) {
+    if (!select) return;
+    const selectId = String(select.id || '');
+    const trigger = document.querySelector(`[data-rq-dd-trigger-for="${selectId}"]`);
+    const label = trigger?.querySelector('.rq-dd-label');
+    const selectedOption = select.options[select.selectedIndex] || select.options[0] || null;
+    if (label) label.textContent = selectedOption ? selectedOption.textContent : 'Selecione';
+    document.querySelectorAll(`[data-rq-dd-option-for="${selectId}"]`).forEach((btn) => {
+      const active = String(btn.getAttribute('data-value') || '') === String(select.value || '');
+      btn.classList.toggle('is-selected', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+
+  function enhanceMarketplaceCustomSelect(select) {
+    if (!select || select.dataset.rqDdInit === '1') {
+      if (select) syncMarketplaceCustomSelect(select);
+      return;
+    }
+    const wrap = select.closest('.rq-select-wrap') || select.parentElement;
+    if (!wrap) return;
+
+    wrap.classList.add('rq-dd');
+    select.dataset.rqDdInit = '1';
+    select.classList.add('rq-dd-native');
+
+    wrap.querySelectorAll('[data-rq-dd-trigger-for], [data-rq-dd-select-id], .rq-dd-menu, .rq-dd-btn').forEach((node) => node.remove());
+    wrap.querySelectorAll('i[data-lucide="chevron-down"]').forEach((icon) => icon.remove());
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'rq-dd-btn';
+    trigger.setAttribute('data-rq-dd-trigger-for', select.id);
+    trigger.innerHTML = `<span class="rq-dd-label">Selecione</span><span class="rq-dd-arrow">▾</span>`;
+
+    const menu = document.createElement('div');
+    menu.className = 'rq-dd-menu hidden';
+    menu.setAttribute('data-rq-dd-select-id', select.id);
+
+    [...select.options].forEach((option) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'rq-dd-item';
+      item.setAttribute('data-rq-dd-option-for', select.id);
+      item.setAttribute('data-value', option.value);
+      item.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+      item.textContent = option.textContent || '';
+      item.addEventListener('click', () => {
+        select.value = option.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        syncMarketplaceCustomSelect(select);
+        closeMarketplaceCustomSelects();
+      });
+      menu.appendChild(item);
+    });
+
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      const willOpen = menu.classList.contains('hidden');
+      closeMarketplaceCustomSelects(wrap.contains(menu) ? select : null);
+      menu.classList.toggle('hidden', !willOpen);
+      trigger.classList.toggle('is-open', willOpen);
+    });
+
+    select.addEventListener('change', () => syncMarketplaceCustomSelect(select));
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    syncMarketplaceCustomSelect(select);
+  }
+
+  function initMarketplaceCustomSelects() {
+    const ids = [
+      'applicant-age', 'applicant-availability', 'applicant-weekend', 'applicant-gg', 'applicant-nick-change',
+      'applicant-age-dynamic', 'applicant-availability-dynamic', 'applicant-weekend-dynamic', 'applicant-gg-dynamic', 'applicant-nick-change-dynamic'
+    ];
+    ids.forEach((id) => {
+      const select = document.getElementById(id);
+      if (select) enhanceMarketplaceCustomSelect(select);
+    });
+  }
+
   function ensureMarketplaceRequestModal() {
     let dynamicModal = document.getElementById('request-modal-dynamic');
 
@@ -866,8 +958,8 @@ function bootMarketplaceMode() {
     if (!staticModalIsComplete && !dynamicModal) {
       const wrap = document.createElement('div');
       wrap.innerHTML = `
-        <div id="request-modal-dynamic" class="fixed inset-0 z-[70] hidden items-center justify-center bg-black/60 px-4 py-5">
-          <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+        <div id="request-modal-dynamic" class="fixed inset-0 z-[70] hidden items-center justify-center overflow-y-auto bg-black/60 px-4 py-5">
+          <div class="w-full max-w-md max-h-[calc(100dvh-2.5rem)] rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
             <div class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
               <div class="min-w-0">
                 <p class="text-[11px] font-extrabold uppercase tracking-[0.14em] text-emerald-600">Pedido de recrutamento</p>
@@ -881,7 +973,7 @@ function bootMarketplaceMode() {
                 <i data-lucide="x" class="h-4 w-4"></i>
               </button>
             </div>
-            <form id="request-form-dynamic" class="space-y-3.5 px-5 py-4">
+            <form id="request-form-dynamic" class="space-y-3.5 px-5 py-4 overflow-y-auto overscroll-contain min-h-0">
               <div class="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label for="applicant-id-dynamic" class="mb-2 block text-sm font-bold text-slate-700">ID</label>
@@ -906,36 +998,36 @@ function bootMarketplaceMode() {
               <div class="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label for="applicant-age-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Idade</label>
-                  <div class="relative">
-                    <select id="applicant-age-dynamic" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_AGE_OPTIONS, 'Selecione sua idade')}</select>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-age-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_AGE_OPTIONS, 'Selecione sua idade')}</select>
                     <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
                   </div>
                 </div>
                 <div>
                   <label for="applicant-availability-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Horário disponível</label>
-                  <div class="relative">
-                    <select id="applicant-availability-dynamic" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_AVAILABILITY_OPTIONS, 'Selecione um horário')}</select>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-availability-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_AVAILABILITY_OPTIONS, 'Selecione um horário')}</select>
                     <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
                   </div>
                 </div>
                 <div>
                   <label for="applicant-weekend-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Disponível sexta e sábado?</label>
-                  <div class="relative">
-                    <select id="applicant-weekend-dynamic" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-weekend-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
                     <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
                   </div>
                 </div>
                 <div>
                   <label for="applicant-gg-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Já jogou GG?</label>
-                  <div class="relative">
-                    <select id="applicant-gg-dynamic" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-gg-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
                     <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
                   </div>
                 </div>
                 <div class="sm:col-span-2">
                   <label for="applicant-nick-change-dynamic" class="mb-2 block text-sm font-bold text-slate-700">Possui troca nick?</label>
-                  <div class="relative">
-                    <select id="applicant-nick-change-dynamic" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
+                  <div class="rq-select-wrap relative">
+                    <select id="applicant-nick-change-dynamic" data-marketplace-custom-select="true" class="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">${getMarketplaceSimpleOptions(MARKETPLACE_BOOLEAN_OPTIONS, 'Selecione')}</select>
                     <i data-lucide="chevron-down" class="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"></i>
                   </div>
                 </div>
@@ -994,8 +1086,20 @@ function bootMarketplaceMode() {
       });
     });
 
+    if (!document.body.dataset.marketplaceCustomSelectCloseBound) {
+      document.body.dataset.marketplaceCustomSelectCloseBound = '1';
+      document.addEventListener('click', (event) => {
+        if (event.target.closest('.rq-dd')) return;
+        closeMarketplaceCustomSelects();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeMarketplaceCustomSelects();
+      });
+    }
+
     bindMarketplaceWhatsappField();
     bindMarketplaceNickLookup();
+    initMarketplaceCustomSelects();
     initIcons();
   }
 
@@ -1033,6 +1137,8 @@ function bootMarketplaceMode() {
     if (els.applicantGg) els.applicantGg.value = '';
     if (els.applicantNickChange) els.applicantNickChange.value = '';
     syncMarketplaceWhatsappConstraints();
+    initMarketplaceCustomSelects();
+    [els.applicantAge, els.applicantAvailability, els.applicantWeekend, els.applicantGg, els.applicantNickChange].forEach((select) => { if (select) syncMarketplaceCustomSelect(select); });
     resetMarketplaceNickLookupState();
     if (els.modalGuild) els.modalGuild.textContent = item?.guildName || 'Guilda';
     if (els.helper) els.helper.textContent = 'Preencha seus dados para enviar a solicitação para essa guilda.';
@@ -1046,6 +1152,7 @@ function bootMarketplaceMode() {
     if (!els.modal) return;
     els.modal.classList.add('hidden');
     els.modal.classList.remove('flex');
+    closeMarketplaceCustomSelects();
     activeRecruitment = null;
   }
 
