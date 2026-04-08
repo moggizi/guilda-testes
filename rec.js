@@ -9,7 +9,7 @@ import {
   collection,
   getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, getGuildAccessKeyConfig, showToast, auth, db } from './logic.js';
+import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, getGuildAccessKeyConfig, getGuildMultiConfig, showToast, auth, db } from './logic.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA6CETOXLO6yp4Gm1JY7fwiWlWo0pKqzqw",
@@ -196,6 +196,7 @@ function bootManagementMode() {
     deleteRecModal: qs('delete-rec-modal'), cancelDeleteRecBtn: qs('btn-cancel-delete-rec'), confirmDeleteRecBtn: qs('btn-confirm-delete-rec')
   };
   let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [], activeRequest = null;
+  let managementGuildSlotsCache = [];
 
   const ctxGuildId = () => String(getGuildContext()?.guildId || '').trim();
   const ctxGuildName = () => String(getGuildContext()?.guildName || '').trim();
@@ -216,7 +217,7 @@ function bootManagementMode() {
     }
     return '';
   };
-  const getManagementGuildSlots = () => {
+  const buildFallbackManagementGuildSlots = () => {
     const slots = [
       { value: '1', label: pickGuildValue('name', 'guildName') || ctxGuildName() || 'Guilda principal', collection: 'membros' },
       { value: '2', label: pickGuildValue('name2', 'guildName2'), collection: 'membros2' },
@@ -224,6 +225,43 @@ function bootManagementMode() {
       { value: '4', label: pickGuildValue('name4', 'guildName4'), collection: 'membros4' }
     ];
     return slots.filter((slot, index) => index === 0 || !!String(slot.label || '').trim());
+  };
+  const normalizeManagementGuildSlots = (slots = []) => {
+    const mapped = (Array.isArray(slots) ? slots : []).map((slot, index) => {
+      const safeSlot = String(slot?.slot || (index + 1));
+      const numericSlot = Number(safeSlot) || (index + 1);
+      const cleanLabel = String(slot?.name || '').trim();
+      return {
+        value: safeSlot,
+        label: cleanLabel || (numericSlot === 1 ? (ctxGuildName() || 'Guilda principal') : ''),
+        collection: numericSlot === 1 ? 'membros' : `membros${numericSlot}`
+      };
+    });
+    return mapped.filter((slot, index) => index === 0 || !!String(slot.label || '').trim());
+  };
+  const refreshManagementGuildSlots = async () => {
+    try {
+      const slots = await getGuildMultiConfig(4);
+      const normalized = normalizeManagementGuildSlots(slots);
+      managementGuildSlotsCache = normalized.length ? normalized : buildFallbackManagementGuildSlots();
+    } catch (_) {
+      managementGuildSlotsCache = buildFallbackManagementGuildSlots();
+    }
+    return managementGuildSlotsCache;
+  };
+  const getManagementGuildSlots = () => {
+    return managementGuildSlotsCache.length ? managementGuildSlotsCache : buildFallbackManagementGuildSlots();
+  };
+  const renderManagementGuildCard = () => {
+    if (!els.currentGuildName) return;
+    const slots = getManagementGuildSlots();
+    if (!slots.length) {
+      els.currentGuildName.textContent = String(ctxGuildName() || '-');
+      return;
+    }
+    els.currentGuildName.innerHTML = slots
+      .map((slot) => `<span class="block">${escapeHtml(slot.label || 'Guilda principal')}</span>`)
+      .join('');
   };
   const getManagementMembersCollection = (slotValue) => {
     const wanted = String(slotValue || '1').trim();
@@ -847,7 +885,8 @@ function bootManagementMode() {
     if (!user) return;
     const ctx = getGuildContext() || {};
     if (els.currentUid) els.currentUid.textContent = String(ctx.guildId || '-');
-    if (els.currentGuildName) els.currentGuildName.textContent = String(ctx.guildName || '-');
+    await refreshManagementGuildSlots();
+    renderManagementGuildCard();
     if (els.openedKey) els.openedKey.textContent = 'Nenhuma';
     const vipAllowed = applyRecruitmentVipGate();
     if (!vipAllowed) {
