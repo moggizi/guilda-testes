@@ -9,6 +9,15 @@
   <script>
     tailwind.config = { theme: { extend: { colors: { emerald: { 50:'#ecfdf5', 100:'#d1fae5', 200:'#a7f3d0', 400:'#34d399', 500:'#10b981', 600:'#059669', 700:'#047857'} } } } }
   </script>
+  <style>
+    .gh-select{
+      appearance:none;
+      -webkit-appearance:none;
+      -moz-appearance:none;
+      background-image:none;
+    }
+    .gh-select::-ms-expand{ display:none; }
+  </style>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body class="bg-gray-50/80">
@@ -88,9 +97,22 @@
             </div>
           </div>
 
-          <button id="btn-new-line" title="Recurso PLUS" onclick="openLineModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
-            <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
-          </button>
+          <div class="flex items-center gap-2">
+            <div class="relative w-[170px] sm:w-[220px]">
+              <select id="sort-mode" class="gh-select w-full h-[42px] pl-4 pr-10 rounded-xl border border-emerald-100 bg-white text-sm font-semibold text-gray-700 shadow-sm outline-none transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+                <option value="all" selected>Todos (GG + honra)</option>
+                <option value="gg">Pontos GG</option>
+                <option value="honra">Pontos honra</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-emerald-600">
+                <i data-lucide="chevrons-up-down" class="w-4 h-4"></i>
+              </div>
+            </div>
+
+            <button id="btn-new-line" title="Recurso PLUS" onclick="openLineModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
+              <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
+            </button>
+          </div>
         </div>
 
         <div class="max-w-5xl mx-auto px-4 pb-4 flex gap-3">
@@ -135,17 +157,22 @@
 
         <div class="bg-gray-50 rounded-2xl p-3 border border-gray-100">
           <div class="flex items-center justify-between">
-            <p class="text-sm font-bold text-gray-800">Membros (máx. 4)</p>
-            <span id="selected-count" class="text-xs text-gray-400">0/4</span>
+            <p class="text-sm font-bold text-gray-800">Membros (máx. 10)</p>
+            <span id="selected-count" class="text-xs text-gray-400">0/10</span>
           </div>
 
           <div id="selected-members" class="mt-3 space-y-2"></div>
 
           <div class="mt-3">
             <label class="text-xs font-bold text-gray-600 ml-1">Adicionar membro</label>
-            <select id="member-picker" class="w-full mt-1 px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all">
-              <option value="">Selecione um membro...</option>
-            </select>
+            <div class="relative mt-1">
+              <select id="member-picker" class="gh-select w-full px-4 pr-11 py-3 rounded-xl border border-emerald-100 bg-white outline-none text-sm font-medium text-gray-700 shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all">
+                <option value="">Selecione um membro...</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-emerald-600">
+                <i data-lucide="chevrons-up-down" class="w-4 h-4"></i>
+              </div>
+            </div>
             <button id="btn-add-member" onclick="addPickedMember()" class="mt-2 w-full py-2.5 rounded-xl bg-white border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">Adicionar</button>
           </div>
         </div>
@@ -209,9 +236,11 @@
     // ---- Estado ------------------------------------------------------------
     let guildId = null;
     let members = [];        // cache local de membros (para picker / snapshots)
-    let lines = [];          // lista de lines renderizada
+    let lines = [];          // lista canônica de lines
     let editingLineId = null;
     let selectedMemberIds = []; // para modal
+    let currentScoreMode = 'all';
+    const LINE_MEMBER_LIMIT = 10;
 
     // Cache keys (por guilda)
     const ctx = getGuildContext();
@@ -235,6 +264,10 @@
 
     setUiReady(!!guildId);
 
+    try {
+      const modeEl = document.getElementById('sort-mode');
+      if (modeEl?.value) currentScoreMode = modeEl.value;
+    } catch(_) {}
 
     // ---- Utilitários --------------------------------------------------------
     const normalize = (s) => (s || '').toString().toLowerCase().trim();
@@ -261,6 +294,136 @@
       return num ? `Line ${num}` : 'Line';
     }
 
+    function toInt(value) {
+      if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
+      const raw = (value ?? '').toString().trim();
+      if (!raw) return 0;
+      const cleaned = raw.replace(/[^\d-]/g, '');
+      const num = parseInt(cleaned, 10);
+      return Number.isFinite(num) ? num : 0;
+    }
+
+    function getByPaths(obj, paths = []) {
+      for (const path of (paths || [])) {
+        const parts = String(path || '').split('.');
+        let cur = obj;
+        let ok = true;
+        for (const part of parts) {
+          if (cur && Object.prototype.hasOwnProperty.call(cur, part)) cur = cur[part];
+          else { ok = false; break; }
+        }
+        if (!ok) continue;
+        if (cur !== undefined && cur !== null && String(cur).trim() !== '') return cur;
+      }
+      return null;
+    }
+
+    function resolveMemberData(item) {
+      if (!item) return null;
+      const raw = (typeof item === 'string') ? { id: String(item) } : item;
+      const current = getMemberById(raw?.id);
+      if (current) return { ...raw, ...current };
+      return raw;
+    }
+
+    function getMemberScoreParts(memberLike) {
+      const member = resolveMemberData(memberLike) || {};
+      const gg = toInt(getByPaths(member, [
+        'pontosGG', 'pontosGg', 'pontos_gg', 'pontosGuilda', 'pontosGuerra',
+        'ggPoints', 'guildWarPoints', 'guildWarPts', 'gg', 'pontos', 'ponto', 'pontuacao'
+      ]));
+      const honra = toInt(getByPaths(member, [
+        'pontosHonra', 'pontos_honra', 'honraPoints', 'honorPoints',
+        'honra', 'honor', 'pontuacaoHonra'
+      ]));
+      return { gg, honra, all: gg + honra };
+    }
+
+    function getLineResolvedMembers(line) {
+      const arr = Array.isArray(line?.members) && line.members.length
+        ? line.members
+        : Array.isArray(line?.memberIds)
+          ? line.memberIds
+          : [];
+      return arr.map(resolveMemberData).filter(Boolean);
+    }
+
+    function getLineScoreData(line) {
+      const membersArr = getLineResolvedMembers(line);
+      let gg = 0;
+      let honra = 0;
+      for (const member of membersArr) {
+        const parts = getMemberScoreParts(member);
+        gg += parts.gg;
+        honra += parts.honra;
+      }
+      return { gg, honra, all: gg + honra };
+    }
+
+    function getScoreByMode(scores, mode = currentScoreMode) {
+      if (mode === 'gg') return Number(scores?.gg || 0);
+      if (mode === 'honra') return Number(scores?.honra || 0);
+      return Number(scores?.all || 0);
+    }
+
+    function getScoreModeLabel(mode = currentScoreMode) {
+      if (mode === 'gg') return 'Pontos GG';
+      if (mode === 'honra') return 'Pontos honra';
+      return 'Todos (GG + honra)';
+    }
+
+    function getScoreModeShortLabel(mode = currentScoreMode) {
+      if (mode === 'gg') return 'GG';
+      if (mode === 'honra') return 'Honra';
+      return 'Total';
+    }
+
+    function formatPoints(value) {
+      return new Intl.NumberFormat('pt-BR').format(Number(value || 0));
+    }
+
+    function sortLinesByMode(list) {
+      return [...(list || [])].sort((a, b) => {
+        const scoreA = getLineScoreData(a);
+        const scoreB = getLineScoreData(b);
+        const primary = getScoreByMode(scoreB) - getScoreByMode(scoreA);
+        if (primary !== 0) return primary;
+
+        const secondary = Number(scoreB.all || 0) - Number(scoreA.all || 0);
+        if (secondary !== 0) return secondary;
+
+        return (Number(a?.number || 0) - Number(b?.number || 0));
+      });
+    }
+
+    function lineMatchesQuery(line, queryText) {
+      const q = normalize(queryText);
+      if (!q) return true;
+
+      const name = normalize(getDisplayName(line));
+      if (name.includes(q)) return true;
+
+      const mem = getLineResolvedMembers(line);
+      for (const m of mem) {
+        const id = normalize(m?.id || '');
+        const nick = normalize(m?.nick || m?.nickname || '');
+        const vid = normalize(m?.visibleId || m?.playerId || m?.uid || m?.id || '');
+        if (id.includes(q) || nick.includes(q) || vid.includes(q)) return true;
+      }
+      return false;
+    }
+
+    function getFilteredLines(source = lines) {
+      const q = normalize(document.getElementById('search-input')?.value || '');
+      if (!q) return [...(source || [])];
+      return (source || []).filter(line => lineMatchesQuery(line, q));
+    }
+
+    function refreshRenderedLines() {
+      const processed = sortLinesByMode(getFilteredLines(lines));
+      renderLines(processed);
+    }
+
     function badge(text, icon) {
       if (!text && text !== 0) return '';
       return `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-bold">
@@ -279,6 +442,7 @@
 
     function mapMemberSnap(m) {
       // tenta manter compatível com membros.html
+      const parts = getMemberScoreParts(m);
       return {
         id: (m.id || '').toString(),
         nick: (m.nick || m.nickname || '').toString(),
@@ -288,7 +452,9 @@
         guildWarMeta: (m.guildWarMeta || '').toString(),
         weeklyMeta: m.weeklyMeta ?? null,
         weeklyMetaValue: (m.weeklyMetaValue || '').toString(),
-        hasTag: m.hasTag ?? null
+        hasTag: m.hasTag ?? null,
+        pontosGG: parts.gg,
+        pontosHonra: parts.honra
       };
     }
 
@@ -315,21 +481,25 @@
       if (!el) return;
 
       if (!Array.isArray(list) || list.length === 0) {
-        el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">0 lines.</div>`;
-        lines = [];
+        const emptyText = Array.isArray(lines) && lines.length > 0
+          ? 'Nenhuma line encontrada.'
+          : '0 lines.';
+        el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">${emptyText}</div>`;
         setCount();
         initIcons();
         return;
       }
 
-      lines = list;
       setCount();
 
       el.innerHTML = list.map(l => {
         const name = getDisplayName(l);
-        const memArr = (l.members || []).map(x => (typeof x === 'string') ? (getMemberById(x) ? mapMemberSnap(getMemberById(x)) : {id:x, nick:'', visibleId:''}) : x);
+        const memArr = getLineResolvedMembers(l);
         const count = memArr.length;
-        const preview = memArr.slice(0, 4);
+        const preview = memArr;
+        const scores = getLineScoreData(l);
+        const selectedScore = getScoreByMode(scores);
+        const selectedLabel = getScoreModeShortLabel();
 
         return `
           <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
@@ -339,25 +509,44 @@
               </div>
               <div class="flex-1 min-w-0">
                 <p class="font-semibold text-gray-900 text-sm truncate">${name}</p>
-                <p class="text-xs text-gray-400">${count}/4 membros</p>
+                <p class="text-xs text-gray-400">${count}/${LINE_MEMBER_LIMIT} membros • Total: ${formatPoints(scores.all)}</p>
               </div>
-              <div class="flex gap-1.5">
+              <div class="flex gap-1.5 flex-wrap justify-end">
                 ${badge(`Line ${Number(l.number||0)||'—'}`, 'hash')}
-                ${badge(`${count}/4`, 'users')}
+                ${badge(`${count}/${LINE_MEMBER_LIMIT}`, 'users')}
+                ${badge(`Total: ${formatPoints(scores.all)}`, 'medal')}
+                ${badge(`${getScoreModeShortLabel()}: ${formatPoints(selectedScore)}`, 'trophy')}
               </div>
               <div class="text-gray-300"><i data-lucide="chevron-down" class="w-5 h-5"></i></div>
             </div>
 
             <div id="line-details-${l.id}" class="hidden border-t border-gray-100 p-4 bg-gray-50/50 space-y-3">
-              <div class="grid grid-cols-2 gap-3">
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <div class="bg-white rounded-xl p-3 border border-gray-100">
                   <p class="text-xs text-gray-400 mb-1">Nome</p>
                   <p class="text-xs font-bold text-gray-800 truncate">${name}</p>
                 </div>
                 <div class="bg-white rounded-xl p-3 border border-gray-100">
                   <p class="text-xs text-gray-400 mb-1">Participantes</p>
-                  <p class="text-xs font-bold text-gray-800">${count}/4</p>
+                  <p class="text-xs font-bold text-gray-800">${count}/${LINE_MEMBER_LIMIT}</p>
                 </div>
+                <div class="bg-white rounded-xl p-3 border border-gray-100">
+                  <p class="text-xs text-gray-400 mb-1">GG</p>
+                  <p class="text-xs font-bold text-gray-800">${formatPoints(scores.gg)}</p>
+                </div>
+                <div class="bg-white rounded-xl p-3 border border-gray-100">
+                  <p class="text-xs text-gray-400 mb-1">Honra</p>
+                  <p class="text-xs font-bold text-gray-800">${formatPoints(scores.honra)}</p>
+                </div>
+                <div class="bg-white rounded-xl p-3 border border-gray-100">
+                  <p class="text-xs text-gray-400 mb-1">Total</p>
+                  <p class="text-xs font-bold text-gray-800">${formatPoints(scores.all)}</p>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl p-3 border border-emerald-100">
+                <p class="text-xs text-gray-400 mb-1">${getScoreModeLabel()}</p>
+                <p class="text-sm font-extrabold text-emerald-700">${formatPoints(selectedScore)} pontos</p>
               </div>
 
               <div class="space-y-2">
@@ -367,6 +556,10 @@
                     <div class="flex-1 min-w-0">
                       <p class="text-sm font-semibold text-gray-900 truncate">${m.nick || 'Sem Nick'}</p>
                       <p class="text-xs text-gray-400 truncate">ID: ${m.visibleId || m.id || '-'}</p>
+                    </div>
+                    <div class="text-right">
+                      <p class="text-[11px] font-bold text-gray-700">GG: ${formatPoints(getMemberScoreParts(m).gg)}</p>
+                      <p class="text-[11px] text-gray-400">Honra: ${formatPoints(getMemberScoreParts(m).honra)}</p>
                     </div>
                     <i data-lucide="chevron-right" class="w-5 h-5 text-gray-300"></i>
                   </button>
@@ -416,7 +609,10 @@
         const raw = localStorage.getItem(keyLines());
         if (!raw) return;
         const cached = JSON.parse(raw);
-        if (Array.isArray(cached)) renderLines(cached);
+        if (Array.isArray(cached)) {
+          lines = cached;
+          refreshRenderedLines();
+        }
       } catch(_) {}
     }
 
@@ -492,8 +688,8 @@
           }
         } catch(_) {}
 
-        // se não tiver cache de membros e for necessário (picker), busca 1x
-        if ((!Array.isArray(members) || members.length === 0) && force) {
+        // esta tela precisa dos membros para resolver pontos/nicks corretamente
+        if (!Array.isArray(members) || members.length === 0) {
           await fetchMembersFromDB();
         }
 
@@ -504,7 +700,8 @@
             if (raw) {
               const cached = JSON.parse(raw);
               if (Array.isArray(cached)) {
-                renderLines(cached);
+                lines = cached;
+                refreshRenderedLines();
                 return;
               }
             }
@@ -513,7 +710,8 @@
 
         // 3) Firestore só quando: force OU cache vazio
         const arr = await fetchLinesFromDB();
-        renderLines(arr);
+        lines = arr;
+        refreshRenderedLines();
         saveCached(arr);
 
         if (force) showToast('success', 'Atualizado!');
@@ -542,7 +740,7 @@
     function renderSelected() {
       const box = document.getElementById('selected-members');
       const countEl = document.getElementById('selected-count');
-      if (countEl) countEl.textContent = `${selectedMemberIds.length}/4`;
+      if (countEl) countEl.textContent = `${selectedMemberIds.length}/${LINE_MEMBER_LIMIT}`;
 
       if (!box) return;
       if (selectedMemberIds.length === 0) {
@@ -604,8 +802,8 @@
       const id = picker?.value;
       if (!id) return;
 
-      if (selectedMemberIds.length >= 4) {
-        showToast('error', 'Máximo de 4 membros por line.');
+      if (selectedMemberIds.length >= LINE_MEMBER_LIMIT) {
+        showToast('error', `Máximo de ${LINE_MEMBER_LIMIT} membros por line.`);
         return;
       }
 
@@ -643,7 +841,7 @@
       }
 
       selectedMemberIds.push(String(id));
-      selectedMemberIds = uniq(selectedMemberIds).slice(0,4);
+      selectedMemberIds = uniq(selectedMemberIds).slice(0, LINE_MEMBER_LIMIT);
       picker.value = '';
       renderSelected();
     };
@@ -662,8 +860,10 @@
       document.getElementById('line-modal-title').textContent = 'Editar Line';
       document.getElementById('line-name').value = name;
 
-      const memArr = Array.isArray(line.members) ? line.members : [];
-      selectedMemberIds = uniq(memArr.map(x => (typeof x === 'string') ? x : (x?.id))).slice(0,4);
+      const memArr = (Array.isArray(line.members) && line.members.length)
+        ? line.members
+        : (Array.isArray(line.memberIds) ? line.memberIds : []);
+      selectedMemberIds = uniq(memArr.map(x => (typeof x === 'string') ? x : (x?.id))).slice(0, LINE_MEMBER_LIMIT);
 
       document.getElementById('btn-delete-line').classList.remove('hidden');
       document.getElementById('line-modal').classList.remove('hidden');
@@ -697,7 +897,7 @@
           showToast('error', 'Selecione pelo menos 1 membro.');
           return;
         }
-        if (selectedMemberIds.length > 4) selectedMemberIds = selectedMemberIds.slice(0,4);
+        if (selectedMemberIds.length > LINE_MEMBER_LIMIT) selectedMemberIds = selectedMemberIds.slice(0, LINE_MEMBER_LIMIT);
 
         const rawName = (document.getElementById('line-name').value || '').toString().trim();
         let number = 0;
@@ -751,7 +951,7 @@
 
         // Forçamos o salvamento do cache (arrays + counts) imediatamente
         saveCached(lines);
-        renderLines(lines);
+        refreshRenderedLines();
 
         closeLineModal();
         showToast('success', 'Line salva!');
@@ -777,7 +977,7 @@
         lines = before.filter(l => String(l.id) !== String(editingLineId));
         
         saveCached(lines);
-        renderLines(lines);
+        refreshRenderedLines();
 
         editingLineId = null;
         closeLineModal();
@@ -790,29 +990,14 @@
 
     // ---- Pesquisa -----------------------------------------------------------
     function applySearch() {
-      const q = normalize(document.getElementById('search-input')?.value || '');
-      if (!q) {
-        renderLines(lines);
-        return;
-      }
-      const filtered = (lines || []).filter(l => {
-        const name = normalize(getDisplayName(l));
-        if (name.includes(q)) return true;
-
-        const mem = Array.isArray(l.members) ? l.members : [];
-        for (const it of mem) {
-          const id = (typeof it === 'string') ? it : (it?.id || '');
-          const m = (typeof it === 'string') ? getMemberById(id) : it;
-          const nick = normalize(m?.nick || '');
-          const vid = normalize(m?.visibleId || id);
-          if (nick.includes(q) || vid.includes(q)) return true;
-        }
-        return false;
-      });
-      renderLines(filtered);
+      refreshRenderedLines();
     }
 
     document.getElementById('search-input')?.addEventListener('input', applySearch);
+    document.getElementById('sort-mode')?.addEventListener('change', (ev) => {
+      currentScoreMode = (ev?.target?.value || 'all').toString();
+      refreshRenderedLines();
+    });
 
     // ---- Visual do membro (igual estilo da tela de membros) -----------------
     window.openMemberView = (id) => {
@@ -865,8 +1050,8 @@
           const arr = JSON.parse(ev.newValue || '[]');
           if (Array.isArray(arr)) members = arr;
         } catch(_) {}
-        // atualiza nomes nos cards e picker
-        renderLines(lines);
+        // atualiza nomes/pontos nos cards e picker
+        refreshRenderedLines();
         updatePickerOptions();
         initIcons();
       }
