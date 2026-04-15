@@ -321,10 +321,9 @@
 
     function resolveMemberObj(memberRef) {
       if (!memberRef) return null;
-      const raw = (typeof memberRef === 'string') ? { id: String(memberRef) } : memberRef;
-      const current = raw?.id ? getMemberById(raw.id) : null;
-      if (current) return { ...raw, ...current };
-      return raw;
+      if (typeof memberRef === 'string') return getMemberById(memberRef) || { id: memberRef };
+      if (memberRef.id) return getMemberById(memberRef.id) || memberRef;
+      return memberRef;
     }
 
     function readFirstNumericField(obj, keys) {
@@ -355,8 +354,8 @@
 
     function getMemberPointBreakdown(memberRef) {
       const m = resolveMemberObj(memberRef) || {};
-      const ggKeys = ['pontosGG','pontosGg','ggPoints','pontos_gg','pontuacaoGG','pontuacaoGg','guerraGuilda','guerraDeGuilda','pontosGuilda','pontosGuerra','guildPoints','guildWarPoints','guildWarPts','scoreGG','ggAtual','totalGG','gg','pontos','ponto','pontuacao'];
-      const honraKeys = ['pontosHonra','pontoshonra','honraPoints','honorPoints','pontos_honra','pontuacaoHonra','honraAtual','scoreHonra','totalHonra','honra','honor'];
+      const ggKeys = ['pontosGG','pontosGg','ggPoints','pontos_gg','pontuacaoGG','pontuacaoGg','guerraGuilda','guerraDeGuilda','pontosGuilda','pontosGuerra','guildPoints','scoreGG','ggAtual','totalGG'];
+      const honraKeys = ['pontosHonra','pontoshonra','honraPoints','pontos_honra','pontuacaoHonra','honraAtual','scoreHonra','totalHonra','honra'];
       let gg = readFirstNumericField(m, ggKeys);
       let honra = readFirstNumericField(m, honraKeys);
 
@@ -373,19 +372,27 @@
       };
     }
 
+    function getLineMemberRefs(line) {
+      const ids = uniq([
+        ...(Array.isArray(line?.memberIds) ? line.memberIds : []),
+        ...(Array.isArray(line?.members) ? line.members.map((m) => (typeof m === 'string' ? m : m?.id)) : [])
+      ].map((id) => String(id || '')).filter(Boolean));
+
+      if (ids.length) {
+        return ids.map((id) => getMemberById(id) || ((Array.isArray(line?.members) ? line.members : []).find((m) => String(typeof m === 'string' ? m : m?.id) === id) || { id }));
+      }
+
+      return Array.isArray(line?.members) ? line.members : [];
+    }
+
     function getSortModeLabel(mode = currentSortMode) {
       if (mode === 'gg') return 'GG';
       if (mode === 'honra') return 'Honra';
       return 'GG + honra';
     }
 
-    function getLineResolvedMembers(line) {
-      const arr = Array.isArray(line?.members) && line.members.length ? line.members : (Array.isArray(line?.memberIds) ? line.memberIds : []);
-      return arr.map(resolveMemberObj).filter(Boolean);
-    }
-
     function getLinePointBreakdown(line, mode = currentSortMode) {
-      const memberRefs = getLineResolvedMembers(line);
+      const memberRefs = getLineMemberRefs(line);
       let gg = 0;
       let honra = 0;
       for (const ref of memberRefs) {
@@ -414,7 +421,7 @@
         const name = normalize(getDisplayName(l));
         if (name.includes(q)) return true;
 
-        const mem = Array.isArray(l.members) ? l.members : [];
+        const mem = getLineMemberRefs(l);
         for (const it of mem) {
           const id = (typeof it === 'string') ? it : (it?.id || '');
           const m = (typeof it === 'string') ? getMemberById(id) : (getMemberById(id) || it);
@@ -520,7 +527,12 @@
 
       el.innerHTML = safeList.map(l => {
         const name = getDisplayName(l);
-        const memArr = getLineResolvedMembers(l);
+        const memArr = getLineMemberRefs(l).map(x => {
+          const id = typeof x === 'string' ? x : (x?.id || '');
+          const current = getMemberById(id);
+          const base = current || x || { id, nick:'', visibleId:'' };
+          return mapMemberSnap(base);
+        });
         const count = memArr.length;
         const preview = memArr.slice(0, 10);
         const pts = getLinePointBreakdown(l, currentSortMode);
@@ -712,8 +724,10 @@
           }
         } catch(_) {}
 
-        // no refresh manual, atualiza membros também para manter a soma das lines correta
+        // no atualizar forçado, sempre recarrega membros também
         if (force) {
+          await fetchMembersFromDB();
+        } else if (!Array.isArray(members) || members.length === 0) {
           await fetchMembersFromDB();
         }
 
@@ -936,7 +950,7 @@
       document.getElementById('line-modal-title').textContent = 'Editar Line';
       document.getElementById('line-name').value = name;
 
-      const memArr = Array.isArray(line.members) ? line.members : [];
+      const memArr = getLineMemberRefs(line);
       selectedMemberIds = uniq(memArr.map(x => (typeof x === 'string') ? x : (x?.id))).slice(0,10);
 
       document.getElementById('btn-delete-line').classList.remove('hidden');
