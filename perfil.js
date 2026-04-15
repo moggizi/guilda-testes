@@ -361,21 +361,30 @@ function makePieChart(canvasId, labelText, items) {
   if (!canvas || !window.Chart) return;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
+
   const valid = Array.isArray(items) ? items.filter((x) => Number(x?.pontos || 0) > 0) : [];
   if (!valid.length) {
     charts[canvasId] = ensureNoInfoCanvas(canvasId, labelText);
     return;
   }
+
   charts[canvasId] = new window.Chart(ctx, {
     type: 'pie',
     data: {
       labels: valid.map((x) => `${x.nick} (${x.pontos})`),
-      datasets: [{ data: valid.map((x) => Number(x.pontos || 0)), backgroundColor: ['#10b981', '#22c55e', '#86efac'], borderColor: '#ffffff', borderWidth: 2 }]
+      datasets: [{
+        data: valid.map((x) => Number(x.pontos || 0)),
+        backgroundColor: ['#13d440', '#cad413', '#d43313'],
+        borderColor: 'transparent',
+        borderWidth: 0,
+        hoverBorderColor: 'transparent',
+        hoverBorderWidth: 0,
+        spacing: 0
+      }]
     },
     options: chartOptions(labelText)
   });
 }
-
 function renderMemberList(members) {
   const container = document.getElementById('members-ranking-list');
   if (!container) return;
