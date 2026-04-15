@@ -25,7 +25,7 @@ module.exports = async (req, res) => {
     if (!q) return res.status(400).json({ error: 'query ausente' });
     if (!/^[0-9]{5,20}$/.test(q)) return res.status(400).json({ error: 'ID inválido' });
 
-    const upstreamUrl = `http://axicld.duckdns.org:5006/api/v1/freefire/profile/:${encodeURIComponent(q)}?api_key=ilimitado`;
+    const upstreamUrl = `https://axicld.duckdns.org:5006/api/v1/freefire/profile/:${encodeURIComponent(q)}?api_key=ilimitado`;
 
     const upstreamResp = await fetch(upstreamUrl, {
       method: 'GET',
