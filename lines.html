@@ -336,41 +336,33 @@
       return null;
     }
 
-    function readNumericByKeyHint(obj, hint) {
-      if (!obj || typeof obj !== 'object') return null;
-      const entries = Object.entries(obj);
-      for (const [key, value] of entries) {
-        const k = normalize(key);
-        if (!k) continue;
-        if (k.includes(hint)) {
-          const num = parseLooseNumber(value);
-          if (value !== undefined && value !== null && `${value}`.trim() !== '' && Number.isFinite(num) && num > 0) {
-            return num;
-          }
-        }
-      }
-      return null;
-    }
-
     function getMemberPointBreakdown(memberRef) {
-      const m = resolveMemberObj(memberRef) || {};
-      const ggKeys = ['pontosGG','pontosGg','ggPoints','pontos_gg','pontuacaoGG','pontuacaoGg','guerraGuilda','guerraDeGuilda','pontosGuilda','pontosGuerra','guildPoints','scoreGG','ggAtual','totalGG'];
-      const honraKeys = ['pontosHonra','pontoshonra','honraPoints','pontos_honra','pontuacaoHonra','honraAtual','scoreHonra','totalHonra','honra'];
-      let gg = readFirstNumericField(m, ggKeys);
-      let honra = readFirstNumericField(m, honraKeys);
+  const m = resolveMemberObj(memberRef) || {};
+  
+  // Adicionado no início da lista os parâmetros idênticos aos exibidos no modal:
+  // 'guildWarMeta' e 'guildWar' para GG, 'weeklyMetaValue' e 'weeklyMeta' para Honra.
+  const ggKeys = ['guildWarMeta', 'guerraMeta', 'guildWar', 'guerra', 'pontosGG','pontosGg','ggPoints','pontos_gg','pontuacaoGG','pontuacaoGg','guerraGuilda','guerraDeGuilda','pontosGuilda','pontosGuerra','guildPoints','scoreGG','ggAtual','totalGG'];
+  const honraKeys = ['weeklyMetaValue', 'metaSemanalValor', 'weeklyMeta', 'metaSemanal', 'pontosHonra','pontoshonra','honraPoints','pontos_honra','pontuacaoHonra','honraAtual','scoreHonra','totalHonra','honra'];
+  
+  let gg = readFirstNumericField(m, ggKeys);
+  let honra = readFirstNumericField(m, honraKeys);
 
-      if (gg == null) gg = readNumericByKeyHint(m, 'gg');
-      if (honra == null) honra = readNumericByKeyHint(m, 'honra');
+  if (gg == null) gg = readNumericByKeyHint(m, 'gg');
+  if (honra == null) honra = readNumericByKeyHint(m, 'honra');
 
-      gg = parseLooseNumber(gg);
-      honra = parseLooseNumber(honra);
+  // Fallbacks extras para garantir a busca se o nome da chave tiver apenas 'war' ou 'meta'
+  if (gg == null) gg = readNumericByKeyHint(m, 'guerra') || readNumericByKeyHint(m, 'war');
+  if (honra == null) honra = readNumericByKeyHint(m, 'meta');
 
-      return {
-        gg,
-        honra,
-        total: gg + honra
-      };
-    }
+  gg = parseLooseNumber(gg);
+  honra = parseLooseNumber(honra);
+
+  return {
+    gg,
+    honra,
+    total: gg + honra
+  };
+}
 
     function getLineMemberRefs(line) {
       const ids = uniq([
