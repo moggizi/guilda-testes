@@ -321,9 +321,10 @@
 
     function resolveMemberObj(memberRef) {
       if (!memberRef) return null;
-      if (typeof memberRef === 'string') return getMemberById(memberRef) || { id: memberRef };
-      if (memberRef.id) return getMemberById(memberRef.id) || memberRef;
-      return memberRef;
+      const raw = (typeof memberRef === 'string') ? { id: String(memberRef) } : memberRef;
+      const current = raw?.id ? getMemberById(raw.id) : null;
+      if (current) return { ...raw, ...current };
+      return raw;
     }
 
     function readFirstNumericField(obj, keys) {
@@ -354,8 +355,8 @@
 
     function getMemberPointBreakdown(memberRef) {
       const m = resolveMemberObj(memberRef) || {};
-      const ggKeys = ['pontosGG','pontosGg','ggPoints','pontos_gg','pontuacaoGG','pontuacaoGg','guerraGuilda','guerraDeGuilda','pontosGuilda','pontosGuerra','guildPoints','scoreGG','ggAtual','totalGG'];
-      const honraKeys = ['pontosHonra','pontoshonra','honraPoints','pontos_honra','pontuacaoHonra','honraAtual','scoreHonra','totalHonra','honra'];
+      const ggKeys = ['pontosGG','pontosGg','ggPoints','pontos_gg','pontuacaoGG','pontuacaoGg','guerraGuilda','guerraDeGuilda','pontosGuilda','pontosGuerra','guildPoints','guildWarPoints','guildWarPts','scoreGG','ggAtual','totalGG','gg','pontos','ponto','pontuacao'];
+      const honraKeys = ['pontosHonra','pontoshonra','honraPoints','honorPoints','pontos_honra','pontuacaoHonra','honraAtual','scoreHonra','totalHonra','honra','honor'];
       let gg = readFirstNumericField(m, ggKeys);
       let honra = readFirstNumericField(m, honraKeys);
 
@@ -378,8 +379,13 @@
       return 'GG + honra';
     }
 
+    function getLineResolvedMembers(line) {
+      const arr = Array.isArray(line?.members) && line.members.length ? line.members : (Array.isArray(line?.memberIds) ? line.memberIds : []);
+      return arr.map(resolveMemberObj).filter(Boolean);
+    }
+
     function getLinePointBreakdown(line, mode = currentSortMode) {
-      const memberRefs = Array.isArray(line?.members) && line.members.length ? line.members : (line?.memberIds || []);
+      const memberRefs = getLineResolvedMembers(line);
       let gg = 0;
       let honra = 0;
       for (const ref of memberRefs) {
@@ -514,7 +520,7 @@
 
       el.innerHTML = safeList.map(l => {
         const name = getDisplayName(l);
-        const memArr = (Array.isArray(l.members) ? l.members : []).map(x => (typeof x === 'string') ? (getMemberById(x) ? mapMemberSnap(getMemberById(x)) : {id:x, nick:'', visibleId:''}) : (getMemberById(x?.id) || x));
+        const memArr = getLineResolvedMembers(l);
         const count = memArr.length;
         const preview = memArr.slice(0, 10);
         const pts = getLinePointBreakdown(l, currentSortMode);
@@ -706,8 +712,8 @@
           }
         } catch(_) {}
 
-        // se não tiver cache de membros e for necessário (picker), busca 1x
-        if ((!Array.isArray(members) || members.length === 0) && force) {
+        // no refresh manual, atualiza membros também para manter a soma das lines correta
+        if (force) {
           await fetchMembersFromDB();
         }
 
