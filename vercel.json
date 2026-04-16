@@ -14,7 +14,7 @@
       "destination": "/membros.html"
        {
       "source": "/free_fire",
-      "destination": "/free-fire.html"
+      "destination": "/free_fire.html"
     },
     {
       "source": "/members",
