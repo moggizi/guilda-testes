@@ -85,14 +85,22 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <div class="relative">
-              <select id="points-sort" class="appearance-none min-w-[190px] sm:min-w-[220px] pl-4 pr-10 py-2.5 rounded-xl border border-emerald-100 bg-white text-sm font-medium text-gray-700 shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all">
-                <option value="all" selected>Todos (GG + honra)</option>
-                <option value="gg">Pontos GG</option>
-                <option value="honra">Pontos honra</option>
-              </select>
-              <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">▾</span>
-            </div>
+            <div id="sort-picker-wrap" class="relative min-w-[190px] sm:min-w-[220px]">
+  <button type="button" onclick="toggleSortPickerMenu()" class="w-full px-4 py-2.5 rounded-xl border border-emerald-100 bg-white text-left text-sm font-medium text-gray-700 shadow-sm outline-none hover:border-emerald-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all">
+    <span class="flex items-center justify-between gap-3">
+      <span id="sort-picker-label" class="truncate">Todos (GG + honra)</span>
+      <span id="sort-picker-caret" class="text-gray-400 text-xs">▾</span>
+    </span>
+  </button>
+
+  <div id="sort-picker-menu" class="hidden absolute right-0 top-[calc(100%+8px)] w-full z-40 overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xl shadow-emerald-100/30">
+    <div class="p-2 space-y-1">
+      <button type="button" onclick="pickSortOption('all', 'Todos (GG + honra)')" class="w-full px-3 py-2 text-left text-sm font-semibold text-gray-700 rounded-xl hover:bg-emerald-50 hover:text-emerald-700 transition-colors">Todos (GG + honra)</button>
+      <button type="button" onclick="pickSortOption('gg', 'Pontos GG')" class="w-full px-3 py-2 text-left text-sm font-semibold text-gray-700 rounded-xl hover:bg-emerald-50 hover:text-emerald-700 transition-colors">Pontos GG</button>
+      <button type="button" onclick="pickSortOption('honra', 'Pontos honra')" class="w-full px-3 py-2 text-left text-sm font-semibold text-gray-700 rounded-xl hover:bg-emerald-50 hover:text-emerald-700 transition-colors">Pontos honra</button>
+    </div>
+  </div>
+</div>
 
             <button id="btn-new-line" title="Recurso PLUS" onclick="openLineModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
               <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
