@@ -8,17 +8,93 @@ const firebaseConfig = {
   measurementId: "G-5RBH2Q2NKG"
 };
 
-let cachedDb = null;
+function parseFirestoreValue(value) {
+  if (!value || typeof value !== 'object') return value;
 
-async function getDb() {
-  if (cachedDb) return cachedDb;
+  if ('stringValue' in value) return value.stringValue;
+  if ('integerValue' in value) return Number(value.integerValue);
+  if ('doubleValue' in value) return Number(value.doubleValue);
+  if ('booleanValue' in value) return value.booleanValue;
+  if ('timestampValue' in value) return new Date(value.timestampValue);
+  if ('nullValue' in value) return null;
+  if ('mapValue' in value) {
+    const fields = value.mapValue.fields || {};
+    const out = {};
+    for (const [key, fieldValue] of Object.entries(fields)) {
+      out[key] = parseFirestoreValue(fieldValue);
+    }
+    return out;
+  }
+  if ('arrayValue' in value) {
+    return (value.arrayValue.values || []).map(parseFirestoreValue);
+  }
 
-  const { initializeApp, getApps, getApp } = await import('firebase/app');
-  const { getFirestore } = await import('firebase/firestore');
+  return value;
+}
 
-  const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-  cachedDb = getFirestore(app);
-  return cachedDb;
+function parseFirestoreDocument(doc) {
+  const fields = doc?.fields || {};
+  const out = {};
+
+  for (const [key, value] of Object.entries(fields)) {
+    out[key] = parseFirestoreValue(value);
+  }
+
+  return out;
+}
+
+async function getKeyData(chaveCliente) {
+  const base = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
+  const docUrl = `${base}/tempo/${encodeURIComponent(chaveCliente)}?key=${firebaseConfig.apiKey}`;
+
+  const docResponse = await fetch(docUrl);
+
+  if (docResponse.ok) {
+    const docData = await docResponse.json();
+    return parseFirestoreDocument(docData);
+  }
+
+  if (docResponse.status !== 404) {
+    const errorText = await docResponse.text();
+    throw new Error(`Firestore documento direto falhou (${docResponse.status}): ${errorText}`);
+  }
+
+  const queryUrl = `${base}:runQuery?key=${firebaseConfig.apiKey}`;
+  const queryBody = {
+    structuredQuery: {
+      from: [{ collectionId: 'tempo' }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: 'keypass' },
+          op: 'EQUAL',
+          value: { stringValue: chaveCliente }
+        }
+      },
+      limit: 1
+    }
+  };
+
+  const queryResponse = await fetch(queryUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(queryBody)
+  });
+
+  if (!queryResponse.ok) {
+    const errorText = await queryResponse.text();
+    throw new Error(`Firestore consulta por keypass falhou (${queryResponse.status}): ${errorText}`);
+  }
+
+  const queryResult = await queryResponse.json();
+  const found = Array.isArray(queryResult)
+    ? queryResult.find(item => item && item.document)
+    : null;
+
+  if (!found || !found.document) {
+    return null;
+  }
+
+  return parseFirestoreDocument(found.document);
 }
 
 module.exports = async (req, res) => {
@@ -55,30 +131,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const db = await getDb();
-    const { doc, getDoc, collection, query, where, limit, getDocs } = await import('firebase/firestore');
-
-    let dadosChave = null;
-
-    // 1) Tenta encontrar usando a própria key como ID do documento: tempo/{key}
-    const chaveRef = doc(db, 'tempo', chaveCliente);
-    const docSnap = await getDoc(chaveRef);
-
-    if (docSnap.exists()) {
-      dadosChave = docSnap.data() || {};
-    } else {
-      // 2) Se não existir, tenta encontrar por campo keypass == key
-      const q = query(
-        collection(db, 'tempo'),
-        where('keypass', '==', chaveCliente),
-        limit(1)
-      );
-
-      const resultado = await getDocs(q);
-      if (!resultado.empty) {
-        dadosChave = resultado.docs[0].data() || {};
-      }
-    }
+    const dadosChave = await getKeyData(chaveCliente);
 
     if (!dadosChave) {
       return res.status(401).json({
@@ -89,8 +142,8 @@ module.exports = async (req, res) => {
 
     let dataExpiracao = dadosChave.expira;
 
-    if (dataExpiracao && typeof dataExpiracao.toDate === 'function') {
-      dataExpiracao = dataExpiracao.toDate();
+    if (dataExpiracao instanceof Date) {
+      // ok
     } else {
       dataExpiracao = new Date(dataExpiracao);
     }
@@ -98,7 +151,8 @@ module.exports = async (req, res) => {
     if (!dataExpiracao || Number.isNaN(dataExpiracao.getTime())) {
       return res.status(500).json({
         success: false,
-        mensagem: 'Campo expira inválido na chave.'
+        mensagem: 'Campo expira inválido na chave.',
+        detalhe: { expira: dadosChave.expira ?? null }
       });
     }
 
@@ -113,9 +167,11 @@ module.exports = async (req, res) => {
     const response = await fetch(urlOriginal);
 
     if (!response.ok) {
+      const errorText = await response.text();
       return res.status(502).json({
         success: false,
-        mensagem: 'Falha ao buscar dados no servidor fonte do FF.'
+        mensagem: 'Falha ao buscar dados no servidor fonte do FF.',
+        detalhe: `Status ${response.status}: ${errorText}`
       });
     }
 
@@ -126,7 +182,8 @@ module.exports = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      mensagem: 'Erro interno no servidor ao processar a requisição.'
+      mensagem: 'Erro interno no servidor ao processar a requisição.',
+      detalhe: String(error?.message || error)
     });
   }
 };
