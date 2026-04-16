@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GuildaHub - API Free Fire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: '#22c55e', // Verde estilo gamer
+                        darkbg: '#0f172a',
+                        cardbg: '#1e293b'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-darkbg text-gray-200 font-sans antialiased selection:bg-brand selection:text-white">
+
+    <!-- Header -->
+    <header class="border-b border-gray-800 bg-cardbg/50 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="text-2xl font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-gamepad text-brand"></i>
+                Guilda<span class="text-brand">Hub</span> API
+            </div>
+            <a href="#comprar" class="bg-brand hover:bg-green-600 text-white px-5 py-2 rounded-md font-semibold transition-colors duration-300">
+                Adquirir Acesso
+            </a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <main class="max-w-6xl mx-auto px-4 py-16 text-center">
+        <h1 class="text-5xl md:text-6xl font-extrabold text-white mb-6">
+            A melhor API de dados do <span class="text-brand">Free Fire</span>
+        </h1>
+        <p class="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
+            Integre informações precisas de jogadores em seu sistema, site ou bot de forma rápida, estável e segura.
+        </p>
+
+        <!-- Como funciona (Documentação Básica) -->
+        <div class="bg-cardbg rounded-xl p-8 shadow-xl text-left border border-gray-800 max-w-4xl mx-auto">
+            <h2 class="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2">Como funciona?</h2>
+            <p class="text-gray-400 mb-4">Faça uma requisição GET simples passando o ID do jogador e a sua chave de acesso (key).</p>
+            
+            <div class="bg-black rounded-lg p-4 font-mono text-sm text-green-400 overflow-x-auto mb-6">
+                GET https://guildahub.online/api/freefire/info?ID=<span class="text-yellow-400">99999999</span>&key=<span class="text-red-400">SUA_CHAVE_AQUI</span>
+            </div>
+
+            <h3 class="text-lg font-semibold text-white mb-2">Retorno (JSON):</h3>
+            <div class="bg-black rounded-lg p-4 font-mono text-sm text-blue-300 overflow-x-auto">
+<pre>{
+  "success": true,
+  "ok": true,
+  "id": ":229171907",
+  "nick": "ᵒᵗᵏᴋᴜsʜɪɴᴀ愛",
+  "level": "81",
+  "likes": "18.103",
+  "region": "BR",
+  "experience": "7.926.908",
+  "booyah_pass": "LV.55 (Não Pago)",
+  "account_created": "12 de maio de 2018 às 00:29:23",
+  "last_login": "14 de fevereiro de 2026 às 19:25:05",
+  "game_version": "OB52",
+  "guild_name": "OTTAKUBRASIL",
+  "guild_id": "2061030374",
+  "guild_level": "6",
+  "guild_members": "39",
+  "bio": "[FF0000]Gostou? Segue minha conta @ottakubrasil",
+  "account_age_days": 2897,
+  "account_age_full": "2897 dias de existencia"
+}</pre>
+            </div>
+        </div>
+
+        <!-- Seção de Compra -->
+        <div id="comprar" class="mt-20">
+            <h2 class="text-3xl font-bold text-white mb-6">Pronto para integrar?</h2>
+            <p class="text-gray-400 mb-8">Venda mais na sua loja ou turbine seu projeto com dados reais do FF.</p>
+            
+            <!-- Link do WhatsApp dinâmico -->
+            <a href="https://wa.me/5531998241241?text=Olá,%20vim%20pelo%20site%20do%20GuildaHub%20e%20tenho%20interesse%20em%20comprar%20a%20API%20do%20Free%20Fire." target="_blank" 
+               class="inline-flex items-center gap-3 bg-green-600 hover:bg-green-500 text-white px-8 py-4 rounded-full font-bold text-lg transition-all duration-300 transform hover:scale-105 shadow-[0_0_20px_rgba(22,163,74,0.4)]">
+                <i class="fa-brands fa-whatsapp text-2xl"></i>
+                Contratar via WhatsApp
+            </a>
+            <p class="mt-4 text-sm text-gray-500">Atendimento imediato: +55 (31) 99824-1241</p>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-800 mt-20 py-8 text-center text-gray-500">
+        <p>&copy; 2026 GuildaHub. Todos os direitos reservados.</p>
+    </footer>
+
+</body>
+</html>
