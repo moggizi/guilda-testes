@@ -14,10 +14,12 @@
       "destination": "/membros.html"
     },
     {
-      
-    
-       "source": "/free_fire/api/info",
-      "destination": "/free_fire/api.html"  
+      "source": "/free_fire/api",
+      "destination": "/free_fire/api.html"
+    },
+    {
+      "source": "/free_fire/api/info",
+      "destination": "/api/free_fire/api/info"
     },
     {
       "source": "/members",
@@ -66,8 +68,8 @@
     {
       "source": "/suporte",
       "destination": "/suporte.html"
-     },
-     {
+    },
+    {
       "source": "/perfil-guilda",
       "destination": "/perfil-guilda.html"
     }

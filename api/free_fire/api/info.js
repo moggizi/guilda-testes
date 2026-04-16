@@ -1,0 +1,88 @@
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAZQv-ImckNQW1Pb1AMfQ8f5rtKLU6VijU",
+  authDomain: "api-ff-guildahub.firebaseapp.com",
+  projectId: "api-ff-guildahub",
+  storageBucket: "api-ff-guildahub.firebasestorage.app",
+  messagingSenderId: "98820381088",
+  appId: "1:98820381088:web:21da613e35c33096c12cc5",
+  measurementId: "G-5RBH2Q2NKG"
+};
+
+const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+
+export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+  const idJogador = searchParams.get('ID');
+  const chaveCliente = searchParams.get('key');
+
+  if (!chaveCliente) {
+    return Response.json(
+      { success: false, mensagem: 'Chave de API não fornecida. Contate +5531998241241' },
+      { status: 401 }
+    );
+  }
+
+  if (!idJogador) {
+    return Response.json(
+      { success: false, mensagem: 'ID do jogador não informado. Use ?ID=numero' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const chaveRef = doc(db, 'tempo', chaveCliente);
+    const docSnap = await getDoc(chaveRef);
+
+    if (!docSnap.exists()) {
+      return Response.json(
+        { success: false, mensagem: 'Chave de API inválida.' },
+        { status: 401 }
+      );
+    }
+
+    const dadosChave = docSnap.data();
+    let dataExpiracao = dadosChave.expira;
+
+    if (dataExpiracao && typeof dataExpiracao.toDate === 'function') {
+      dataExpiracao = dataExpiracao.toDate();
+    } else {
+      dataExpiracao = new Date(dataExpiracao);
+    }
+
+    if (!dataExpiracao || Number.isNaN(dataExpiracao.getTime())) {
+      return Response.json(
+        { success: false, mensagem: 'Campo expira inválido na chave.' },
+        { status: 500 }
+      );
+    }
+
+    if (new Date() > dataExpiracao) {
+      return Response.json(
+        { success: false, mensagem: 'Sua chave de acesso expirou! Renove o seu plano.' },
+        { status: 403 }
+      );
+    }
+
+    const urlOriginal = `https://axicld.duckdns.org:5006/api/v1/freefire/profile/${idJogador}?api_key=ilimitado`;
+    const response = await fetch(urlOriginal);
+
+    if (!response.ok) {
+      return Response.json(
+        { success: false, mensagem: 'Falha ao buscar dados no servidor fonte do FF.' },
+        { status: 502 }
+      );
+    }
+
+    const dados = await response.json();
+    return Response.json(dados, { status: 200 });
+  } catch (error) {
+    return Response.json(
+      { success: false, mensagem: 'Erro interno no servidor ao processar a requisição.' },
+      { status: 500 }
+    );
+  }
+}
