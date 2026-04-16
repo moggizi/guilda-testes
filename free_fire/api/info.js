@@ -14,13 +14,14 @@ const firebaseConfig = {
 const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 
+
 function buildRealApiUrl(idJogador) {
   const baseUrl = process.env.FF_API_BASE_URL;
   const apiKey = process.env.FF_API_KEY;
   const profilePath = process.env.FF_API_PROFILE_PATH || '/api/v1/freefire/profile';
 
   if (!baseUrl || !apiKey) {
-    throw new Error('As variáveis FF_API_BASE_URL e/ou FF_API_KEY não foram configuradas.');
+    throw new Error('As variáveis FF_API_BASE_URL e FF_API_KEY não foram configuradas.');
   }
 
   const normalizedBase = baseUrl.replace(/\/+$/, '');
@@ -60,6 +61,7 @@ export async function GET(request) {
     }
 
     const dadosChave = docSnap.data();
+
     let dataExpiracao = dadosChave.expira;
 
     if (dataExpiracao && typeof dataExpiracao.toDate === 'function') {
@@ -76,21 +78,18 @@ export async function GET(request) {
     }
 
     const urlOriginal = buildRealApiUrl(idJogador);
+
     const response = await fetch(urlOriginal);
 
     if (!response.ok) {
-      throw new Error(`Falha ao buscar dados no servidor fonte do FF. Status ${response.status}`);
+      throw new Error('Falha ao buscar dados no servidor fonte do FF');
     }
 
     const dados = await response.json();
     return Response.json(dados);
   } catch (error) {
     return Response.json(
-      {
-        success: false,
-        mensagem: 'Erro interno no servidor ao processar a requisição.',
-        detalhe: String(error?.message || error)
-      },
+      { success: false, mensagem: 'Erro interno no servidor ao processar a requisição.', detalhe: String(error?.message || error) },
       { status: 500 }
     );
   }
