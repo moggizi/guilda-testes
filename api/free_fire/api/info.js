@@ -1,102 +1,29 @@
-const firebaseConfig = {
-  apiKey: "AIzaSyAZQv-ImckNQW1Pb1AMfQ8f5rtKLU6VijU",
-  authDomain: "api-ff-guildahub.firebaseapp.com",
-  projectId: "api-ff-guildahub",
-  storageBucket: "api-ff-guildahub.firebasestorage.app",
-  messagingSenderId: "98820381088",
-  appId: "1:98820381088:web:21da613e35c33096c12cc5",
-  measurementId: "G-5RBH2Q2NKG"
-};
+const { initializeApp, cert, getApps } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
-function parseFirestoreValue(value) {
-  if (!value || typeof value !== 'object') return value;
+const ADMIN_APP_NAME = 'ff-api-admin';
+const SERVICE_ACCOUNT_ENV = 'FIREBASE_SERVICE_ACCOUNT_FF_API';
 
-  if ('stringValue' in value) return value.stringValue;
-  if ('integerValue' in value) return Number(value.integerValue);
-  if ('doubleValue' in value) return Number(value.doubleValue);
-  if ('booleanValue' in value) return value.booleanValue;
-  if ('timestampValue' in value) return new Date(value.timestampValue);
-  if ('nullValue' in value) return null;
-  if ('mapValue' in value) {
-    const fields = value.mapValue.fields || {};
-    const out = {};
-    for (const [key, fieldValue] of Object.entries(fields)) {
-      out[key] = parseFirestoreValue(fieldValue);
+function getDb() {
+  let adminApp = getApps().find(app => app.name === ADMIN_APP_NAME);
+
+  if (!adminApp) {
+    const raw = process.env[SERVICE_ACCOUNT_ENV];
+
+    if (!raw) {
+      throw new Error(`A variável ${SERVICE_ACCOUNT_ENV} não foi configurada.`);
     }
-    return out;
-  }
-  if ('arrayValue' in value) {
-    return (value.arrayValue.values || []).map(parseFirestoreValue);
+
+    const serviceAccount = JSON.parse(raw);
+
+    adminApp = initializeApp(
+      { credential: cert(serviceAccount) },
+      ADMIN_APP_NAME
+    );
   }
 
-  return value;
+  return getFirestore(adminApp);
 }
-
-function parseFirestoreDocument(doc) {
-  const fields = doc?.fields || {};
-  const out = {};
-
-  for (const [key, value] of Object.entries(fields)) {
-    out[key] = parseFirestoreValue(value);
-  }
-
-  return out;
-}
-
-async function getKeyData(chaveCliente) {
-  const base = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
-  const docUrl = `${base}/tempo/${encodeURIComponent(chaveCliente)}?key=${firebaseConfig.apiKey}`;
-
-  const docResponse = await fetch(docUrl);
-
-  if (docResponse.ok) {
-    const docData = await docResponse.json();
-    return parseFirestoreDocument(docData);
-  }
-
-  if (docResponse.status !== 404) {
-    const errorText = await docResponse.text();
-    throw new Error(`Firestore documento direto falhou (${docResponse.status}): ${errorText}`);
-  }
-
-  const queryUrl = `${base}:runQuery?key=${firebaseConfig.apiKey}`;
-  const queryBody = {
-    structuredQuery: {
-      from: [{ collectionId: 'tempo' }],
-      where: {
-        fieldFilter: {
-          field: { fieldPath: 'keypass' },
-          op: 'EQUAL',
-          value: { stringValue: chaveCliente }
-        }
-      },
-      limit: 1
-    }
-  };
-
-  const queryResponse = await fetch(queryUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(queryBody)
-  });
-
-  if (!queryResponse.ok) {
-    const errorText = await queryResponse.text();
-    throw new Error(`Firestore consulta por keypass falhou (${queryResponse.status}): ${errorText}`);
-  }
-
-  const queryResult = await queryResponse.json();
-  const found = Array.isArray(queryResult)
-    ? queryResult.find(item => item && item.document)
-    : null;
-
-  if (!found || !found.document) {
-    return null;
-  }
-
-  return parseFirestoreDocument(found.document);
-}
-
 
 function buildRealApiUrl(idJogador) {
   const baseUrl = process.env.FF_API_BASE_URL;
@@ -147,19 +74,21 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const dadosChave = await getKeyData(chaveCliente);
+    const db = getDb();
+    const docSnap = await db.collection('tempo').doc(chaveCliente).get();
 
-    if (!dadosChave) {
+    if (!docSnap.exists) {
       return res.status(401).json({
         success: false,
         mensagem: 'Chave de API inválida.'
       });
     }
 
+    const dadosChave = docSnap.data() || {};
     let dataExpiracao = dadosChave.expira;
 
-    if (dataExpiracao instanceof Date) {
-      // ok
+    if (dataExpiracao && typeof dataExpiracao.toDate === 'function') {
+      dataExpiracao = dataExpiracao.toDate();
     } else {
       dataExpiracao = new Date(dataExpiracao);
     }
