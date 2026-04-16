@@ -1,19 +1,29 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAZQv-ImckNQW1Pb1AMfQ8f5rtKLU6VijU",
-  authDomain: "api-ff-guildahub.firebaseapp.com",
-  projectId: "api-ff-guildahub",
-  storageBucket: "api-ff-guildahub.firebasestorage.app",
-  messagingSenderId: "98820381088",
-  appId: "1:98820381088:web:21da613e35c33096c12cc5",
-  measurementId: "G-5RBH2Q2NKG"
-};
+const ADMIN_APP_NAME = 'ff-api-admin';
+const SERVICE_ACCOUNT_ENV = 'FIREBASE_SERVICE_ACCOUNT_FF_API';
 
-const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp);
+function getDb() {
+  let adminApp = getApps().find(app => app.name === ADMIN_APP_NAME);
 
+  if (!adminApp) {
+    const raw = process.env[SERVICE_ACCOUNT_ENV];
+
+    if (!raw) {
+      throw new Error(`A variável ${SERVICE_ACCOUNT_ENV} não foi configurada.`);
+    }
+
+    const serviceAccount = JSON.parse(raw);
+
+    adminApp = initializeApp(
+      { credential: cert(serviceAccount) },
+      ADMIN_APP_NAME
+    );
+  }
+
+  return getFirestore(adminApp);
+}
 
 function buildRealApiUrl(idJogador) {
   const baseUrl = process.env.FF_API_BASE_URL;
@@ -50,24 +60,30 @@ export async function GET(request) {
   }
 
   try {
-    const chaveRef = doc(db, 'tempo', chaveCliente);
-    const docSnap = await getDoc(chaveRef);
+    const db = getDb();
+    const docSnap = await db.collection('tempo').doc(chaveCliente).get();
 
-    if (!docSnap.exists()) {
+    if (!docSnap.exists) {
       return Response.json(
         { success: false, mensagem: 'Chave de API inválida.' },
         { status: 401 }
       );
     }
 
-    const dadosChave = docSnap.data();
-
+    const dadosChave = docSnap.data() || {};
     let dataExpiracao = dadosChave.expira;
 
     if (dataExpiracao && typeof dataExpiracao.toDate === 'function') {
       dataExpiracao = dataExpiracao.toDate();
     } else {
       dataExpiracao = new Date(dataExpiracao);
+    }
+
+    if (!dataExpiracao || Number.isNaN(dataExpiracao.getTime())) {
+      return Response.json(
+        { success: false, mensagem: 'Campo expira inválido na chave.', detalhe: { expira: dadosChave.expira ?? null } },
+        { status: 500 }
+      );
     }
 
     if (new Date() > dataExpiracao) {
@@ -78,11 +94,14 @@ export async function GET(request) {
     }
 
     const urlOriginal = buildRealApiUrl(idJogador);
-
     const response = await fetch(urlOriginal);
 
     if (!response.ok) {
-      throw new Error('Falha ao buscar dados no servidor fonte do FF');
+      const errorText = await response.text();
+      return Response.json(
+        { success: false, mensagem: 'Falha ao buscar dados no servidor fonte do FF.', detalhe: `Status ${response.status}: ${errorText}` },
+        { status: 502 }
+      );
     }
 
     const dados = await response.json();
