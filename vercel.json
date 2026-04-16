@@ -12,10 +12,14 @@
     {
       "source": "/membros",
       "destination": "/membros.html"
-     },
-     {
+    },
+    {
       "source": "/api/freefire",
       "destination": "/api/freefire.html"
+     },
+     { 
+       "source": "/free_fire/api/info",
+      "destination": "/api/free_fire/api/info"  
     },
     {
       "source": "/members",
