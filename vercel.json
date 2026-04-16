@@ -14,8 +14,8 @@
       "destination": "/membros.html"
      },
      {
-      "source": "/freefire",
-      "destination": "/freefire.html"
+      "source": "/api/freefire",
+      "destination": "/api/freefire.html"
     },
     {
       "source": "/members",
