@@ -13,7 +13,7 @@
       "source": "/membros",
       "destination": "/membros.html"
        {
-      "source": "/free-fire",
+      "source": "/free_fire",
       "destination": "/free-fire.html"
     },
     {
