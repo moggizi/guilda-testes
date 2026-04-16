@@ -95,7 +95,7 @@
 
   <div id="sort-picker-menu" class="hidden absolute right-0 top-[calc(100%+8px)] w-full z-40 overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xl shadow-emerald-100/30">
     <div class="p-2 space-y-1">
-      <button type="button" onclick="pickSortOption('all', 'Todos (GG + honra)')" class="w-full px-3 py-2 text-left text-sm font-semibold text-gray-700 rounded-xl hover:bg-emerald-50 hover:text-emerald-700 transition-colors">Todos (GG + honra)</button>
+      <button type="button" onclick="pickSortOption('all', 'Todos (GG + honra)')" class="w-full px-3 py-2 text-left text-sm font-semibold bg-emerald-50 text-emerald-700 rounded-xl hover:bg-emerald-50 hover:text-emerald-700 transition-colors">Todos (GG + honra)</button>
       <button type="button" onclick="pickSortOption('gg', 'Pontos GG')" class="w-full px-3 py-2 text-left text-sm font-semibold text-gray-700 rounded-xl hover:bg-emerald-50 hover:text-emerald-700 transition-colors">Pontos GG</button>
       <button type="button" onclick="pickSortOption('honra', 'Pontos honra')" class="w-full px-3 py-2 text-left text-sm font-semibold text-gray-700 rounded-xl hover:bg-emerald-50 hover:text-emerald-700 transition-colors">Pontos honra</button>
     </div>
@@ -1102,9 +1102,28 @@
     };
 
     window.pickSortOption = (value, label) => {
-      document.getElementById('sort-picker-label').textContent = label;
-      document.getElementById('sort-picker-menu').classList.add('hidden');
-      document.getElementById('sort-picker-caret').textContent = '▾';
+      const labelEl = document.getElementById('sort-picker-label');
+      if (labelEl) labelEl.textContent = label;
+      
+      const menu = document.getElementById('sort-picker-menu');
+      if (menu) {
+        menu.classList.add('hidden');
+        
+        // NOVO: Faz o botão clicado ficar verde e tira dos outros
+        const buttons = menu.querySelectorAll('button');
+        buttons.forEach(btn => {
+          if (btn.textContent.trim() === label) {
+            btn.classList.remove('text-gray-700');
+            btn.classList.add('bg-emerald-50', 'text-emerald-700');
+          } else {
+            btn.classList.remove('bg-emerald-50', 'text-emerald-700');
+            btn.classList.add('text-gray-700');
+          }
+        });
+      }
+      
+      const caret = document.getElementById('sort-picker-caret');
+      if (caret) caret.textContent = '▾';
       
       currentSortMode = value;
       updateLinesView(allLines);
