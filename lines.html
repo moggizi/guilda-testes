@@ -1074,16 +1074,41 @@
     }
 
     document.getElementById('search-input')?.addEventListener('input', applySearch);
-    document.getElementById('points-sort')?.addEventListener('change', (ev) => {
-      currentSortMode = (ev?.target?.value || 'all').toString();
-      updateLinesView(allLines);
+   document.addEventListener('click', (ev) => {
+      // Fecha a lista de membros se clicar fora
+      const wrapMember = document.getElementById('member-picker-wrap');
+      if (wrapMember && !wrapMember.contains(ev.target)) closeMemberPickerMenu();
+
+      // Fecha a lista de filtros se clicar fora
+      const wrapSort = document.getElementById('sort-picker-wrap');
+      if (wrapSort && !wrapSort.contains(ev.target)) {
+        document.getElementById('sort-picker-menu')?.classList.add('hidden');
+        const caret = document.getElementById('sort-picker-caret');
+        if (caret) caret.textContent = '▾';
+      }
     });
 
-    document.addEventListener('click', (ev) => {
-      const wrap = document.getElementById('member-picker-wrap');
-      if (!wrap) return;
-      if (!wrap.contains(ev.target)) closeMemberPickerMenu();
-    });
+    window.toggleSortPickerMenu = () => {
+      const menu = document.getElementById('sort-picker-menu');
+      const caret = document.getElementById('sort-picker-caret');
+      if (!menu) return;
+      if (menu.classList.contains('hidden')) {
+        menu.classList.remove('hidden');
+        caret.textContent = '▴';
+      } else {
+        menu.classList.add('hidden');
+        caret.textContent = '▾';
+      }
+    };
+
+    window.pickSortOption = (value, label) => {
+      document.getElementById('sort-picker-label').textContent = label;
+      document.getElementById('sort-picker-menu').classList.add('hidden');
+      document.getElementById('sort-picker-caret').textContent = '▾';
+      
+      currentSortMode = value;
+      updateLinesView(allLines);
+    };
 
     // ---- Visual do membro (igual estilo da tela de membros) -----------------
     window.openMemberView = (id) => {
