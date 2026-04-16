@@ -12,7 +12,8 @@
     {
       "source": "/membros",
       "destination": "/membros.html"
-       {
+     },
+     {
       "source": "/free_fire",
       "destination": "/free_fire.html"
     },
