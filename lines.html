@@ -14,10 +14,8 @@
 <body class="bg-gray-50/80">
 
   <div class="flex min-h-screen">
-    <!-- Menu Mobile Overlay -->
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
 
-    <!-- Sidebar -->
     <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:static">
       <div class="flex items-center justify-between p-5 border-b border-gray-100">
         <div class="flex items-center gap-3">
@@ -73,9 +71,7 @@
       </div>
     </aside>
 
-    <!-- Main -->
     <main class="flex-1 lg:ml-0">
-      <!-- Topbar -->
       <header class="sticky top-0 z-30 bg-white/70 backdrop-blur border-b border-gray-100">
         <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
           <div class="flex items-center gap-3">
@@ -127,7 +123,6 @@
     </main>
   </div>
 
-  <!-- MODAL Line (Adicionar/Editar) -->
   <div id="line-modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
     <div class="fixed inset-0 bg-black/40" onclick="closeLineModal()"></div>
     <div class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in">
@@ -184,7 +179,6 @@
     </div>
   </div>
 
-  <!-- MODAL Detalhe do Membro (visual) -->
   <div id="member-view-modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
     <div class="fixed inset-0 bg-black/40" onclick="closeMemberView()"></div>
     <div class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in">
@@ -540,13 +534,12 @@
 
               <div class="flex-1 min-w-0">
                 <p class="font-semibold text-gray-900 text-sm truncate">${escapeHtml(name)}</p>
-                <p class="text-xs text-gray-400 truncate">${count}/10 membros • ${formatPoints(pts.active)} ${pointsLabel}</p>
+                <p class="text-xs text-gray-400 truncate">${count}/10 membros</p>
               </div>
 
               <div class="hidden sm:flex gap-1.5">
                 ${badge(`Line ${Number(l.number||0)||'—'}`, 'hash')}
                 ${badge(`${count}/10`, 'users')}
-                ${badge(formatPoints(pts.active), 'trophy')}
               </div>
 
               <div class="text-right shrink-0">
@@ -569,7 +562,7 @@
                 </div>
                 <div class="bg-white rounded-xl p-3 border border-emerald-100 bg-emerald-50/50">
                   <p class="text-xs text-emerald-700 mb-1">Pontuação total</p>
-                  <p class="text-xs font-extrabold text-emerald-700">${formatPoints(pts.active)} <span class="text-[10px] font-bold text-emerald-600">${escapeHtml(pointsTitle)}</span></p>
+                  <p class="text-xs font-extrabold text-emerald-700">${escapeHtml(pointsTitle)}</p>
                 </div>
               </div>
 
