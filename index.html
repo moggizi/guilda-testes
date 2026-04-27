@@ -304,12 +304,45 @@
 
         <!-- Signup -->
         <form id="signup-form" class="hidden mt-6 space-y-4">
+          <div class="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-sm font-black text-slate-900">Você é dono de guilda?</p>
+                <p id="signup-mode-desc" class="mt-1 text-xs font-medium leading-relaxed text-slate-500">
+                  Ative se você vai criar e administrar uma guilda na plataforma.
+                </p>
+              </div>
+
+              <label class="relative inline-flex cursor-pointer items-center pt-1">
+                <input id="signup-is-owner" type="checkbox" class="peer sr-only" checked>
+                <span class="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-emerald-500 after:absolute after:left-0.5 after:top-1.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5"></span>
+              </label>
+            </div>
+          </div>
+
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="username">Nome de usuário (Guilda)</label>
-            <input id="username" type="text" required
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-gameid">ID do usuário</label>
+            <input id="signup-gameid" type="text" inputmode="numeric" required
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+              placeholder="Ex: 123456789" />
+            <p class="mt-1 text-xs font-semibold text-amber-600">
+              Importante: coloque o ID do seu usuário/personagem. NÃO coloque o ID da guilda.
+            </p>
+          </div>
+
+          <div id="signup-guild-wrap">
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-guild-name">Nome da guilda</label>
+            <input id="signup-guild-name" type="text" required
               class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
               placeholder="Ex: Ottakubrasil" />
-            <p class="mt-1 text-xs text-slate-500">Esse nome identifica sua guilda.</p>
+            <p class="mt-1 text-xs text-slate-500">Esse nome identifica sua guilda no painel.</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-nick">Nome/Nick</label>
+            <input id="signup-nick" type="text" required maxlength="30"
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+              placeholder="Ex: moggizi" />
           </div>
 
           <div>
@@ -339,191 +372,6 @@
   <div id="toast-container" class="fixed top-5 right-5 z-[60] flex flex-col gap-2"></div>
 
 <!-- Scripts -->
-        <script>
-    // Drawer open/close (non-module; works before auth module)
-    const backdrop = document.getElementById('auth-backdrop');
-    const drawer = document.getElementById('auth-drawer');
-
-    function openAuth(){
-      backdrop.classList.add('show');
-      drawer.classList.add('show');
-      document.documentElement.style.overflow = 'hidden';
-      // focus email for faster access
-      setTimeout(()=>{ try{ document.getElementById('email')?.focus(); }catch(_){} }, 50);
-    }
-    function closeAuth(){
-      backdrop.classList.remove('show');
-      drawer.classList.remove('show');
-      document.documentElement.style.overflow = '';
-    }
-
-    document.getElementById('open-auth')?.addEventListener('click', openAuth);
-    document.getElementById('open-auth-2')?.addEventListener('click', openAuth);
-    document.getElementById('open-auth-3')?.addEventListener('click', openAuth);
-    document.getElementById('close-auth')?.addEventListener('click', closeAuth);
-    backdrop?.addEventListener('click', closeAuth);
-    window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeAuth(); });
-
-    // Scroll reveal
-    (function(){
-      const els = Array.from(document.querySelectorAll('[data-reveal]'));
-      const io = new IntersectionObserver((entries)=>{
-        for (const ent of entries){
-          if(ent.isIntersecting) ent.target.classList.add('show');
-          else ent.target.classList.remove('show'); // replay when scrolling back
-        }
-      }, { threshold: 0.18 });
-      els.forEach(el => { el.classList.add('reveal'); io.observe(el); });
-    })();
-
-    try { window.lucide && window.lucide.createIcons && window.lucide.createIcons(); } catch(_) {}
-  </script>
-
-<script type="module">
-    import { auth, showToast, checkAuth, finalizeSignup, setupSidebar, initIcons } from './logic.js';
-    
-    setupSidebar();
-    initIcons();
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
-    // Se já estiver logado, vai pro dashboard
-    checkAuth(false).then(user => {
-      if(user) window.location.href = 'dashboard.html';
-    });
-
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('email').value;
-      const pass = document.getElementById('password').value;
-      const btn = document.getElementById('btn-login');
-
-      btn.disabled = true;
-      btn.innerHTML = '<span class="btn-spinner"></span>';
-
-      try {
-        await signInWithEmailAndPassword(auth, email, pass);
-        try { sessionStorage.setItem('hub_do_preload', '1'); } catch(_) {}
-        window.location.href = "dashboard.html?login=1";
-      } catch (err) {
-        console.error(err);
-        let msg = "Erro ao entrar.";
-        if(err.code === 'auth/invalid-credential') msg = "Email ou senha incorretos.";
-        showToast('error', msg);
-        btn.disabled = false;
-        btn.innerHTML = '<span>Entrar</span>';
-      }
-    });
-
-    // Alternância de telas
-    const btnShowSignup = document.getElementById('btn-show-signup');
-    const btnShowLogin = document.getElementById('btn-show-login');
-    const loginForm = document.getElementById('login-form');
-    const signupForm = document.getElementById('signup-form');
-    const loginHint = document.getElementById('login-hint');
-
-    function showSignup() {
-      loginForm.classList.add('hidden');
-      signupForm.classList.remove('hidden');
-      btnShowSignup.classList.add('hidden');
-      btnShowLogin.classList.remove('hidden');
-      if (loginHint) loginHint.textContent = "Já tem conta?";
-    }
-    function showLogin() {
-      signupForm.classList.add('hidden');
-      loginForm.classList.remove('hidden');
-      btnShowLogin.classList.add('hidden');
-      btnShowSignup.classList.remove('hidden');
-      if (loginHint) loginHint.textContent = "Não tem conta?";
-    }
-
-    btnShowSignup?.addEventListener('click', showSignup);
-    btnShowLogin?.addEventListener('click', showLogin);
-
-    // Criar conta (username + email + senha)
-    signupForm?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      const username = document.getElementById('username').value.trim();
-      const email = document.getElementById('signup-email').value.trim();
-      const pass = document.getElementById('signup-password').value;
-
-      const btn = document.getElementById('btn-signup');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="btn-spinner"></span>';
-
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        const signupResult = await finalizeSignup(cred.user, username);
-
-        if ((signupResult?.promoDays || 0) > 0) {
-          try {
-            sessionStorage.setItem('hub_signup_promo_toast', `Promoção de ${signupResult.promoDays} dias ativada!`);
-          } catch(_) {}
-        }
-
-        showToast('success', 'Conta criada com sucesso!');
-        try { sessionStorage.setItem('hub_do_preload', '1'); } catch(_) {}
-        window.location.href = "dashboard.html?login=1";
-      } catch (err) {
-        console.error(err);
-        try { await signOut(auth); } catch(_) {}
-
-        let msg = "Não foi possível criar a conta.";
-        if (err.code === 'auth/email-already-in-use') msg = "Esse e-mail já está em uso.";
-        if (err.code === 'auth/weak-password') msg = "Senha fraca (mínimo 6 caracteres).";
-        if (String(err?.code || '').includes('permission-denied') || String(err?.message || '').includes('permission')) {
-          msg = "Não foi possível finalizar a criação da conta (permissões).";
-        }
-        showToast('error', msg);
-        btn.disabled = false;
-        btn.innerHTML = '<span>Criar conta</span>';
-      }
-    });
-  </script>
-
-<script>
-(function(){
-  const openBtn = document.getElementById('sidebar-open');
-  const closeBtn = document.getElementById('sidebar-close');
-  const overlay = document.getElementById('sidebar-overlay');
-  const sidebar = document.getElementById('sidebar');
-  function open(){
-    overlay.classList.remove('hidden');
-    sidebar.classList.remove('-translate-x-full');
-    document.body.style.overflow='hidden';
-  }
-  function close(){
-    overlay.classList.add('hidden');
-    sidebar.classList.add('-translate-x-full');
-    document.body.style.overflow='';
-  }
-  if(openBtn) openBtn.addEventListener('click', open);
-  if(closeBtn) closeBtn.addEventListener('click', close);
-  if(overlay) overlay.addEventListener('click', close);
-  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') close(); });
-})();
-
-    // ===== Menu lateral (tema claro) =====
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebar-overlay');
-    function openSidebar(){
-      sidebar?.classList.remove('-translate-x-full');
-      overlay?.classList.remove('hidden');
-      document.documentElement.style.overflow = 'hidden';
-    }
-    function closeSidebar(){
-      sidebar?.classList.add('-translate-x-full');
-      overlay?.classList.add('hidden');
-      document.documentElement.style.overflow = '';
-    }
-    document.getElementById('sidebar-open')?.addEventListener('click', openSidebar);
-    document.getElementById('sidebar-close')?.addEventListener('click', closeSidebar);
-    overlay?.addEventListener('click', closeSidebar);
-
-    // ===== Entrar no topo =====
-    document.getElementById('open-auth-top')?.addEventListener('click', openAuth);
-
-</script>
-
+  <script type="module" src="./inicio.js"></script>
 </body>
 </html>
