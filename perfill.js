@@ -216,10 +216,40 @@ function setPhotoUI(base64Str) {
   }
 }
 
+function dateFromFirestoreValue(val) {
+  if (!val) return null;
+
+  if (typeof val.toDate === 'function') {
+    return val.toDate();
+  }
+
+  const seconds = typeof val.seconds === 'number'
+    ? val.seconds
+    : (typeof val._seconds === 'number' ? val._seconds : null);
+
+  if (seconds !== null) {
+    const nanos = typeof val.nanoseconds === 'number'
+      ? val.nanoseconds
+      : (typeof val._nanoseconds === 'number' ? val._nanoseconds : 0);
+
+    return new Date((seconds * 1000) + Math.floor(nanos / 1000000));
+  }
+
+  if (typeof val === 'number') {
+    return new Date(val > 9999999999 ? val : val * 1000);
+  }
+
+  if (typeof val === 'string') {
+    const d = new Date(val);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  return null;
+}
+
 const formatDateBR = (val) => {
-  if (!val) return '--';
-  const d = val.toDate ? val.toDate() : new Date(val);
-  if (Number.isNaN(d.getTime())) return '--';
+  const d = dateFromFirestoreValue(val);
+  if (!d || Number.isNaN(d.getTime())) return '--';
   return d.toLocaleDateString('pt-BR');
 };
 
@@ -362,7 +392,7 @@ function fillProfileForm(data) {
   els.viewRole.textContent = actualRole;
   els.viewRole.className = `inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide ${getRoleStyle(actualRole)}`;
   
-  els.viewCreated.textContent = formatDateBR(data.createdAt);
+  els.viewCreated.textContent = formatDateBR(data.createdAt || data.criadoEm || data.created_at || data.created);
 }
 
 // Lógica de Criar/Migrar
