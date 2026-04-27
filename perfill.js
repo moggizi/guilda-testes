@@ -143,7 +143,7 @@ async function loadProfile() {
   
   try {
     // 1. Busca perfis onde uid == auth.uid
-    const q = query(collection(db, 'users'), where('email', '==', email));
+    const q = query(collection(db, 'users'), where('uid', '==', uid));
     const snap = await getDocs(q);
 
     
