@@ -16,62 +16,77 @@
   <div class="flex min-h-screen">
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
 
-    <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:static">
-      <div class="flex items-center justify-between p-5 border-b border-gray-100">
-        <div class="flex items-center gap-3">
-          <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
-          <div><h1 class="font-bold text-gray-900 text-lg">Guilda e eventos</h1><p class="text-xs text-gray-400">Painel</p></div>
+    <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
+  <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+    <div class="flex items-center gap-3">
+      <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
+      <div>
+        <h1 class="font-bold text-gray-900 text-lg">Guilda e eventos</h1>
+        <p class="text-xs text-gray-400">Painel</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
+    <a href="dashboard.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="house" class="w-5 h-5"></i> Dashboard
+    </a>
+
+    <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
+    </a>
+
+    <a href="membros.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="users" class="w-5 h-5"></i> Membros
+    </a>
+
+    <a href="lines.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
+      <i data-lucide="layers" class="w-5 h-5"></i> Lines
+    </a>
+
+    <a href="ajustes.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
+    </a>
+
+    <a href="upgrade.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="sparkles" class="w-5 h-5"></i> Upgrade
+    </a>
+
+    <a href="camp.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
+    </a>
+
+    <a href="admin.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="settings" class="w-5 h-5"></i> Admin
+    </a>
+
+    <a id="nav-chefe" href="chefe.html" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="crown" class="w-5 h-5"></i> Chefe
+    </a>
+  </nav>
+
+  <div class="shrink-0 p-4 border-t border-gray-100 bg-white">
+    <a href="perfil.html" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50 hover:bg-emerald-100 transition-colors">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-emerald-200/50 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden border border-emerald-300">
+          <img id="sidebar-avatar" src="" alt="" class="w-full h-full object-cover hidden">
+          <i id="sidebar-avatar-icon" data-lucide="user" class="w-4 h-4"></i>
+        </div>
+
+        <div>
+          <p id="user-role" class="text-sm font-bold">Meu Perfil</p>
+          <p id="user-email" class="text-[10px] opacity-80 truncate w-28">Configurações</p>
         </div>
       </div>
+    </a>
 
-      <nav class="p-4 space-y-1">
-        <a href="dashboard.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="house" class="w-5 h-5"></i> Dashboard
-        </a>
-        <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
-        </a>
-        <a href="membros.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="users" class="w-5 h-5"></i> Membros
-        </a>
-        <a href="lines.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
-          <i data-lucide="layers" class="w-5 h-5"></i> Lines
-        </a>
-        <a href="ajustes.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
-        </a>
-        <a href="upgrade.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="sparkles" class="w-5 h-5"></i> Upgrade
-        </a>
-        <a href="camp.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
-        </a>
-        <a href="admin.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="settings" class="w-5 h-5"></i> Admin
-        </a>
-        <a id="nav-chefe" href="chefe.html" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-          <i data-lucide="crown" class="w-5 h-5"></i> Chefe
-        </a>
-      </nav>
+    <button id="btn-logout" class="w-full mt-2 flex items-center justify-center gap-2 py-2 text-sm font-semibold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+      <i data-lucide="log-out" class="w-4 h-4"></i> Sair
+    </button>
+  </div>
+</aside>
 
-      
-      <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100">
-        <div class="flex items-center justify-between px-3 py-2">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm">A</div>
-            <div>
-              <p id="user-role" class="text-sm font-medium text-gray-700">Carregando...</p>
-              <p id="user-email" class="text-xs text-gray-400 truncate w-24">...</p>
-            </div>
-          </div>
-          <button id="btn-logout" class="p-2 text-gray-400 hover:text-red-500 transition-colors" title="Sair">
-            <i data-lucide="log-out" class="w-4 h-4"></i>
-          </button>
-        </div>
-      </div>
-    </aside>
-
-    <main class="flex-1 lg:ml-0">
+<main class="flex-1 min-w-0 lg:ml-72">
       <header class="sticky top-0 z-30 bg-white/70 backdrop-blur border-b border-gray-100">
         <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
           <div class="flex items-center gap-3">
