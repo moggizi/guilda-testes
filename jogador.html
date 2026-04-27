@@ -3,371 +3,214 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Jogador - Guilda HUB</title>
+  <title>Painel do Jogador - Guilda HUB</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script>
-    tailwind.config = { theme: { extend: { colors: { emerald: { 50:'#ecfdf5', 100:'#d1fae5', 200:'#a7f3d0', 400:'#34d399', 500:'#10b981', 600:'#059669', 700:'#047857'} } } } }
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            emerald: { 50:'#ecfdf5', 100:'#d1fae5', 200:'#a7f3d0', 400:'#34d399', 500:'#10b981', 600:'#059669', 700:'#047857' }
+          }
+        }
+      }
+    };
   </script>
   <link rel="stylesheet" href="./style.css" />
 </head>
-<body class="bg-gray-50 text-gray-900">
-  <div class="min-h-screen flex">
-    <!-- Sidebar -->
-    <aside id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 lg:static">
-      <div class="p-5 flex items-center gap-3">
-        <div class="h-10 w-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black">GH</div>
-        <div>
-          <div class="font-extrabold leading-tight">Guilda HUB</div>
-          <div class="text-xs text-gray-500">Acesso: <span class="font-bold">Jogador</span></div>
+<body class="bg-gray-50/80 text-gray-900">
+  <div class="flex min-h-screen">
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
+
+    <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
+      <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+        <div class="flex items-center gap-3">
+          <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav" onerror="this.src='https://via.placeholder.com/40'">
+          <div>
+            <h1 class="font-bold text-gray-900 text-lg leading-tight">Guilda e eventos</h1>
+            <p class="text-xs text-gray-400">Painel do Jogador</p>
+          </div>
         </div>
+        <button id="mobile-close-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500" type="button" aria-label="Fechar menu">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
       </div>
 
-      <nav class="px-3 pb-3">
-        <a href="jogador.html" class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-50 text-emerald-700 font-bold">
-          <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-          Dashboard
+      <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
+        <a href="jogador.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
+          <i data-lucide="gamepad-2" class="w-5 h-5"></i> Painel
+        </a>
+
+        <a href="eventos.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamentos
+        </a>
+
+        <a href="stats.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Minhas Stats
+        </a>
+
+        <a href="suporte.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="help-circle" class="w-5 h-5"></i> Suporte
         </a>
       </nav>
 
-      <div class="mt-auto p-4">
-        <div class="text-xs text-gray-500 mb-2">
-          Logado como: <span id="user-email" class="font-semibold text-gray-700"></span>
-        </div>
-        <button id="btn-logout" class="w-full px-4 py-3 rounded-2xl bg-gray-900 text-white font-bold hover:bg-black">
-          Sair
+      <div class="shrink-0 p-4 border-t border-gray-100 bg-white">
+        <a href="perfil.html" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50 hover:bg-emerald-100 transition-colors">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-8 h-8 shrink-0 rounded-full bg-emerald-200/50 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden border border-emerald-300">
+              <img id="sidebar-avatar" src="" alt="" class="w-full h-full object-cover hidden">
+              <i id="sidebar-avatar-icon" data-lucide="user" class="w-4 h-4"></i>
+            </div>
+            <div class="min-w-0">
+              <p id="user-role" class="text-sm font-bold truncate">Jogador</p>
+              <p id="user-email" class="text-[10px] opacity-80 truncate w-32">Carregando...</p>
+            </div>
+          </div>
+        </a>
+
+        <button id="btn-logout" class="w-full mt-2 flex items-center justify-center gap-2 py-2 text-sm font-semibold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors" type="button">
+          <i data-lucide="log-out" class="w-4 h-4"></i> Sair
         </button>
       </div>
     </aside>
 
-    <!-- Overlay + topbar -->
-    <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
-
-    <div class="flex-1 lg:ml-0">
-      <header class="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-gray-100">
-        <div class="mx-auto max-w-5xl px-4 py-4 flex items-center justify-between">
-          <button id="mobile-menu-btn" class="lg:hidden h-11 w-11 rounded-2xl bg-gray-100 flex items-center justify-center z-50">
-            <i data-lucide="menu" class="w-5 h-5"></i>
-          </button>
-
-          <div>
-            <div class="font-extrabold">Dashboard do Jogador</div>
-            <div class="text-xs text-gray-500">Leitura da sua guilda + busca por ID</div>
+    <main class="flex-1 min-w-0 relative flex flex-col lg:ml-72">
+      <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
+        <div class="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div class="flex items-center gap-3 min-w-0">
+            <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500" type="button" aria-label="Abrir menu">
+              <i data-lucide="menu" class="w-5 h-5"></i>
+            </button>
+            <div class="min-w-0">
+              <h1 class="text-lg font-bold text-gray-900 truncate">Painel do Jogador</h1>
+              <p class="text-xs text-gray-400 hidden sm:block">Área básica para acompanhar sua conta na Guilda HUB.</p>
+            </div>
           </div>
-
-          <div class="text-right">
-            <div id="guild-name" class="text-sm font-bold text-gray-900"></div>
-            <div class="text-xs text-gray-500">Jogador</div>
-          </div>
+          <a href="perfil.html" class="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-colors">
+            <i data-lucide="user" class="w-4 h-4"></i> Ver perfil
+          </a>
         </div>
       </header>
 
-      <main class="mx-auto max-w-5xl px-4 py-6 space-y-6">
-        <!-- Search -->
-        <section class="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-          <div class="flex flex-col sm:flex-row sm:items-end gap-3">
-            <div class="flex-1">
-              <label class="block text-xs text-gray-500 mb-1">Pesquisar membro por ID</label>
-              <input id="search-id" type="text" inputmode="numeric" placeholder="Digite o ID do jogador..."
-                class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
-              <div class="mt-2 text-xs text-gray-400">Ao digitar um ID válido, você verá os detalhes do membro e os demais membros da guilda.</div>
-            </div>
-            <button id="btn-clear" class="sm:w-40 px-4 py-3 rounded-2xl bg-gray-100 font-bold hover:bg-gray-200">
-              Limpar
-            </button>
-          </div>
-        </section>
+      <div class="flex-1 p-4 sm:p-6 max-w-6xl mx-auto w-full">
+        <div id="loading-state" class="flex flex-col items-center justify-center py-24">
+          <i data-lucide="loader-2" class="w-8 h-8 text-emerald-500 animate-spin mb-4"></i>
+          <p class="text-sm text-gray-500 font-medium">Carregando seu painel...</p>
+        </div>
 
-        <!-- Default dashboard -->
-        <section id="default-dashboard" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div class="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <div class="text-xs text-gray-500 mb-2">Total de membros</div>
-            <div id="stat-members" class="text-3xl font-black">—</div>
-          </div>
-          <div class="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <div class="text-xs text-gray-500 mb-2">Lines cadastradas</div>
-            <div id="stat-lines" class="text-3xl font-black">—</div>
-          </div>
-          <div class="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <div class="text-xs text-gray-500 mb-2">Guilda</div>
-            <div id="stat-guild" class="text-lg font-extrabold leading-snug">—</div>
-          </div>
-        </section>
-
-        <!-- Search result -->
-        <section id="result-box" class="hidden space-y-4">
-          <div class="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <div class="text-xs text-gray-500">Membro encontrado</div>
-                <div id="result-title" class="text-xl font-black">—</div>
+        <section id="player-dashboard" class="hidden space-y-6">
+          <div class="rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white p-6 sm:p-8 shadow-xl shadow-slate-900/10 overflow-hidden relative">
+            <div class="absolute -right-16 -top-16 w-48 h-48 rounded-full bg-emerald-400/20 blur-3xl"></div>
+            <div class="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+              <div class="flex items-center gap-4 min-w-0">
+                <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-white/10 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                  <img id="hero-avatar" src="" alt="" class="w-full h-full object-cover hidden">
+                  <i id="hero-avatar-icon" data-lucide="user-round" class="w-8 h-8 text-emerald-200"></i>
+                </div>
+                <div class="min-w-0">
+                  <p class="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300 mb-2">Conta de jogador</p>
+                  <h2 class="text-2xl sm:text-3xl font-black truncate">Olá, <span id="player-name">Jogador</span></h2>
+                  <p id="player-subtitle" class="text-sm text-slate-300 mt-1 truncate">Seu painel básico já está ativo.</p>
+                </div>
               </div>
-              <span class="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold">Somente leitura</span>
+
+              <div class="flex flex-col sm:flex-row gap-2 shrink-0">
+                <a href="eventos.html" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-500 text-white text-sm font-black hover:bg-emerald-600 transition-colors">
+                  <i data-lucide="search" class="w-4 h-4"></i> Procurar guilda
+                </a>
+                <a href="perfil.html" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white/10 text-white text-sm font-black border border-white/10 hover:bg-white/15 transition-colors">
+                  <i data-lucide="user-pen" class="w-4 h-4"></i> Editar perfil
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div class="lg:col-span-2 bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+              <div class="flex items-start justify-between gap-4 mb-5">
+                <div>
+                  <h3 class="text-base font-black text-gray-900 flex items-center gap-2">
+                    <i data-lucide="construction" class="w-5 h-5 text-emerald-500"></i> Área do jogador
+                  </h3>
+                  <p class="text-sm text-gray-500 mt-1">Essa parte ainda está em desenvolvimento.</p>
+                </div>
+                <span class="inline-flex items-center rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-3 py-1 text-xs font-black uppercase tracking-wide">Beta</span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="rounded-2xl bg-gray-50 border border-gray-100 p-4">
+                  <i data-lucide="bell-ring" class="w-5 h-5 text-emerald-500 mb-3"></i>
+                  <h4 class="text-sm font-black text-gray-900">Convites e avisos</h4>
+                  <p class="text-xs text-gray-500 mt-1 leading-relaxed">Em breve você poderá acompanhar convites de guilda e notificações importantes por aqui.</p>
+                </div>
+
+                <div class="rounded-2xl bg-gray-50 border border-gray-100 p-4">
+                  <i data-lucide="line-chart" class="w-5 h-5 text-emerald-500 mb-3"></i>
+                  <h4 class="text-sm font-black text-gray-900">Histórico do jogador</h4>
+                  <p class="text-xs text-gray-500 mt-1 leading-relaxed">A ideia é mostrar evolução, participação em recrutamentos e dados básicos do perfil.</p>
+                </div>
+              </div>
             </div>
 
-            <div id="result-details" class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm"></div>
+            <aside class="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+              <h3 class="text-base font-black text-gray-900 flex items-center gap-2 mb-5">
+                <i data-lucide="badge-check" class="w-5 h-5 text-emerald-500"></i> Sua conta
+              </h3>
+
+              <div class="space-y-4">
+                <div>
+                  <p class="text-[11px] font-black text-gray-400 uppercase tracking-wider">ID no jogo</p>
+                  <p id="player-game-id" class="text-sm font-bold text-gray-800 truncate">--</p>
+                </div>
+                <div>
+                  <p class="text-[11px] font-black text-gray-400 uppercase tracking-wider">E-mail</p>
+                  <p id="player-email" class="text-sm font-bold text-gray-800 truncate">--</p>
+                </div>
+                <div>
+                  <p class="text-[11px] font-black text-gray-400 uppercase tracking-wider">Tipo de conta</p>
+                  <p id="player-role" class="inline-flex mt-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-3 py-1 text-xs font-black uppercase tracking-wide">Jogador</p>
+                </div>
+                <div>
+                  <p class="text-[11px] font-black text-gray-400 uppercase tracking-wider">Criado em</p>
+                  <p id="player-created" class="text-sm font-bold text-gray-800 truncate">--</p>
+                </div>
+              </div>
+            </aside>
           </div>
 
-          <div class="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <div class="text-sm font-extrabold mb-3">Outros membros da guilda</div>
-            <ul id="result-members" class="divide-y divide-gray-100"></ul>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <a href="eventos.html" class="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all group">
+              <div class="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                <i data-lucide="users-round" class="w-5 h-5"></i>
+              </div>
+              <h3 class="text-sm font-black text-gray-900">Ver recrutamentos</h3>
+              <p class="text-xs text-gray-500 mt-1 leading-relaxed">Encontre guildas abertas e oportunidades para entrar em uma equipe.</p>
+            </a>
+
+            <a href="perfil.html" class="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all group">
+              <div class="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                <i data-lucide="user-round-cog" class="w-5 h-5"></i>
+              </div>
+              <h3 class="text-sm font-black text-gray-900">Completar perfil</h3>
+              <p class="text-xs text-gray-500 mt-1 leading-relaxed">Adicione foto, nick e bio para deixar seu perfil mais completo.</p>
+            </a>
+
+            <a href="suporte.html" class="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all group">
+              <div class="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                <i data-lucide="message-circle-question" class="w-5 h-5"></i>
+              </div>
+              <h3 class="text-sm font-black text-gray-900">Precisa de ajuda?</h3>
+              <p class="text-xs text-gray-500 mt-1 leading-relaxed">Acesse o suporte caso tenha problema com login, cadastro ou perfil.</p>
+            </a>
           </div>
         </section>
-
-        <!-- Footer -->
-        <footer class="text-center text-xs text-gray-400 py-6">
-          Guilda • HUB — acesso do Jogador (sem permissao de edicão)
-        </footer>
-      </main>
-    </div>
+      </div>
+    </main>
   </div>
 
-  <script type="module">
-    import { checkAuth, setupSidebar, initIcons, logout, showToast, db, getGuildContext } from "./logic.js";
-    import { collection, getDocs, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  <div id="toast-root" class="fixed bottom-4 right-4 z-[80] space-y-2"></div>
 
-    setupSidebar();
-    initIcons();
-    document.getElementById("btn-logout")?.addEventListener("click", logout);
-
-    const els = {
-      guildName: document.getElementById("guild-name"),
-      statMembers: document.getElementById("stat-members"),
-      statLines: document.getElementById("stat-lines"),
-      statGuild: document.getElementById("stat-guild"),
-      search: document.getElementById("search-id"),
-      btnClear: document.getElementById("btn-clear"),
-      defaultDash: document.getElementById("default-dashboard"),
-      resultBox: document.getElementById("result-box"),
-      resultTitle: document.getElementById("result-title"),
-      resultDetails: document.getElementById("result-details"),
-      resultMembers: document.getElementById("result-members")
-    };
-
-    let membersCache = [];
-    let linesCount = 0;
-
-    // Cache local (evita "piscar" e deixa a tela utilizável antes do Firestore responder)
-    const ctx0 = getGuildContext();
-    let gid0 = ctx0?.guildId ? String(ctx0.guildId) : "";
-    if (!gid0) {
-      try { gid0 = String(JSON.parse(localStorage.getItem("guildCtx_cache_v1") || "{}").guildId || ""); } catch (_) {}
-    }
-    const LS_STATS_KEY = gid0 ? `player_stats_${gid0}` : "player_stats_unknown";
-    const LS_MEMBERS_KEY = gid0 ? `player_members_${gid0}` : "player_members_unknown";
-
-    function hydrateFromCache() {
-      try {
-        // Nome da guilda já vem do cache do ctx (logic.js), então já renderiza header/estatística.
-        if (ctx0?.guildName) {
-          els.statGuild.textContent = String(ctx0.guildName);
-          if (els.guildName) els.guildName.textContent = String(ctx0.guildName);
-        } else if (ctx0?.guildId) {
-          els.statGuild.textContent = String(ctx0.guildId);
-          if (els.guildName) els.guildName.textContent = "Sua guilda";
-        }
-
-        const rawS = localStorage.getItem(LS_STATS_KEY);
-        if (rawS) {
-          const s = JSON.parse(rawS);
-          if (s && typeof s.membersCount !== 'undefined') els.statMembers.textContent = String(s.membersCount);
-          if (s && typeof s.linesCount !== 'undefined') els.statLines.textContent = String(s.linesCount);
-          if (s && s.guildName) {
-            els.statGuild.textContent = String(s.guildName);
-            if (els.guildName) els.guildName.textContent = String(s.guildName);
-          }
-        }
-
-        const rawM = localStorage.getItem(LS_MEMBERS_KEY);
-        if (rawM) {
-          const m = JSON.parse(rawM);
-          if (Array.isArray(m)) {
-            membersCache = m;
-          }
-        }
-      } catch (_) {}
-    }
-
-    hydrateFromCache();
-
-    function setDefaultView() {
-      els.resultBox.classList.add("hidden");
-      els.defaultDash.classList.remove("hidden");
-    }
-
-    function setResultView() {
-      els.defaultDash.classList.add("hidden");
-      els.resultBox.classList.remove("hidden");
-    }
-
-    function row(label, value) {
-      const div = document.createElement("div");
-      div.className = "bg-gray-50 border border-gray-100 rounded-2xl p-3";
-      div.innerHTML = \`<div class="text-xs text-gray-500">\${label}</div><div class="font-bold break-words">\${value ?? "—"}</div>\`;
-      return div;
-    }
-
-    async function waitForGuildContext() {
-      // Em alguns dispositivos, o onAuthStateChanged pode demorar um pouco.
-      // Esta função garante que temos guildId antes de consultar Firestore.
-      for (let i = 0; i < 30; i++) {
-        const ctx = getGuildContext();
-        if (ctx?.guildId) return ctx;
-        await new Promise(r => setTimeout(r, 50));
-      }
-      return getGuildContext();
-    }
-
-    async function loadReadOnlyStats() {
-      const ctx = await waitForGuildContext();
-      const gid = ctx?.guildId;
-      if (!gid) throw new Error("Guilda não resolvida. Faça login novamente.");
-
-      // membros
-      const snapM = await getDocs(collection(db, "guildas", gid, "membros"));
-      membersCache = [];
-      snapM.forEach(d => {
-        const data = d.data() || {};
-        // Guarda só o necessário para busca/visão (evita cache gigante)
-        membersCache.push({
-          id: d.id,
-          nick: data.nick ?? "",
-          visibleId: data.visibleId ?? "",
-          whatsapp: data.whatsapp ?? "",
-          guildWar: !!data.guildWar,
-          guildWarMeta: data.guildWarMeta ?? "",
-          weeklyMeta: !!data.weeklyMeta,
-          weeklyMetaValue: data.weeklyMetaValue ?? "",
-          joinDate: data.joinDate ?? ""
-        });
-      });
-      membersCache.sort((a,b)=> String(a.nick||"").localeCompare(String(b.nick||"")));
-
-      // lines
-      const snapL = await getDocs(collection(db, "guildas", gid, "lines"));
-      linesCount = snapL.size;
-
-      els.statMembers.textContent = String(membersCache.length);
-      els.statLines.textContent = String(linesCount);
-      els.statGuild.textContent = String(ctx.guildName || gid);
-      if (els.guildName) els.guildName.textContent = String(ctx.guildName || "Sua guilda");
-
-      // Atualiza cache local
-      try {
-        localStorage.setItem(LS_STATS_KEY, JSON.stringify({
-          guildName: ctx.guildName || null,
-          membersCount: membersCache.length,
-          linesCount,
-          ts: Date.now()
-        }));
-        localStorage.setItem(LS_MEMBERS_KEY, JSON.stringify(membersCache));
-      } catch (_) {}
-    }
-
-    function renderOtherMembers(highlightVisibleId) {
-      const ul = els.resultMembers;
-      ul.innerHTML = "";
-      const max = 30;
-      const list = membersCache.slice(0, max);
-
-      list.forEach(m => {
-        const li = document.createElement("li");
-        li.className = "py-3 flex items-center justify-between gap-3";
-        const vid = (m.visibleId ?? "").toString();
-        const nick = (m.nick ?? "—").toString();
-        li.innerHTML = \`
-          <div>
-            <div class="font-bold text-gray-900">\${nick}</div>
-            <div class="text-xs text-gray-500">ID: \${vid || "—"}</div>
-          </div>
-          \${highlightVisibleId && vid && vid === highlightVisibleId ? '<span class="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold">Você</span>' : ''}
-        \`;
-        ul.appendChild(li);
-      });
-
-      if (membersCache.length > max) {
-        const more = document.createElement("div");
-        more.className = "pt-3 text-xs text-gray-400";
-        more.textContent = \`Mostrando \${max} de \${membersCache.length} membros.\`;
-        ul.appendChild(more);
-      }
-    }
-
-    function renderMemberResult(m) {
-      const vid = (m.visibleId ?? "—").toString();
-      const nick = (m.nick ?? "—").toString();
-
-      els.resultTitle.textContent = \`\${nick} • ID \${vid}\`;
-      els.resultDetails.innerHTML = "";
-      els.resultDetails.appendChild(row("Guilda", getGuildContext().guildName || getGuildContext().guildId));
-      els.resultDetails.appendChild(row("WhatsApp", m.whatsapp || "—"));
-      els.resultDetails.appendChild(row("Guerra de Guilda", (m.guildWar ? "✅ Sim" : "❌ Não")));
-      els.resultDetails.appendChild(row("Meta Guerra", m.guildWarMeta ?? "—"));
-      els.resultDetails.appendChild(row("Meta semanal", m.weeklyMeta ? "✅ Sim" : "❌ Não"));
-      els.resultDetails.appendChild(row("Valor meta", m.weeklyMetaValue ?? "—"));
-      els.resultDetails.appendChild(row("Entrada", m.joinDate ?? "—"));
-
-      renderOtherMembers(vid);
-      setResultView();
-    }
-
-    let timer = null;
-    async function handleSearch() {
-      const raw = (els.search.value || "").trim();
-      if (!raw) {
-        setDefaultView();
-        return;
-      }
-
-      // 1) tenta no cache (mais rápido)
-      const found = membersCache.find(x => String(x.visibleId ?? "").trim() === raw);
-      if (found) {
-        renderMemberResult(found);
-        return;
-      }
-
-      // 2) fallback: consulta (caso cache esteja desatualizado)
-      try {
-        const gid = getGuildContext().guildId;
-        const q = query(collection(db, "guildas", gid, "membros"), where("visibleId", "==", raw), limit(1));
-        const snap = await getDocs(q);
-        if (snap.empty) {
-          showToast("error", "Nenhum membro encontrado com esse ID.");
-          return;
-        }
-        const d = snap.docs[0];
-        renderMemberResult({ id: d.id, ...d.data() });
-      } catch (e) {
-        console.error(e);
-        showToast("error", e?.message || "Erro ao pesquisar.");
-      }
-    }
-
-    els.btnClear?.addEventListener("click", () => {
-      els.search.value = "";
-      setDefaultView();
-    });
-
-    els.search?.addEventListener("input", () => {
-      clearTimeout(timer);
-      timer = setTimeout(handleSearch, 250);
-    });
-
-    // Auth + boot
-    checkAuth().then(async (user) => {
-      if (!user) return;
-      showToast("success", "Login OK");
-
-      // Mostra algo imediatamente (sem depender do Firestore)
-      setDefaultView();
-
-      try {
-        await loadReadOnlyStats();
-      } catch (e) {
-        console.error(e);
-        showToast("error", e?.message || "Erro ao carregar dados.");
-      }
-    });
-  </script>
+  <script type="module" src="./jogador1.js"></script>
 </body>
 </html>
