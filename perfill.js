@@ -1,5 +1,4 @@
 import {
-  getFirestore,
   doc,
   getDoc,
   setDoc,
@@ -13,6 +12,91 @@ import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast,
 
 const qs = (id) => document.getElementById(id);
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
+const normalizeEmail = (v) => String(v ?? '').trim().toLowerCase();
+const isNumericDocId = (id) => /^\d+$/.test(String(id || ''));
+
+function sameEmail(a, b) {
+  const ea = normalizeEmail(a);
+  const eb = normalizeEmail(b);
+  return !!ea && !!eb && ea === eb;
+}
+
+function snapToProfile(snap) {
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+function profileBelongsToCurrentUser(data, uid, email) {
+  if (!data) return false;
+
+  return (
+    data.uid === uid ||
+    sameEmail(data.email, email) ||
+    sameEmail(data.playerEmail, email)
+  );
+}
+
+async function queryUsersByField(field, value) {
+  const clean = String(value || '').trim();
+  if (!clean) return [];
+
+  const q = query(collection(db, 'users'), where(field, '==', clean));
+  const snap = await getDocs(q);
+
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function findProfilesForCurrentUser(uid, email) {
+  const found = new Map();
+
+  function add(profile) {
+    if (profile && profile.id) found.set(profile.id, profile);
+  }
+
+  function addMany(list) {
+    list.forEach(add);
+  }
+
+  // 1. Documento antigo pelo UID do Auth: /users/{auth.uid}
+  const authDocSnap = await getDoc(doc(db, 'users', uid));
+  const authDoc = snapToProfile(authDocSnap);
+  add(authDoc);
+
+  // 2. Se o documento antigo já aponta para um Game ID migrado
+  const migratedId = normalizeDigits(
+    authDoc?.gameIdMigrated ||
+    authDoc?.gameId ||
+    authDoc?.id ||
+    ''
+  );
+
+  if (migratedId) {
+    const migratedSnap = await getDoc(doc(db, 'users', migratedId));
+    add(snapToProfile(migratedSnap));
+  }
+
+  // 3. Busca por UID
+  addMany(await queryUsersByField('uid', uid));
+
+  // 4. Busca por e-mail. Alguns registros antigos podem estar com caixa diferente.
+  const rawEmail = String(email || '').trim();
+  const lowerEmail = normalizeEmail(email);
+
+  addMany(await queryUsersByField('email', rawEmail));
+  if (lowerEmail && lowerEmail !== rawEmail) {
+    addMany(await queryUsersByField('email', lowerEmail));
+  }
+
+  // 5. Fallback para campo antigo/player
+  addMany(await queryUsersByField('playerEmail', rawEmail));
+  if (lowerEmail && lowerEmail !== rawEmail) {
+    addMany(await queryUsersByField('playerEmail', lowerEmail));
+  }
+
+  return {
+    authDoc,
+    profiles: Array.from(found.values())
+  };
+}
 
 const els = {
   loading: qs('loading-state'),
@@ -44,7 +128,7 @@ let currentUserProfileId = null;
 let currentBase64Photo = '';
 
 // --- Helpers de Imagem (Compressão < 1MB) ---
-function dataUrlSizeBytes(dataUrl='') {
+function dataUrlSizeBytes(dataUrl = '') {
   if (!dataUrl || !dataUrl.includes(',')) return 0;
   const base64 = dataUrl.split(',')[1] || '';
   const padding = (base64.match(/=*$/)?.[0]?.length) || 0;
@@ -69,7 +153,7 @@ async function compressImageToBase64(file, maxBytes = 900 * 1024) {
   const img = await loadImageFromFile(file);
   let width = img.width || 0;
   let height = img.height || 0;
-  const maxDim = 800; // Reduzindo proporção pra perfil (geralmente foto quadrada pequena)
+  const maxDim = 800;
   
   if (width > maxDim || height > maxDim) {
     const scale = Math.min(maxDim / width, maxDim / height);
@@ -78,18 +162,18 @@ async function compressImageToBase64(file, maxBytes = 900 * 1024) {
   }
   
   const canvas = document.createElement('canvas');
-  // Cortar quadrado perfeito para perfil
   const size = Math.min(width, height);
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) throw new Error('Canvas indisponível.');
   
-  let quality = 0.88, output = '', attempts = 0;
+  let quality = 0.88;
+  let output = '';
+  let attempts = 0;
   
   while (attempts < 12) {
     ctx.clearRect(0, 0, size, size);
-    // Centraliza a imagem no quadrado
     const offsetX = (width - size) / 2;
     const offsetY = (height - size) / 2;
     ctx.drawImage(img, offsetX, offsetY, size, size, 0, 0, size, size);
@@ -101,25 +185,34 @@ async function compressImageToBase64(file, maxBytes = 900 * 1024) {
     quality -= 0.1;
     attempts += 1;
   }
-  return output; // Retorna o mais comprimido possível
+
+  return output;
 }
 
 // --- Funções de UI ---
 function setPhotoUI(base64Str) {
   currentBase64Photo = base64Str || '';
+
   if (currentBase64Photo) {
     els.preview.src = currentBase64Photo;
     els.preview.classList.remove('hidden');
     els.placeholder.classList.add('hidden');
-    if(els.sidebarAvatar && els.sidebarIcon) {
-        els.sidebarAvatar.src = currentBase64Photo;
-        els.sidebarAvatar.classList.remove('hidden');
-        els.sidebarIcon.classList.add('hidden');
+
+    if (els.sidebarAvatar && els.sidebarIcon) {
+      els.sidebarAvatar.src = currentBase64Photo;
+      els.sidebarAvatar.classList.remove('hidden');
+      els.sidebarIcon.classList.add('hidden');
     }
   } else {
     els.preview.src = '';
     els.preview.classList.add('hidden');
     els.placeholder.classList.remove('hidden');
+
+    if (els.sidebarAvatar && els.sidebarIcon) {
+      els.sidebarAvatar.src = '';
+      els.sidebarAvatar.classList.add('hidden');
+      els.sidebarIcon.classList.remove('hidden');
+    }
   }
 }
 
@@ -137,70 +230,133 @@ function getRoleStyle(role) {
   return 'bg-slate-100 text-slate-700 ring-1 ring-slate-300';
 }
 
+function setLoadingVisible(isVisible) {
+  els.loading?.classList.toggle('hidden', !isVisible);
+}
+
+function setMainFormVisible(isVisible) {
+  els.formMain?.classList.toggle('hidden', !isVisible);
+}
+
+function setCreateModalVisible(isVisible) {
+  els.modalCreate?.classList.toggle('hidden', !isVisible);
+  els.modalCreate?.classList.toggle('flex', isVisible);
+}
+
+function resetCreateBtn() {
+  els.btnConfirm.disabled = false;
+  els.btnConfirm.textContent = 'Criar meu Perfil';
+}
+
+function getOldDataFromModal() {
+  try {
+    return JSON.parse(els.formCreate.dataset.oldData || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+function buildBridgePayload(gameProfileDoc, oldAuthDocData = {}) {
+  const uid = auth.currentUser.uid;
+  const email = auth.currentUser.email || '';
+
+  return {
+    uid,
+    email: email || gameProfileDoc.email || oldAuthDocData.email || '',
+    id: gameProfileDoc.id,
+    gameIdMigrated: gameProfileDoc.id,
+
+    nick: gameProfileDoc.nick || oldAuthDocData.nick || '',
+    foto: gameProfileDoc.foto || oldAuthDocData.foto || '',
+    cat: gameProfileDoc.cat || gameProfileDoc.bio || oldAuthDocData.cat || oldAuthDocData.bio || '',
+
+    guildId: gameProfileDoc.guildId || oldAuthDocData.guildId || '',
+    guilda: gameProfileDoc.guilda || oldAuthDocData.guilda || '',
+    role: gameProfileDoc.role || oldAuthDocData.role || 'Membro',
+
+    updatedAt: serverTimestamp()
+  };
+}
+
 // --- Lógica Principal ---
 async function loadProfile() {
   const uid = auth.currentUser.uid;
+  const email = auth.currentUser.email || '';
   
   try {
-    // 1. Busca perfis onde uid == auth.uid
-    const q = query(collection(db, 'users'), where('uid', '==', uid));
-    const snap = await getDocs(q);
+    const { authDoc, profiles } = await findProfilesForCurrentUser(uid, email);
 
-    
-    let gameProfileDoc = null;
-    let oldAuthDocData = null; // Backup das infos antigas caso precise migrar
+    let gameProfileDoc = profiles.find(p =>
+      isNumericDocId(p.id) &&
+      profileBelongsToCurrentUser(p, uid, email)
+    );
 
-    snap.docs.forEach(d => {
-      // Se o ID do documento for APENAS números, consideramos como perfil migrado (ID do jogo)
-      if (/^\d+$/.test(d.id)) {
-        gameProfileDoc = { id: d.id, ...d.data() };
-      } else {
-        // Doc antigo (geralmente tem o mesmo ID do Auth contendo letras)
-        if (d.id === uid) {
-          oldAuthDocData = d.data();
-        }
-      }
-    });
+    const oldAuthDocData = authDoc && !isNumericDocId(authDoc.id)
+      ? authDoc
+      : null;
 
     if (gameProfileDoc) {
-      // PERFIL JÁ EXISTE E ESTÁ MIGRADO
       currentUserProfileId = gameProfileDoc.id;
+
+      const patch = {};
+
+      if (!gameProfileDoc.uid) patch.uid = uid;
+      if (!gameProfileDoc.email && email) patch.email = email;
+      if (!gameProfileDoc.id) patch.id = gameProfileDoc.id;
+
+      if (Object.keys(patch).length > 0) {
+        await setDoc(doc(db, 'users', gameProfileDoc.id), {
+          ...patch,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        gameProfileDoc = {
+          ...gameProfileDoc,
+          ...patch
+        };
+      }
+
+      await setDoc(doc(db, 'users', uid), buildBridgePayload(gameProfileDoc, oldAuthDocData || {}), { merge: true });
+
       fillProfileForm(gameProfileDoc);
-      els.loading.classList.add('hidden');
-      els.formMain.classList.remove('hidden');
+
+      setLoadingVisible(false);
+      setCreateModalVisible(false);
+      setMainFormVisible(true);
       initIcons();
-    } else {
-      // NÃO TEM PERFIL NUMÉRICO -> Forçar criação/migração
-      els.loading.classList.add('hidden');
-      els.modalCreate.classList.remove('hidden');
-      els.modalCreate.classList.add('flex');
-      
-      // Guarda temporariamente os dados antigos no form do modal para usar no submit
-      els.formCreate.dataset.oldData = JSON.stringify(oldAuthDocData || {});
-      initIcons();
+      return;
     }
+
+    // Não existe perfil oficial numérico confiável para este usuário.
+    // Guarda os dados antigos, se existirem, para criação/migração no submit.
+    els.formCreate.dataset.oldData = JSON.stringify(oldAuthDocData || {});
+
+    setLoadingVisible(false);
+    setMainFormVisible(false);
+    setCreateModalVisible(true);
+    initIcons();
   } catch (error) {
     console.error(error);
     showToast('error', 'Erro ao carregar os dados do perfil.');
+    setLoadingVisible(false);
   }
 }
 
 function fillProfileForm(data) {
   const ctx = getGuildContext() || {};
   
-  // O contexto da sessão (logic.js) é a fonte mais atual para Guilda e Role
   const actualGuildName = ctx.guildName || data.guilda || 'Sem guilda';
   const actualRole = ctx.role || data.role || 'Membro';
 
   els.inputNick.value = data.nick || '';
-  els.inputBio.value = data.cat || data.bio || ''; // No seu doc antigo "cat" parecia ser bio
+  els.inputBio.value = data.cat || data.bio || '';
   els.bioCounter.textContent = `${els.inputBio.value.length}/100`;
   
   setPhotoUI(data.foto || '');
 
   els.viewGameId.value = data.id || currentUserProfileId || '--';
   els.viewUid.value = data.uid || '--';
-  els.viewEmail.value = data.email || '--';
+  els.viewEmail.value = data.email || auth.currentUser.email || '--';
   els.viewGuild.value = actualGuildName;
   
   els.viewRole.textContent = actualRole;
@@ -213,6 +369,8 @@ function fillProfileForm(data) {
 async function handleCreateProfile(e) {
   e.preventDefault();
   
+  const uid = auth.currentUser.uid;
+  const email = auth.currentUser.email || '';
   const rawId = els.inputNewGameId.value;
   const gameId = normalizeDigits(rawId);
   
@@ -221,70 +379,69 @@ async function handleCreateProfile(e) {
     return;
   }
 
-  // Previne duplo clique
   els.btnConfirm.disabled = true;
   els.btnConfirm.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Criando...`;
   initIcons();
 
   try {
-    // Verifica se esse GameID já existe na base
     const existingRef = doc(db, 'users', gameId);
     const checkSnap = await getDoc(existingRef);
-    if (checkSnap.exists()) {
+    const existingData = checkSnap.exists() ? checkSnap.data() : null;
+
+    if (existingData && !profileBelongsToCurrentUser(existingData, uid, email)) {
       showToast('error', 'Esse ID de jogo já está vinculado a outro perfil.');
       resetCreateBtn();
       return;
     }
 
-    // Pega os dados antigos recuperados na hora do load
-    const oldData = JSON.parse(els.formCreate.dataset.oldData || '{}');
+    const oldData = getOldDataFromModal();
     const ctx = getGuildContext() || {};
-    
-    // Constrói payload do novo perfil (mantendo tudo que já tinha, adicionando o ID)
-    const payload = {
+    const baseData = {
       ...oldData,
-      id: gameId, // Id definitivo
-      uid: auth.currentUser.uid, // Mantém a amarração com a autenticação
-      email: auth.currentUser.email || oldData.email || '',
-      guildId: ctx.guildId || oldData.guildId || '',
-      guilda: ctx.guildName || oldData.guilda || '',
-      role: ctx.role || oldData.role || 'Membro',
-      nick: oldData.nick || '',
-      foto: oldData.foto || '',
-      cat: oldData.cat || '', // A bio antiga
-      createdAt: oldData.createdAt || serverTimestamp(),
+      ...(existingData || {})
+    };
+
+    const payload = {
+      ...baseData,
+
+      id: gameId,
+      uid,
+      email: email || baseData.email || '',
+
+      guildId: ctx.guildId || baseData.guildId || '',
+      guilda: ctx.guildName || baseData.guilda || '',
+      role: ctx.role || baseData.role || 'Membro',
+
+      nick: baseData.nick || '',
+      foto: baseData.foto || '',
+      cat: baseData.cat || baseData.bio || '',
+
+      createdAt: baseData.createdAt || serverTimestamp(),
       updatedAt: serverTimestamp()
     };
 
-    // Cria o documento oficial
-    await setDoc(existingRef, payload);
-    
-    // Atualiza o documento "antigo" (do Auth UID) para não quebrar o checkAuth do logic.js.
-    // Assim logic.js continua achando o guildId e o role na raiz
-    await setDoc(doc(db, 'users', auth.currentUser.uid), {
+    await setDoc(existingRef, payload, { merge: true });
+
+    await setDoc(doc(db, 'users', uid), {
       ...payload,
-      gameIdMigrated: gameId // Flag indicando que foi migrado
+      gameIdMigrated: gameId
     }, { merge: true });
 
-    showToast('success', 'Perfil criado com sucesso!');
-    
-    els.modalCreate.classList.add('hidden');
-    els.modalCreate.classList.remove('flex');
-    
-    // Recarrega a tela para ler o novo doc
-    els.loading.classList.remove('hidden');
-    await loadProfile();
+    currentUserProfileId = gameId;
 
+    showToast('success', existingData ? 'Perfil migrado com sucesso!' : 'Perfil criado com sucesso!');
+
+    setCreateModalVisible(false);
+    setLoadingVisible(false);
+    setMainFormVisible(true);
+
+    fillProfileForm(payload);
+    initIcons();
   } catch (error) {
     console.error(error);
-    showToast('error', 'Não foi possível criar o perfil.');
+    showToast('error', 'Não foi possível criar ou migrar o perfil.');
     resetCreateBtn();
   }
-}
-
-function resetCreateBtn() {
-  els.btnConfirm.disabled = false;
-  els.btnConfirm.textContent = 'Criar meu Perfil';
 }
 
 // Lógica de Salvar Edição
@@ -310,16 +467,13 @@ async function handleSaveProfile(e) {
 
   try {
     const payload = {
-      nick: nick,
-      cat: bio, // Mantendo o nome de campo "cat" como no seu DB original
+      nick,
+      cat: bio,
       foto: currentBase64Photo,
       updatedAt: serverTimestamp()
     };
 
-    // 1. Salva no documento oficial do perfil numérico
     await setDoc(doc(db, 'users', currentUserProfileId), payload, { merge: true });
-    
-    // 2. Replica pro doc do Auth UID pro sistema geral ter o nick/foto atualizado
     await setDoc(doc(db, 'users', auth.currentUser.uid), payload, { merge: true });
 
     showToast('success', 'Perfil atualizado com sucesso!');
@@ -350,6 +504,7 @@ function bindEvents() {
   els.inputFoto.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     try {
       showToast('info', 'Processando imagem...');
       const base64 = await compressImageToBase64(file, 900 * 1024);
@@ -369,6 +524,7 @@ function bindEvents() {
 (async function boot() {
   bindEvents();
   initIcons();
+
   const user = await checkAuth(true);
   if (!user) return;
   
