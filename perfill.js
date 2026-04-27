@@ -143,11 +143,9 @@ async function loadProfile() {
   
   try {
     // 1. Busca perfis onde uid == auth.uid
-    const q = query(collection(db, 'users'), where('uid', '==', uid));
-    const snap = await getDocs(q);
-
     const q = query(collection(db, 'users'), where('email', '==', email));
     const snap = await getDocs(q);
+
     
     let gameProfileDoc = null;
     let oldAuthDocData = null; // Backup das infos antigas caso precise migrar
