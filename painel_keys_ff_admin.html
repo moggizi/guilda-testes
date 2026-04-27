@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GuildaHub - Painel de Keys</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --card-2: #111827;
+      --border: #334155;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --brand: #22c55e;
+      --brand-2: #16a34a;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --ok: #10b981;
+      --shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: linear-gradient(180deg, #0b1120 0%, var(--bg) 100%); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, input { font: inherit; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 24px; }
+
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: blur(10px);
+      background: rgba(15, 23, 42, 0.78);
+      border-bottom: 1px solid rgba(51, 65, 85, 0.85);
+    }
+    .topbar-inner {
+      max-width: 1180px; margin: 0 auto; padding: 16px 24px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .2px;
+      font-size: 24px;
+    }
+    .brand-badge {
+      width: 14px; height: 14px; border-radius: 999px; background: var(--brand);
+      box-shadow: 0 0 18px rgba(34,197,94,.7);
+    }
+    .brand span:last-child { color: var(--brand); }
+
+    .btn {
+      border: 0; border-radius: 12px; padding: 12px 16px; cursor: pointer; font-weight: 700;
+      transition: .18s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
+    .btn-brand { background: linear-gradient(180deg, var(--brand) 0%, var(--brand-2) 100%); color: white; }
+    .btn-ghost { background: rgba(30, 41, 59, .8); color: var(--text); border: 1px solid var(--border); }
+    .btn-danger { background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%); color: white; }
+
+    .grid { display: grid; gap: 20px; }
+    .grid-2 { grid-template-columns: 1.1fr .9fr; }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    .card {
+      background: linear-gradient(180deg, rgba(30,41,59,.95) 0%, rgba(17,24,39,.98) 100%);
+      border: 1px solid rgba(51,65,85,.9);
+      border-radius: 24px; padding: 22px; box-shadow: var(--shadow);
+    }
+    .card-title { font-size: 22px; font-weight: 800; margin: 0 0 6px; }
+    .card-subtitle { color: var(--muted); margin: 0; }
+
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px;
+    }
+
+    .field { display: grid; gap: 8px; margin-bottom: 14px; }
+    .label { color: var(--muted); font-size: 14px; font-weight: 700; }
+    .input {
+      width: 100%; background: rgba(15,23,42,.95); color: var(--text);
+      border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    .input:focus { border-color: rgba(34,197,94,.9); box-shadow: 0 0 0 4px rgba(34,197,94,.12); }
+
+    .inline { display: flex; gap: 12px; flex-wrap: wrap; }
+    .inline > * { flex: 1; min-width: 160px; }
+
+    .hero {
+      padding: 28px 0 18px;
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+    }
+    .hero h1 { margin: 0 0 10px; font-size: 40px; line-height: 1.02; }
+    .hero p { margin: 0; color: var(--muted); max-width: 760px; font-size: 17px; }
+
+    .stats { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0,1fr)); margin-top: 8px; }
+    .stat {
+      background: linear-gradient(180deg, rgba(30,41,59,.95) 0%, rgba(17,24,39,.98) 100%);
+      border: 1px solid rgba(51,65,85,.9);
+      border-radius: 22px; padding: 18px;
+    }
+    .stat-kicker { color: var(--muted); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+    .stat-value { font-size: 28px; font-weight: 900; margin-top: 8px; }
+
+    .login-shell {
+      min-height: calc(100vh - 82px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 28px 16px 40px;
+    }
+    .login-card { width: 100%; max-width: 470px; }
+
+    .keys-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+    .key-card {
+      background: rgba(15,23,42,.88); border: 1px solid rgba(51,65,85,.9); border-radius: 20px; padding: 18px;
+      display: grid; gap: 14px;
+    }
+    .key-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .key-name {
+      font-weight: 900; font-size: 16px; line-height: 1.3; word-break: break-all;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 800; white-space: nowrap;
+      border: 1px solid transparent;
+    }
+    .badge-ok { color: #d1fae5; background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); }
+    .badge-warning { color: #fef3c7; background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.35); }
+    .badge-danger { color: #fecaca; background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); }
+    .meta { display: grid; gap: 8px; color: var(--muted); font-size: 14px; }
+    .meta strong { color: var(--text); font-weight: 700; }
+    .empty {
+      border: 1px dashed rgba(51,65,85,.95); border-radius: 20px; padding: 26px; text-align: center; color: var(--muted);
+      background: rgba(15,23,42,.5);
+    }
+
+    .hint {
+      margin-top: 12px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(51,65,85,.85);
+      background: rgba(15,23,42,.7); color: var(--muted); font-size: 14px;
+    }
+    .message {
+      margin-top: 12px; padding: 12px 14px; border-radius: 14px; font-weight: 700; display: none;
+    }
+    .message.show { display: block; }
+    .message.error { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); color: #fecaca; }
+    .message.success { background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.35); color: #d1fae5; }
+
+    .muted { color: var(--muted); }
+    .hidden { display: none !important; }
+
+    @media (max-width: 980px) {
+      .grid-2, .keys-grid, .grid-3, .stats { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-badge"></div>
+        <div>Guilda<span>Hub</span> Keys</div>
+      </div>
+      <button id="logoutBtn" class="btn btn-ghost hidden">Sair</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="loginView" class="login-shell">
+      <div class="card login-card">
+        <div class="section-head">
+          <div>
+            <h2 class="card-title">Entrar no painel</h2>
+            <p class="card-subtitle">Sem cadastro. Apenas login administrativo.</p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="email">E-mail</label>
+          <input id="email" class="input" type="email" placeholder="seuemail@exemplo.com" autocomplete="username" />
+        </div>
+
+        <div class="field">
+          <label class="label" for="password">Senha</label>
+          <input id="password" class="input" type="password" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+
+        <button id="loginBtn" class="btn btn-brand" style="width:100%;">Entrar</button>
+
+        <div id="loginMessage" class="message"></div>
+        <div class="hint">Crie antes um usuário no Firebase Authentication com e-mail e senha. O painel só faz login.</div>
+      </div>
+    </section>
+
+    <section id="panelView" class="hidden">
+      <div class="wrap">
+        <div class="hero">
+          <div>
+            <h1>Painel de Keys da API</h1>
+            <p>Crie novas keys, veja o tempo restante de cada uma, identifique as expiradas e exclua o que não precisar mais. Tudo em uma única tela.</p>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-kicker">Total</div>
+            <div id="statTotal" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-kicker">Ativas</div>
+            <div id="statAtivas" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-kicker">Expiram em até 7 dias</div>
+            <div id="statUrgentes" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-kicker">Expiradas</div>
+            <div id="statExpiradas" class="stat-value">0</div>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top:20px; align-items:start;">
+          <div class="card">
+            <div class="section-head">
+              <div>
+                <h2 class="card-title">Criar nova key</h2>
+                <p class="card-subtitle">Você pode digitar manualmente ou gerar automaticamente.</p>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label" for="keyInput">Key</label>
+              <div class="inline">
+                <input id="keyInput" class="input" type="text" placeholder="HUB-XXXXXXXXX" />
+                <button id="generateKeyBtn" class="btn btn-ghost" type="button">Gerar key</button>
+              </div>
+            </div>
+
+            <div class="inline">
+              <div class="field">
+                <label class="label" for="daysInput">Dias para expirar</label>
+                <input id="daysInput" class="input" type="number" min="1" value="30" />
+              </div>
+              <div class="field">
+                <label class="label" for="customDateInput">Ou data e hora exata</label>
+                <input id="customDateInput" class="input" type="datetime-local" />
+              </div>
+            </div>
+
+            <div class="inline">
+              <button class="btn btn-ghost quick-days" data-days="7" type="button">+7 dias</button>
+              <button class="btn btn-ghost quick-days" data-days="30" type="button">+30 dias</button>
+              <button class="btn btn-ghost quick-days" data-days="90" type="button">+90 dias</button>
+            </div>
+
+            <button id="createKeyBtn" class="btn btn-brand" style="width:100%; margin-top:8px;">Salvar key</button>
+            <div id="panelMessage" class="message"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <div>
+                <h2 class="card-title">Resumo rápido</h2>
+                <p class="card-subtitle">Situação atual da coleção <strong>tempo</strong>.</p>
+              </div>
+            </div>
+            <div class="meta" id="summaryMeta">
+              <div><strong>Usuário logado:</strong> <span id="currentUserEmail">-</span></div>
+              <div><strong>Leitura em tempo real:</strong> Ativada</div>
+              <div><strong>Coleção:</strong> tempo</div>
+              <div><strong>Documento:</strong> a própria key</div>
+              <div><strong>Campos salvos:</strong> keypass, criacao, expira</div>
+            </div>
+            <div class="hint" style="margin-top:16px;">Dica: se você preencher a data exata, ela tem prioridade. Se deixar vazia, o painel usa a quantidade de dias.</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div class="section-head">
+            <div>
+              <h2 class="card-title">Keys cadastradas</h2>
+              <p class="card-subtitle">Mostra o que existe, quando foi criado e quanto falta para expirar.</p>
+            </div>
+          </div>
+
+          <div id="keysEmpty" class="empty">Nenhuma key encontrada.</div>
+          <div id="keysList" class="keys-grid hidden"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js';
+    import {
+      getAuth,
+      signInWithEmailAndPassword,
+      signOut,
+      onAuthStateChanged,
+      setPersistence,
+      browserLocalPersistence
+    } from 'https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js';
+    import {
+      getFirestore,
+      collection,
+      doc,
+      setDoc,
+      deleteDoc,
+      onSnapshot,
+      query,
+      orderBy,
+      serverTimestamp,
+      Timestamp
+    } from 'https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAZQv-ImckNQW1Pb1AMfQ8f5rtKLU6VijU",
+      authDomain: "api-ff-guildahub.firebaseapp.com",
+      projectId: "api-ff-guildahub",
+      storageBucket: "api-ff-guildahub.firebasestorage.app",
+      messagingSenderId: "98820381088",
+      appId: "1:98820381088:web:21da613e35c33096c12cc5",
+      measurementId: "G-5RBH2Q2NKG"
+    };
+
+    // Opcional: coloque e-mails autorizados aqui para reforçar o painel na interface.
+    // O ideal é reforçar isso também nas regras do Firestore.
+    const ADMIN_EMAILS = [
+      'SEU_EMAIL_AQUI'
+    ];
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const loginView = document.getElementById('loginView');
+    const panelView = document.getElementById('panelView');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const loginBtn = document.getElementById('loginBtn');
+    const createKeyBtn = document.getElementById('createKeyBtn');
+    const generateKeyBtn = document.getElementById('generateKeyBtn');
+    const loginMessage = document.getElementById('loginMessage');
+    const panelMessage = document.getElementById('panelMessage');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const keyInput = document.getElementById('keyInput');
+    const daysInput = document.getElementById('daysInput');
+    const customDateInput = document.getElementById('customDateInput');
+    const currentUserEmail = document.getElementById('currentUserEmail');
+    const keysList = document.getElementById('keysList');
+    const keysEmpty = document.getElementById('keysEmpty');
+    const statTotal = document.getElementById('statTotal');
+    const statAtivas = document.getElementById('statAtivas');
+    const statUrgentes = document.getElementById('statUrgentes');
+    const statExpiradas = document.getElementById('statExpiradas');
+
+    let unsubscribeKeys = null;
+
+    function showMessage(el, text, type = 'error') {
+      el.textContent = text;
+      el.className = `message show ${type}`;
+    }
+
+    function hideMessage(el) {
+      el.textContent = '';
+      el.className = 'message';
+    }
+
+    function formatDate(value) {
+      if (!value) return '-';
+      const date = value instanceof Date ? value : (typeof value?.toDate === 'function' ? value.toDate() : new Date(value));
+      if (Number.isNaN(date.getTime())) return '-';
+      return new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'long',
+        timeStyle: 'short'
+      }).format(date);
+    }
+
+    function getExpirationInfo(expiraValue) {
+      const now = new Date();
+      const expira = expiraValue instanceof Date ? expiraValue : (typeof expiraValue?.toDate === 'function' ? expiraValue.toDate() : new Date(expiraValue));
+      if (Number.isNaN(expira.getTime())) {
+        return { label: 'Data inválida', badge: 'badge-danger', expired: true, daysLeft: null, sortDays: -99999 };
+      }
+
+      const diffMs = expira.getTime() - now.getTime();
+      const daysLeft = Math.ceil(diffMs / 86400000);
+
+      if (diffMs < 0) {
+        const expiredDays = Math.abs(daysLeft);
+        return {
+          label: expiredDays <= 1 ? 'Expirada' : `Expirada há ${expiredDays} dias`,
+          badge: 'badge-danger',
+          expired: true,
+          daysLeft,
+          sortDays: daysLeft
+        };
+      }
+
+      if (daysLeft <= 7) {
+        return {
+          label: daysLeft <= 1 ? 'Expira hoje/amanhã' : `Expira em ${daysLeft} dias`,
+          badge: 'badge-warning',
+          expired: false,
+          daysLeft,
+          sortDays: daysLeft
+        };
+      }
+
+      return {
+        label: `Faltam ${daysLeft} dias`,
+        badge: 'badge-ok',
+        expired: false,
+        daysLeft,
+        sortDays: daysLeft
+      };
+    }
+
+    function randomChunk(size) {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let out = '';
+      for (let i = 0; i < size; i++) {
+        out += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return out;
+    }
+
+    function generateKey() {
+      return `HUB-${randomChunk(4)}${randomChunk(4)}${randomChunk(4)}`;
+    }
+
+    function updateStats(items) {
+      const total = items.length;
+      const expiradas = items.filter(item => item.expInfo.expired).length;
+      const ativas = total - expiradas;
+      const urgentes = items.filter(item => !item.expInfo.expired && item.expInfo.daysLeft !== null && item.expInfo.daysLeft <= 7).length;
+
+      statTotal.textContent = total;
+      statAtivas.textContent = ativas;
+      statUrgentes.textContent = urgentes;
+      statExpiradas.textContent = expiradas;
+    }
+
+    function renderKeys(snapshot) {
+      const items = snapshot.docs.map(docSnap => {
+        const data = docSnap.data() || {};
+        const expInfo = getExpirationInfo(data.expira);
+        return {
+          id: docSnap.id,
+          keypass: data.keypass || docSnap.id,
+          criacao: data.criacao || null,
+          expira: data.expira || null,
+          expInfo
+        };
+      }).sort((a, b) => a.expInfo.sortDays - b.expInfo.sortDays);
+
+      updateStats(items);
+
+      if (!items.length) {
+        keysEmpty.classList.remove('hidden');
+        keysList.classList.add('hidden');
+        keysList.innerHTML = '';
+        return;
+      }
+
+      keysEmpty.classList.add('hidden');
+      keysList.classList.remove('hidden');
+
+      keysList.innerHTML = items.map(item => `
+        <div class="key-card">
+          <div class="key-top">
+            <div class="key-name">${item.keypass}</div>
+            <div class="badge ${item.expInfo.badge}">${item.expInfo.label}</div>
+          </div>
+          <div class="meta">
+            <div><strong>Criada em:</strong> ${formatDate(item.criacao)}</div>
+            <div><strong>Expira em:</strong> ${formatDate(item.expira)}</div>
+            <div><strong>ID do documento:</strong> ${item.id}</div>
+          </div>
+          <button class="btn btn-danger delete-key-btn" data-key="${item.id}">Excluir</button>
+        </div>
+      `).join('');
+
+      document.querySelectorAll('.delete-key-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const key = btn.dataset.key;
+          const ok = confirm(`Excluir a key ${key}?`);
+          if (!ok) return;
+
+          try {
+            await deleteDoc(doc(db, 'tempo', key));
+            showMessage(panelMessage, 'Key excluída com sucesso.', 'success');
+          } catch (error) {
+            showMessage(panelMessage, error?.message || 'Erro ao excluir a key.', 'error');
+          }
+        });
+      });
+    }
+
+    async function saveKey() {
+      hideMessage(panelMessage);
+
+      let key = keyInput.value.trim().toUpperCase();
+      const days = Number(daysInput.value || 0);
+      const customDateValue = customDateInput.value;
+
+      if (!key) {
+        key = generateKey();
+        keyInput.value = key;
+      }
+
+      let expiraDate;
+
+      if (customDateValue) {
+        expiraDate = new Date(customDateValue);
+      } else {
+        if (!days || days < 1) {
+          showMessage(panelMessage, 'Informe pelo menos 1 dia ou escolha uma data e hora exata.', 'error');
+          return;
+        }
+        expiraDate = new Date(Date.now() + (days * 86400000));
+      }
+
+      if (Number.isNaN(expiraDate.getTime())) {
+        showMessage(panelMessage, 'Data de expiração inválida.', 'error');
+        return;
+      }
+
+      createKeyBtn.disabled = true;
+      createKeyBtn.textContent = 'Salvando...';
+
+      try {
+        await setDoc(doc(db, 'tempo', key), {
+          keypass: key,
+          criacao: serverTimestamp(),
+          expira: Timestamp.fromDate(expiraDate)
+        }, { merge: true });
+
+        showMessage(panelMessage, 'Key salva com sucesso.', 'success');
+        customDateInput.value = '';
+      } catch (error) {
+        showMessage(panelMessage, error?.message || 'Erro ao salvar a key.', 'error');
+      } finally {
+        createKeyBtn.disabled = false;
+        createKeyBtn.textContent = 'Salvar key';
+      }
+    }
+
+    async function login() {
+      hideMessage(loginMessage);
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!email || !password) {
+        showMessage(loginMessage, 'Preencha e-mail e senha.', 'error');
+        return;
+      }
+
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Entrando...';
+
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (error) {
+        showMessage(loginMessage, 'Login inválido. Verifique e-mail e senha.', 'error');
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Entrar';
+      }
+    }
+
+    function bindRealtimeKeys() {
+      if (unsubscribeKeys) unsubscribeKeys();
+      const q = query(collection(db, 'tempo'), orderBy('expira', 'asc'));
+      unsubscribeKeys = onSnapshot(q, renderKeys, (error) => {
+        showMessage(panelMessage, error?.message || 'Erro ao carregar as keys.', 'error');
+      });
+    }
+
+    async function logout() {
+      await signOut(auth);
+      hideMessage(panelMessage);
+      hideMessage(loginMessage);
+    }
+
+    document.querySelectorAll('.quick-days').forEach(btn => {
+      btn.addEventListener('click', () => {
+        daysInput.value = btn.dataset.days;
+        customDateInput.value = '';
+      });
+    });
+
+    generateKeyBtn.addEventListener('click', () => {
+      keyInput.value = generateKey();
+    });
+
+    createKeyBtn.addEventListener('click', saveKey);
+    loginBtn.addEventListener('click', login);
+    logoutBtn.addEventListener('click', logout);
+    passwordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+    emailInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+
+    await setPersistence(auth, browserLocalPersistence);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        if (unsubscribeKeys) unsubscribeKeys();
+        logoutBtn.classList.add('hidden');
+        panelView.classList.add('hidden');
+        loginView.classList.remove('hidden');
+        currentUserEmail.textContent = '-';
+        return;
+      }
+
+      const email = user.email || '';
+      const enforceEmailList = !ADMIN_EMAILS.includes('SEU_EMAIL_AQUI');
+
+      if (enforceEmailList && !ADMIN_EMAILS.includes(email)) {
+        await signOut(auth);
+        showMessage(loginMessage, 'Este usuário não está autorizado para o painel.', 'error');
+        return;
+      }
+
+      currentUserEmail.textContent = email || '-';
+      logoutBtn.classList.remove('hidden');
+      loginView.classList.add('hidden');
+      panelView.classList.remove('hidden');
+      bindRealtimeKeys();
+    });
+  </script>
+</body>
+</html>

@@ -69,6 +69,12 @@
       "source": "/suporte",
       "destination": "/suporte.html"
     },
+
+    {
+      "source": "/painel",
+      "destination": "/painel_keys_ff_admin.html"
+    },
+    
     {
       "source": "/perfil-guilda",
       "destination": "/perfil-guilda.html"

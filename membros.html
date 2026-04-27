@@ -30,6 +30,14 @@
     .pm-option.pm-selected .pm-circle{border-color:#10b981;background:#10b981}
     .pm-option.pm-selected .pm-circle:after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(45deg)}
 
+    /* playMode counter dropdown */
+    .counter-option{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.85rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;transition:.15s;text-align:left}
+    .counter-option:hover{background:#f9fafb}
+    .counter-option.counter-active{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12);background:#ecfdf5}
+    .counter-option-label{font-size:.875rem;font-weight:600;color:#374151}
+    .counter-option-count{min-width:2.2rem;padding:.25rem .55rem;border-radius:999px;background:#f3f4f6;color:#6b7280;font-size:.75rem;font-weight:700;text-align:center}
+    .counter-option.counter-active .counter-option-count{background:#10b981;color:#fff}
+
     /* Quick Edit specific fixes */
     .animate-in { animation: fadeIn 0.2s ease-out forwards; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -127,6 +135,16 @@
                 <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
               </button>
               <div id="guild-slot-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
+            </div>
+
+            <!-- Contador/Filtro por Função -->
+            <div class="relative">
+              <button id="btn-playmode-counter" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+                <i data-lucide="shield" class="w-4 h-4 text-emerald-500"></i>
+                <span id="playmode-filter-label" class="hidden sm:inline">Função</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
+              </button>
+              <div id="playmode-counter-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
             </div>
 
             <!-- Botão Edição Rápida Novo -->
@@ -447,6 +465,7 @@
     // ==========================================
     let membersCache = [];
     let currentFilter = 'all';
+    let currentPlayModeFilter = 'all';
     let memberTag = null;
     let guildGoals = { metaGG: null, metaHonra: null };
     let hasTagManualOverride = false;
@@ -761,26 +780,180 @@
     // ==========================================
     // FUNÇÕES DE RENDERIZAÇÃO
     // ==========================================
+    const PLAY_MODE_FILTER_OPTIONS = [
+      { key: 'all', label: 'Todos' },
+      { key: 'rush', label: 'Rush' },
+      { key: 'full-gas', label: 'Full Gás' },
+      { key: 'curandeiro', label: 'Curandeiro' },
+      { key: 'fuzileiro', label: 'Fuzileiro' },
+      { key: 'suporte', label: 'Suporte' }
+    ];
+
+    function normalizePlayModeValue(value) {
+      const raw = (value == null ? '' : String(value))
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .trim();
+
+      if (!raw) return '';
+      if (raw === 'rush') return 'rush';
+      if (raw === 'full gas' || raw === 'fullgas') return 'full-gas';
+      if (raw === 'curandeiro') return 'curandeiro';
+      if (raw === 'fuzileiro') return 'fuzileiro';
+      if (raw === 'suporte') return 'suporte';
+      return raw.replace(/\s+/g, '-');
+    }
+
+    function getMemberPlayModes(member) {
+      const raw = member?.playMode;
+      const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+      return list
+        .map(normalizePlayModeValue)
+        .filter(Boolean);
+    }
+
+    function getPlayModeLabel(value) {
+      const normalized = normalizePlayModeValue(value);
+      if (normalized === 'rush') return 'Rush';
+      if (normalized === 'full-gas') return 'Full Gás';
+      if (normalized === 'curandeiro') return 'Curandeiro';
+      if (normalized === 'fuzileiro') return 'Fuzileiro';
+      if (normalized === 'suporte') return 'Suporte';
+      return '';
+    }
+
+    function getMemberPlayModeLabels(member) {
+      const labels = getMemberPlayModes(member)
+        .map(getPlayModeLabel)
+        .filter(Boolean);
+      return [...new Set(labels)];
+    }
+
+    function renderMemberPlayModeLine(member) {
+      const labels = getMemberPlayModeLabels(member);
+      if (!labels.length) return '';
+
+      return `
+        <div class="mt-2 flex justify-end">
+          <span class="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold text-emerald-700">${labels.join(' • ')}</span>
+        </div>
+      `;
+    }
+
+    function matchesCurrentMainFilter(member) {
+      if (currentFilter === 'with-tag') return !!member.hasTag;
+      if (currentFilter === 'no-tag') return !member.hasTag;
+      if (currentFilter === 'with-gg') return !!member.guildWar;
+      if (currentFilter === 'no-gg') return !member.guildWar;
+      if (currentFilter === 'with-weekly') return !!member.weeklyMeta;
+      if (currentFilter === 'no-weekly') return !member.weeklyMeta;
+      if (currentFilter === 'all-met') return !!(member.weeklyMeta && member.guildWar);
+      return true;
+    }
+
+    function matchesCurrentPlayModeFilter(member) {
+      if (currentPlayModeFilter === 'all') return true;
+      return getMemberPlayModes(member).includes(currentPlayModeFilter);
+    }
+
+    function getVisibleMembers({ ignorePlayMode = false } = {}) {
+      const termo = document.getElementById('search-input')?.value.toLowerCase() || '';
+
+      return membersCache.filter((member) => {
+        const matchBusca = (member.nick && member.nick.toLowerCase().includes(termo)) ||
+                           (member.visibleId && String(member.visibleId).includes(termo));
+        if (!matchBusca) return false;
+        if (!matchesCurrentMainFilter(member)) return false;
+        if (!ignorePlayMode && !matchesCurrentPlayModeFilter(member)) return false;
+        return true;
+      });
+    }
+
+    function updatePlayModeFilterButtonLabel() {
+      const labelEl = document.getElementById('playmode-filter-label');
+      const buttonEl = document.getElementById('btn-playmode-counter');
+      const active = PLAY_MODE_FILTER_OPTIONS.find(option => option.key === currentPlayModeFilter);
+      const label = currentPlayModeFilter === 'all' ? 'Função' : (active ? active.label : 'Função');
+
+      if (labelEl) labelEl.innerText = label;
+      if (buttonEl) {
+        buttonEl.classList.toggle('border-emerald-300', currentPlayModeFilter !== 'all');
+        buttonEl.classList.toggle('bg-emerald-50', currentPlayModeFilter !== 'all');
+      }
+    }
+
+    function renderPlayModeCounterDropdown() {
+      const dropdown = document.getElementById('playmode-counter-dropdown');
+      if (!dropdown) return;
+
+      const baseMembers = getVisibleMembers({ ignorePlayMode: true });
+      dropdown.innerHTML = PLAY_MODE_FILTER_OPTIONS.map((option) => {
+        const count = option.key === 'all'
+          ? baseMembers.length
+          : baseMembers.filter(member => getMemberPlayModes(member).includes(option.key)).length;
+        const active = currentPlayModeFilter === option.key;
+
+        return `
+          <button
+            type="button"
+            class="counter-option ${active ? 'counter-active' : ''}"
+            data-playmode-filter-option="${option.key}"
+          >
+            <span class="counter-option-label">${option.label} - ${count}</span>
+            <span class="counter-option-count">${count}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function positionPlayModeCounterDropdown() {
+      const dropdown = document.getElementById('playmode-counter-dropdown');
+      if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+      dropdown.style.left = '';
+      dropdown.style.right = '0';
+      dropdown.style.transform = 'translateX(0)';
+
+      requestAnimationFrame(() => {
+        const rect = dropdown.getBoundingClientRect();
+        const margin = 12;
+        const maxRight = window.innerWidth - margin;
+        let shiftX = 0;
+
+        if (rect.right > maxRight) shiftX -= (rect.right - maxRight);
+        if ((rect.left + shiftX) < margin) shiftX += (margin - (rect.left + shiftX));
+
+        dropdown.style.transform = `translateX(${shiftX}px)`;
+      });
+    }
+
+    function refreshPlayModeCounterUi() {
+      updatePlayModeFilterButtonLabel();
+      renderPlayModeCounterDropdown();
+      positionPlayModeCounterDropdown();
+      initIcons();
+    }
+
+    window.togglePlayModeCounterDropdown = () => {
+      refreshPlayModeCounterUi();
+      document.getElementById('playmode-counter-dropdown')?.classList.toggle('hidden');
+      positionPlayModeCounterDropdown();
+    };
+
+    window.applyPlayModeFilter = (filterKey) => {
+      currentPlayModeFilter = filterKey || 'all';
+      document.getElementById('playmode-counter-dropdown')?.classList.add('hidden');
+      refreshPlayModeCounterUi();
+      applyFiltersAndRender();
+    };
+
     window.applyFiltersAndRender = function() {
       const termo = document.getElementById('search-input')?.value.toLowerCase() || '';
-      
-      const filtrados = membersCache.filter(m => {
-        const matchBusca = (m.nick && m.nick.toLowerCase().includes(termo)) || 
-                           (m.visibleId && String(m.visibleId).includes(termo));
-        if (!matchBusca) return false;
+      const filtrados = getVisibleMembers();
 
-        if (currentFilter === 'with-tag') return m.hasTag;
-        if (currentFilter === 'no-tag') return !m.hasTag;
-        if (currentFilter === 'with-gg') return m.guildWar;
-        if (currentFilter === 'no-gg') return !m.guildWar;
-        if (currentFilter === 'with-weekly') return m.weeklyMeta;
-        if (currentFilter === 'no-weekly') return !m.weeklyMeta;
-        if (currentFilter === 'all-met') return (m.weeklyMeta && m.guildWar);
-
-        return true; 
-      });
-
-      renderList(filtrados, termo !== '' || currentFilter !== 'all');
+      renderList(filtrados, termo !== '' || currentFilter !== 'all' || currentPlayModeFilter !== 'all');
+      refreshPlayModeCounterUi();
     };
 
     function badge(active, icon) {
@@ -812,20 +985,23 @@
 
       el.innerHTML = list.map(m => `
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
-          <div class="w-full flex items-center gap-3 p-5 cursor-pointer" onclick="toggleDetails('${m.id}')">
-            <div class="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
-              ${m.nick ? m.nick.charAt(0).toUpperCase() : '?'}
+          <div class="w-full p-5 cursor-pointer" onclick="toggleDetails('${m.id}')">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
+                ${m.nick ? m.nick.charAt(0).toUpperCase() : '?'}
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="font-semibold text-gray-900 text-sm truncate">${m.nick || 'Sem Nick'}</p>
+                <p class="text-xs text-gray-400">ID: ${m.visibleId || '?'}</p>
+              </div>
+              <div class="flex gap-1.5">
+                ${badge(m.guildWar, 'swords')}
+                ${badge(m.weeklyMeta, 'target')}
+                ${badge(m.hasTag, 'tag')}
+              </div>
+              <div class="text-gray-300"><i data-lucide="chevron-down" class="w-5 h-5"></i></div>
             </div>
-            <div class="flex-1 min-w-0">
-              <p class="font-semibold text-gray-900 text-sm truncate">${m.nick || 'Sem Nick'}</p>
-              <p class="text-xs text-gray-400">ID: ${m.visibleId || '?'}</p>
-            </div>
-            <div class="flex gap-1.5">
-              ${badge(m.guildWar, 'swords')}
-              ${badge(m.weeklyMeta, 'target')}
-              ${badge(m.hasTag, 'tag')}
-            </div>
-            <div class="text-gray-300"><i data-lucide="chevron-down" class="w-5 h-5"></i></div>
+            ${renderMemberPlayModeLine(m)}
           </div>
           <div id="details-${m.id}" class="hidden border-t border-gray-100 p-4 bg-gray-50/50 space-y-3">
             <div class="grid grid-cols-2 gap-3">
@@ -1168,6 +1344,12 @@
       const guildDropdown = document.getElementById('guild-slot-dropdown');
       if (guildBtn && guildDropdown && !guildBtn.contains(e.target) && !guildDropdown.contains(e.target)) {
         guildDropdown.classList.add('hidden');
+      }
+
+      const playModeBtn = document.getElementById('btn-playmode-counter');
+      const playModeDropdown = document.getElementById('playmode-counter-dropdown');
+      if (playModeBtn && playModeDropdown && !playModeBtn.contains(e.target) && !playModeDropdown.contains(e.target)) {
+        playModeDropdown.classList.add('hidden');
       }
     });
 
@@ -1638,6 +1820,17 @@
       __positionGuildSlotDropdown();
     });
 
+    document.getElementById('btn-playmode-counter')?.addEventListener('click', () => {
+      window.togglePlayModeCounterDropdown();
+    });
+
+    document.getElementById('playmode-counter-dropdown')?.addEventListener('click', (e) => {
+      const option = e.target.closest('[data-playmode-filter-option]');
+      if (!option) return;
+      const filterKey = String(option.getAttribute('data-playmode-filter-option') || 'all');
+      window.applyPlayModeFilter(filterKey);
+    });
+
     document.getElementById('guild-slot-dropdown')?.addEventListener('click', async (e) => {
       const option = e.target.closest('[data-guild-slot-option]');
       if (!option) return;
@@ -1651,6 +1844,7 @@
 
     window.addEventListener('resize', () => {
       __positionGuildSlotDropdown();
+      positionPlayModeCounterDropdown();
     });
 
     // ==========================================
@@ -1670,6 +1864,7 @@
       __writeSelectedGuildSlot(currentGuildSlot);
       __syncGuildSlotButtonState();
       __renderGuildSlotDropdown();
+      refreshPlayModeCounterUi();
 
       memberTag = await getMemberTagConfig();
       __updateCurrentMemberTag();

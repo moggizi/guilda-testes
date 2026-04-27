@@ -278,6 +278,14 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
     }
+    
+    // Função para formatar o modo de jogo recebido
+    function formatPlayMode(playMode) {
+      if (!playMode) return '';
+      const arr = Array.isArray(playMode) ? playMode : [playMode];
+      const valid = arr.map(v => (v || '').trim()).filter(Boolean);
+      return valid.join(' • ');
+    }
 
     function parseLooseNumber(v) {
       if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
@@ -339,32 +347,29 @@
     }
 
     function getMemberPointBreakdown(memberRef) {
-  const m = resolveMemberObj(memberRef) || {};
-  
-  // Adicionado no início da lista os parâmetros idênticos aos exibidos no modal:
-  // 'guildWarMeta' e 'guildWar' para GG, 'weeklyMetaValue' e 'weeklyMeta' para Honra.
-  const ggKeys = ['guildWarMeta', 'guerraMeta', 'guildWar', 'guerra', 'pontosGG','pontosGg','ggPoints','pontos_gg','pontuacaoGG','pontuacaoGg','guerraGuilda','guerraDeGuilda','pontosGuilda','pontosGuerra','guildPoints','scoreGG','ggAtual','totalGG'];
-  const honraKeys = ['weeklyMetaValue', 'metaSemanalValor', 'weeklyMeta', 'metaSemanal', 'pontosHonra','pontoshonra','honraPoints','pontos_honra','pontuacaoHonra','honraAtual','scoreHonra','totalHonra','honra'];
-  
-  let gg = readFirstNumericField(m, ggKeys);
-  let honra = readFirstNumericField(m, honraKeys);
+      const m = resolveMemberObj(memberRef) || {};
+      
+      const ggKeys = ['guildWarMeta', 'guerraMeta', 'guildWar', 'guerra', 'pontosGG','pontosGg','ggPoints','pontos_gg','pontuacaoGG','pontuacaoGg','guerraGuilda','guerraDeGuilda','pontosGuilda','pontosGuerra','guildPoints','scoreGG','ggAtual','totalGG'];
+      const honraKeys = ['weeklyMetaValue', 'metaSemanalValor', 'weeklyMeta', 'metaSemanal', 'pontosHonra','pontoshonra','honraPoints','pontos_honra','pontuacaoHonra','honraAtual','scoreHonra','totalHonra','honra'];
+      
+      let gg = readFirstNumericField(m, ggKeys);
+      let honra = readFirstNumericField(m, honraKeys);
 
-  if (gg == null) gg = readNumericByKeyHint(m, 'gg');
-  if (honra == null) honra = readNumericByKeyHint(m, 'honra');
+      if (gg == null) gg = readNumericByKeyHint(m, 'gg');
+      if (honra == null) honra = readNumericByKeyHint(m, 'honra');
 
-  // Fallbacks extras para garantir a busca se o nome da chave tiver apenas 'war' ou 'meta'
-  if (gg == null) gg = readNumericByKeyHint(m, 'guerra') || readNumericByKeyHint(m, 'war');
-  if (honra == null) honra = readNumericByKeyHint(m, 'meta');
+      if (gg == null) gg = readNumericByKeyHint(m, 'guerra') || readNumericByKeyHint(m, 'war');
+      if (honra == null) honra = readNumericByKeyHint(m, 'meta');
 
-  gg = parseLooseNumber(gg);
-  honra = parseLooseNumber(honra);
+      gg = parseLooseNumber(gg);
+      honra = parseLooseNumber(honra);
 
-  return {
-    gg,
-    honra,
-    total: gg + honra
-  };
-}
+      return {
+        gg,
+        honra,
+        total: gg + honra
+      };
+    }
 
     function getLineMemberRefs(line) {
       const ids = uniq([
@@ -482,6 +487,7 @@
         weeklyMeta: m.weeklyMeta ?? null,
         weeklyMetaValue: (m.weeklyMetaValue || '').toString(),
         hasTag: m.hasTag ?? null,
+        playMode: m.playMode ?? null,
         pontosGG: points.gg,
         pontosHonra: points.honra
       };
@@ -579,12 +585,16 @@
                   const mp = getMemberPointBreakdown(m);
                   const memberActive = currentSortMode === 'gg' ? mp.gg : currentSortMode === 'honra' ? mp.honra : mp.total;
                   const memberPointsLabel = currentSortMode === 'gg' ? 'GG' : currentSortMode === 'honra' ? 'Honra' : 'Total';
+                  const pmText = formatPlayMode(m.playMode);
                   return `
                   <button class="w-full text-left bg-white rounded-2xl border border-gray-100 p-3 flex items-center gap-3 hover:bg-gray-50 transition-colors" onclick="openMemberView('${m.id}')">
-                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center text-white font-bold text-xs">${escapeHtml((m.nick||'?').charAt(0).toUpperCase())}</div>
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center shrink-0 text-white font-bold text-xs">${escapeHtml((m.nick||'?').charAt(0).toUpperCase())}</div>
                     <div class="flex-1 min-w-0">
                       <p class="text-sm font-semibold text-gray-900 truncate">${escapeHtml(m.nick || 'Sem Nick')}</p>
-                      <p class="text-xs text-gray-400 truncate">ID: ${escapeHtml(m.visibleId || m.id || '-')}</p>
+                      <div class="flex items-center gap-1.5 mt-0.5">
+                        <p class="text-[11px] text-gray-400 truncate">ID: ${escapeHtml(m.visibleId || m.id || '-')}</p>
+                        ${pmText ? `<span class="shrink-0 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[9px] font-bold uppercase tracking-wide">${escapeHtml(pmText)}</span>` : ''}
+                      </div>
                     </div>
                     <div class="text-right shrink-0">
                       <p class="text-xs font-extrabold text-emerald-700">${formatPoints(memberActive)}</p>
@@ -804,15 +814,17 @@
       picker.innerHTML = `<option value="">Selecione um membro...</option>` + available
         .map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.nick || 'Sem Nick')} • ID: ${escapeHtml(m.visibleId || m.id)}</option>`).join('');
 
-      optionsBox.innerHTML = available.length ? available.map(m => `
+      optionsBox.innerHTML = available.length ? available.map(m => {
+        const pmText = formatPlayMode(m.playMode);
+        return `
         <button type="button" class="w-full flex items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-3 text-left hover:border-emerald-100 hover:bg-emerald-50/60 transition-colors" onclick="pickMemberOption('${escapeHtml(m.id)}')">
           <span class="min-w-0">
             <span class="block text-sm font-semibold text-gray-800 truncate">${escapeHtml(m.nick || 'Sem Nick')}</span>
-            <span class="block text-xs text-gray-400 truncate">ID: ${escapeHtml(m.visibleId || m.id)}</span>
+            <span class="block text-xs text-gray-400 truncate">ID: ${escapeHtml(m.visibleId || m.id)}${pmText ? ` <span class="text-emerald-600 font-medium ml-1">• ${escapeHtml(pmText)}</span>` : ''}</span>
           </span>
           <span class="text-emerald-600 text-xs font-bold">Selecionar</span>
         </button>
-      `).join('') : `<div class="px-3 py-4 text-center text-sm text-gray-400">Nenhum membro disponível.</div>`;
+      `}).join('') : `<div class="px-3 py-4 text-center text-sm text-gray-400">Nenhum membro disponível.</div>`;
 
       picker.value = '';
       updateMemberPickerLabel();
@@ -1137,6 +1149,8 @@
         return;
       }
       const snap = mapMemberSnap(m);
+      const pmText = formatPlayMode(snap.playMode);
+      
       const body = document.getElementById('member-view-body');
       body.innerHTML = `
         <div class="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
@@ -1144,7 +1158,10 @@
             <div class="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center text-white font-bold">${(snap.nick||'?').charAt(0).toUpperCase()}</div>
             <div class="min-w-0">
               <p class="text-base font-extrabold text-gray-900 truncate">${snap.nick || 'Sem Nick'}</p>
-              <p class="text-xs text-gray-400">ID: ${snap.visibleId || snap.id || '-'}</p>
+              <div class="flex items-center gap-2 mt-0.5">
+                <p class="text-xs text-gray-400">ID: ${snap.visibleId || snap.id || '-'}</p>
+                ${pmText ? `<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wide">${escapeHtml(pmText)}</span>` : ''}
+              </div>
             </div>
           </div>
 
