@@ -41,6 +41,113 @@ const formatDateBR = (value) => {
   return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
 };
 const escapeHtml = (str) => String(str ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
+const palavrasBloqueioDireto = [
+  "arrombado",
+  "arrombada",
+  "babaca",
+  "bosta",
+  "buceta",
+  "caralho",
+  "corno",
+  "corna",
+  "cu",
+  "cuzão",
+  "cuzao",
+  "desgraçado",
+  "desgracado",
+  "desgraçada",
+  "desgracada",
+  "fdp",
+  "filho da puta",
+  "filha da puta",
+  "foda-se",
+  "fodase",
+  "idiota",
+  "imbecil",
+  "lixo",
+  "otário",
+  "otario",
+  "otária",
+  "otaria",
+  "pau no cu",
+  "porra",
+  "puta",
+  "puto",
+  "putaria",
+  "retardado",
+  "retardada",
+  "vagabundo",
+  "vagabunda",
+  "vai se foder",
+  "vai tomar no cu",
+  "vsf",
+  "vtmnc",
+  "boiola",
+  "bicha",
+  "traveco",
+  "aleijado",
+  "doente mental",
+  "autista",
+  "mongol",
+  "mongoloide",
+  "boquete",
+  "gozar",
+  "gozada",
+  "gozei",
+  "masturbação",
+  "masturbacao",
+  "punheta",
+  "sexo explícito",
+  "sexo explicito",
+  "nude",
+  "nudes",
+  "pelado",
+  "pelada",
+  "pornô",
+  "porno",
+  "pornografia",
+  "xvideos",
+  "onlyfans",
+  "hitler",
+  "maconha",
+  "cocaína",
+  "cocaina"
+];
+const textoImproprioMensagem = 'Esse campo contém uma palavra imprópria. Remova antes de salvar.';
+function normalizarTextoFiltro(texto) {
+  return String(texto || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[@4]/g, 'a')
+    .replace(/[3]/g, 'e')
+    .replace(/[1|]/g, 'i')
+    .replace(/[0]/g, 'o')
+    .replace(/[5$]/g, 's')
+    .replace(/[7]/g, 't')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function escaparRegexFiltro(texto) {
+  return String(texto || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+function encontrarPalavraImpropria(texto) {
+  const textoNormalizado = ` ${normalizarTextoFiltro(texto)} `;
+  if (!textoNormalizado.trim()) return '';
+  return palavrasBloqueioDireto.find((palavra) => {
+    const palavraNormalizada = normalizarTextoFiltro(palavra);
+    if (!palavraNormalizada) return false;
+    const palavraRegex = escaparRegexFiltro(palavraNormalizada).replace(/\s+/g, '\\s+');
+    return new RegExp(`\\s${palavraRegex}\\s`, 'i').test(textoNormalizado);
+  }) || '';
+}
+function validarTextoPermitido(valor, nomeCampo = 'campo') {
+  const palavraEncontrada = encontrarPalavraImpropria(valor);
+  if (!palavraEncontrada) return true;
+  showToast('error', `${textoImproprioMensagem} Campo: ${nomeCampo}.`);
+  return false;
+}
 const getCheckedValues = (name) => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(el => el.value);
 const setCheckedValues = (name, values=[]) => {
   const wanted = new Set(values || []);
@@ -625,9 +732,13 @@ function bootManagementMode() {
     const requestPlayMode = Array.isArray(item.roles)
       ? item.roles.map(v => String(v || '').trim()).filter(Boolean)
       : [];
+    const requestNick = String(item.nick || item.nickname || item.name || item.nome || '').trim() || 'Sem nick';
+    if (encontrarPalavraImpropria(requestNick)) {
+      throw new Error('O nick do pedido contém palavra imprópria. Recuse ou peça para o jogador enviar novamente.');
+    }
     const payload = {
       visibleId: String(item.id || '').trim(),
-      nick: String(item.nick || item.nickname || item.name || item.nome || '').trim() || 'Sem nick',
+      nick: requestNick,
       whatsapp: String(item.whatsapp || item.phone || '').trim(),
       guildWar: false,
       guildWarMeta: 0,
@@ -825,6 +936,8 @@ function bootManagementMode() {
     const useCall = String(els.useCall?.value || '').trim();
     const description = String(els.desc?.value || '').trim().slice(0,100);
     if (!guildName) { showToast('error','O nome da guilda é obrigatório.'); return; }
+    if (!validarTextoPermitido(guildName, 'Nome da guilda')) return;
+    if (description && !validarTextoPermitido(description, 'Descrição')) return;
     if (!roles.length) { showToast('error','Marque pelo menos uma função.'); return; }
     if (!currentPhotoBase64 && !currentRecruitment?.photoBase64) { showToast('error','Envie uma foto para o recrutamento.'); return; }
     try {
