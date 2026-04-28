@@ -39,6 +39,119 @@ const db = getFirestore(app);
 const qs = (id) => document.getElementById(id);
 const cleanEmail = (email) => String(email || '').trim().toLowerCase();
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
+const palavrasBloqueioDireto = [
+  "arrombado",
+  "arrombada",
+  "babaca",
+  "bosta",
+  "buceta",
+  "caralho",
+  "corno",
+  "corna",
+  "cu",
+  "cuzão",
+  "cuzao",
+  "desgraçado",
+  "desgracado",
+  "desgraçada",
+  "desgracada",
+  "fdp",
+  "filho da puta",
+  "filha da puta",
+  "foda-se",
+  "fodase",
+  "idiota",
+  "imbecil",
+  "lixo",
+  "otário",
+  "otario",
+  "otária",
+  "otaria",
+  "pau no cu",
+  "porra",
+  "puta",
+  "puto",
+  "putaria",
+  "retardado",
+  "retardada",
+  "vagabundo",
+  "vagabunda",
+  "vai se foder",
+  "vai tomar no cu",
+  "vsf",
+  "vtmnc",
+  "boiola",
+  "bicha",
+  "traveco",
+  "aleijado",
+  "doente mental",
+  "autista",
+  "mongol",
+  "mongoloide",
+  "boquete",
+  "gozar",
+  "gozada",
+  "gozei",
+  "masturbação",
+  "masturbacao",
+  "punheta",
+  "sexo explícito",
+  "sexo explicito",
+  "nude",
+  "nudes",
+  "pelado",
+  "pelada",
+  "pornô",
+  "porno",
+  "pornografia",
+  "xvideos",
+  "onlyfans",
+  "hitler",
+  "maconha",
+  "cocaína",
+  "cocaina"
+];
+
+function normalizarTextoImproprio(texto) {
+  return String(texto || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[@4]/g, 'a')
+    .replace(/[3]/g, 'e')
+    .replace(/[1!|]/g, 'i')
+    .replace(/[0]/g, 'o')
+    .replace(/[5$]/g, 's')
+    .replace(/[7]/g, 't')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function escaparRegexImproprio(texto) {
+  return String(texto || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function contemPalavraImpropria(texto) {
+  const textoNormalizado = ` ${normalizarTextoImproprio(texto)} `;
+
+  return palavrasBloqueioDireto.some((palavra) => {
+    const palavraNormalizada = normalizarTextoImproprio(palavra);
+    if (!palavraNormalizada) return false;
+
+    const palavraRegex = escaparRegexImproprio(palavraNormalizada).replace(/\s+/g, '\\s+');
+    const regex = new RegExp(`\\s${palavraRegex}\\s`, 'i');
+
+    return regex.test(textoNormalizado);
+  });
+}
+
+function validarTextoPermitido(valor, campo) {
+  if (!contemPalavraImpropria(valor)) return true;
+  showToast('error', `${campo} contém palavra imprópria.`);
+  return false;
+}
+
 const setHtml = (el, html) => { if (el) el.innerHTML = html; };
 
 function initIcons() {
@@ -179,6 +292,27 @@ async function ensureGameIdAvailable(gameId) {
     throw new Error('game-id-in-use');
   }
   return ref;
+}
+
+async function ensureEmailAvailable(email) {
+  const emailLower = cleanEmail(email);
+  if (!emailLower) return true;
+
+  const fields = ['email', 'playerEmail'];
+
+  for (const field of fields) {
+    const snap = await getDocs(query(collection(db, 'users'), where(field, '==', emailLower), limit(1)));
+    if (!snap.empty) {
+      throw new Error('email-profile-in-use');
+    }
+  }
+
+  return true;
+}
+
+async function ensureSignupAvailable(gameId, email) {
+  await ensureGameIdAvailable(gameId);
+  await ensureEmailAvailable(email);
 }
 
 async function createOwnerAccount(user, { gameId, guildName, nick }) {
@@ -446,9 +580,19 @@ function setupAuthForms() {
       return;
     }
 
+    if (!validarTextoPermitido(nick, 'O nick')) {
+      return;
+    }
+
+    if (isOwner && !validarTextoPermitido(guildName, 'O nome da guilda')) {
+      return;
+    }
+
     setButtonLoading(btn, true, 'Criar conta');
 
     try {
+      await ensureSignupAvailable(gameId, email);
+
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
       const result = isOwner
         ? await createOwnerAccount(cred.user, { gameId, guildName, nick })
@@ -469,6 +613,7 @@ function setupAuthForms() {
 
       let msg = 'Não foi possível criar a conta.';
       if (err?.message === 'game-id-in-use') msg = 'Esse ID de usuário já está vinculado a outra conta.';
+      if (err?.message === 'email-profile-in-use') msg = 'Esse e-mail já está vinculado a outra conta.';
       if (err.code === 'auth/email-already-in-use') msg = 'Esse e-mail já está em uso.';
       if (err.code === 'auth/weak-password') msg = 'Senha fraca (mínimo 6 caracteres).';
       if (String(err?.code || '').includes('permission-denied') || String(err?.message || '').includes('permission')) {
