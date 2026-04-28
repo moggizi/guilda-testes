@@ -15,6 +15,120 @@ const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
 const normalizeEmail = (v) => String(v ?? '').trim().toLowerCase();
 const isNumericDocId = (id) => /^\d+$/.test(String(id || ''));
 
+const palavrasBloqueioDireto = [
+  "arrombado",
+  "arrombada",
+  "babaca",
+  "bosta",
+  "buceta",
+  "caralho",
+  "corno",
+  "corna",
+  "cu",
+  "cuzão",
+  "cuzao",
+  "desgraçado",
+  "desgracado",
+  "desgraçada",
+  "desgracada",
+  "fdp",
+  "filho da puta",
+  "filha da puta",
+  "foda-se",
+  "fodase",
+  "idiota",
+  "imbecil",
+  "lixo",
+  "otário",
+  "otario",
+  "otária",
+  "otaria",
+  "pau no cu",
+  "porra",
+  "puta",
+  "puto",
+  "putaria",
+  "retardado",
+  "retardada",
+  "vagabundo",
+  "vagabunda",
+  "vai se foder",
+  "vai tomar no cu",
+  "vsf",
+  "vtmnc",
+  "boiola",
+  "bicha",
+  "traveco",
+  "aleijado",
+  "doente mental",
+  "autista",
+  "mongol",
+  "mongoloide",
+  "boquete",
+  "gozar",
+  "gozada",
+  "gozei",
+  "masturbação",
+  "masturbacao",
+  "punheta",
+  "sexo explícito",
+  "sexo explicito",
+  "nude",
+  "nudes",
+  "pelado",
+  "pelada",
+  "pornô",
+  "porno",
+  "pornografia",
+  "xvideos",
+  "onlyfans",
+  "hitler",
+  "maconha",
+  "cocaína",
+  "cocaina"
+];
+
+function normalizarTextoImproprio(texto) {
+  return String(texto || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[@4]/g, 'a')
+    .replace(/[3]/g, 'e')
+    .replace(/[1!|]/g, 'i')
+    .replace(/[0]/g, 'o')
+    .replace(/[5$]/g, 's')
+    .replace(/[7]/g, 't')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function escaparRegexImproprio(texto) {
+  return String(texto || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function contemPalavraImpropria(texto) {
+  const textoNormalizado = ` ${normalizarTextoImproprio(texto)} `;
+
+  return palavrasBloqueioDireto.some((palavra) => {
+    const palavraNormalizada = normalizarTextoImproprio(palavra);
+    if (!palavraNormalizada) return false;
+
+    const palavraRegex = escaparRegexImproprio(palavraNormalizada).replace(/\s+/g, '\\s+');
+    const regex = new RegExp(`\\s${palavraRegex}\\s`, 'i');
+
+    return regex.test(textoNormalizado);
+  });
+}
+
+function validarTextoPermitido(valor, campo) {
+  if (!contemPalavraImpropria(valor)) return true;
+  showToast('error', `${campo} contém palavra imprópria.`);
+  return false;
+}
+
+
 function sameEmail(a, b) {
   const ea = normalizeEmail(a);
   const eb = normalizeEmail(b);
@@ -43,6 +157,49 @@ async function queryUsersByField(field, value) {
   const snap = await getDocs(q);
 
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function findEmailConflictsForProfileCreation(uid, email, gameId) {
+  const rawEmail = String(email || '').trim();
+  const lowerEmail = normalizeEmail(email);
+  const searches = [];
+  const seenSearches = new Set();
+
+  function addSearch(field, value) {
+    const clean = String(value || '').trim();
+    if (!clean) return;
+    const key = String(field || '') + ':' + clean;
+    if (seenSearches.has(key)) return;
+    seenSearches.add(key);
+    searches.push([field, clean]);
+  }
+
+  addSearch('email', rawEmail);
+  addSearch('email', lowerEmail);
+  addSearch('playerEmail', rawEmail);
+  addSearch('playerEmail', lowerEmail);
+
+  const found = new Map();
+  for (const [field, value] of searches) {
+    const profiles = await queryUsersByField(field, value);
+    profiles.forEach((profile) => {
+      if (profile?.id) found.set(String(profile.id), profile);
+    });
+  }
+
+  const allowedIds = new Set([String(uid || ''), String(gameId || '')].filter(Boolean));
+
+  return Array.from(found.values()).filter((profile) => {
+    const profileId = String(profile?.id || '').trim();
+    if (!profileId) return false;
+    if (allowedIds.has(profileId)) return false;
+    if (String(profile?.uid || '').trim() === String(uid || '').trim()) return false;
+
+    const linkedGameId = normalizeDigits(profile?.gameIdMigrated || profile?.gameId || '');
+    if (linkedGameId && linkedGameId === String(gameId || '').trim()) return false;
+
+    return true;
+  });
 }
 
 async function findProfilesForCurrentUser(uid, email) {
@@ -424,6 +581,13 @@ async function handleCreateProfile(e) {
       return;
     }
 
+    const emailConflicts = await findEmailConflictsForProfileCreation(uid, email, gameId);
+    if (emailConflicts.length) {
+      showToast('error', 'Esse e-mail já está vinculado a outro perfil.');
+      resetCreateBtn();
+      return;
+    }
+
     const oldData = getOldDataFromModal();
     const ctx = getGuildContext() || {};
     const baseData = {
@@ -490,6 +654,9 @@ async function handleSaveProfile(e) {
     showToast('error', 'O Nick/Nome não pode ficar em branco.');
     return;
   }
+
+  if (!validarTextoPermitido(nick, 'O Nick/Nome')) return;
+  if (!validarTextoPermitido(bio, 'A Bio do jogador')) return;
 
   els.btnSave.disabled = true;
   els.btnSave.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Salvando...`;
