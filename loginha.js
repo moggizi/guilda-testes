@@ -51,12 +51,20 @@ const DEFAULT_CATEGORIES = [
   { id: 'skin', nome: 'Skin', ordem: 6 }
 ];
 
+const SELLER_FEE_RATE = 0.06;
+const SELLER_FEE_PERCENT = 6;
+const SELLER_WITHDRAW_MIN = 20;
+const SELLER_RELEASE_DAYS = 3;
+const BUYER_INFO_CATEGORIES = new Set(['passe', 'diamante', 'likes', 'skin']);
+const SELLER_DELIVERY_INFO_CATEGORIES = new Set(['conta', 'codiguin']);
+
 const els = {
   topSellerBtn: qs('btn-top-seller'),
   topSellerAvatarWrap: qs('seller-top-avatar-wrap'),
   topSellerAvatar: qs('seller-top-avatar'),
   topSellerAvatarIcon: qs('seller-top-avatar-icon'),
   sellerProfileBtn: qs('btn-seller-profile'),
+  buyerProfileBtn: qs('btn-buyer-profile'),
 
   search: qs('store-search'),
   category: qs('store-category'),
@@ -71,6 +79,10 @@ const els = {
   productModal: qs('product-modal'),
   productModalTitle: qs('modal-product-title'),
   productModalBody: qs('modal-product-body'),
+
+  buyerModal: qs('buyer-modal'),
+  buyerOrdersCounter: qs('buyer-orders-counter'),
+  buyerOrdersList: qs('buyer-orders-list'),
 
   sellerModal: qs('seller-modal'),
   sellerModalSubtitle: qs('seller-modal-subtitle'),
@@ -109,6 +121,7 @@ let products = [];
 let filteredProducts = [];
 let sellerProducts = [];
 let sellerOrders = [];
+let buyerOrders = [];
 let loadingProducts = false;
 let loadingStatus = false;
 let loadingSellerPanel = false;
@@ -260,39 +273,103 @@ function isFinalOrderStatus(status) {
   return s === 'entregue' || s === 'reembolsado';
 }
 
-function calculateSellerFinancials(orders = []) {
+function categoryRequiresBuyerInfo(categoryId) {
+  return BUYER_INFO_CATEGORIES.has(normalizeCategoryId(categoryId));
+}
+
+function categoryRequiresSellerDeliveryInfo(categoryId) {
+  return SELLER_DELIVERY_INFO_CATEGORIES.has(normalizeCategoryId(categoryId));
+}
+
+function getBuyerInfoLabel(categoryId) {
+  const id = normalizeCategoryId(categoryId);
+  if (id === 'passe') return 'Informe o ID da conta/personagem que vai receber o passe.';
+  if (id === 'diamante') return 'Informe o ID da conta/personagem que vai receber os diamantes.';
+  if (id === 'likes') return 'Informe o ID ou perfil que vai receber os likes.';
+  if (id === 'skin') return 'Informe o ID da conta/personagem e detalhes da skin.';
+  return 'Informe os dados necessários para o vendedor entregar o pedido.';
+}
+
+function getSellerDeliveryInfoLabel(categoryId) {
+  const id = normalizeCategoryId(categoryId);
+  if (id === 'conta') return 'Dados da conta entregue, login, senha, observações ou instruções.';
+  if (id === 'codiguin') return 'Código entregue e instruções para resgate.';
+  return 'Informações de entrega para o comprador.';
+}
+
+function calculateSellerFinancials(orders = [], sellerData = {}) {
   const now = Date.now();
-  const releaseMs = 3 * 24 * 60 * 60 * 1000;
-  let saldo = 0;
-  let saldoPendente = 0;
+  const releaseMs = SELLER_RELEASE_DAYS * 24 * 60 * 60 * 1000;
+  let saldoBrutoLiberado = 0;
+  let saldoBrutoPendente = 0;
   let totalLiquidoEntregue = 0;
   let totalBrutoEntregue = 0;
   let totalVendasEntregues = 0;
 
   orders.forEach((order) => {
     if (String(order.status || '').toLowerCase() !== 'entregue') return;
-
     const gross = Number(order.total || order.precoUnitario || 0);
     if (!Number.isFinite(gross) || gross <= 0) return;
-
-    const net = gross * 0.95;
+    const net = gross * (1 - SELLER_FEE_RATE);
     const deliveredAt = getDeliveredAtMs(order);
-
     totalVendasEntregues += 1;
     totalBrutoEntregue += gross;
     totalLiquidoEntregue += net;
-
-    if (deliveredAt && now - deliveredAt >= releaseMs) saldo += net;
-    else saldoPendente += net;
+    if (deliveredAt && now - deliveredAt >= releaseMs) saldoBrutoLiberado += net;
+    else saldoBrutoPendente += net;
   });
+
+  const saquePendente = Number(sellerData?.saquePendente ?? sellerData?.financeiro?.saldoEmSaque ?? 0);
+  const totalSacado = Number(sellerData?.totalSacado ?? sellerData?.financeiro?.totalSacado ?? 0);
+  const saldo = Math.max(0, saldoBrutoLiberado - saquePendente - totalSacado);
 
   return {
     saldo,
-    saldoPendente,
+    saldoAtual: saldo,
+    saldoPendente: saldoBrutoPendente,
+    saldoEmSaque: Math.max(0, saquePendente),
+    totalSacado: Math.max(0, totalSacado),
     totalLiquidoEntregue,
     totalBrutoEntregue,
-    totalVendasEntregues
+    totalVendasEntregues,
+    taxaPercentual: SELLER_FEE_PERCENT,
+    saqueMinimo: SELLER_WITHDRAW_MIN,
+    liberacaoDias: SELLER_RELEASE_DAYS
   };
+}
+
+async function syncSellerFinancialsToFirebase() {
+  if (!lojaStatus?.vendedor || !ghubProfile?.gameId) return calculateSellerFinancials(sellerOrders, lojaStatus?.vendedor || {});
+  const finances = calculateSellerFinancials(sellerOrders, lojaStatus.vendedor);
+  const payload = {
+    saldoAtual: finances.saldoAtual,
+    saldoPendente: finances.saldoPendente,
+    saldoEmSaque: finances.saldoEmSaque,
+    totalSacado: finances.totalSacado,
+    totalVendas: finances.totalVendasEntregues,
+    totalVendasEntregues: finances.totalVendasEntregues,
+    financeiro: {
+      saldoAtual: finances.saldoAtual,
+      saldoPendente: finances.saldoPendente,
+      saldoEmSaque: finances.saldoEmSaque,
+      totalSacado: finances.totalSacado,
+      totalBrutoEntregue: finances.totalBrutoEntregue,
+      totalLiquidoEntregue: finances.totalLiquidoEntregue,
+      totalVendasEntregues: finances.totalVendasEntregues,
+      taxaPercentual: SELLER_FEE_PERCENT,
+      saqueMinimo: SELLER_WITHDRAW_MIN,
+      liberacaoDias: SELLER_RELEASE_DAYS,
+      atualizadoEmMs: Date.now()
+    },
+    updatedAt: serverTimestamp()
+  };
+  try {
+    await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), payload, { merge: true });
+    lojaStatus.vendedor = { ...lojaStatus.vendedor, ...payload };
+  } catch (err) {
+    console.warn('Não foi possível salvar saldos do vendedor:', err);
+  }
+  return finances;
 }
 
 
@@ -664,13 +741,10 @@ function renderProducts() {
 async function getSellerPublicStats(sellerId) {
   const cleanSellerId = String(sellerId || '').trim();
   if (!cleanSellerId) return { totalVendasEntregues: 0 };
-
   try {
-    const snap = await getDocs(collection(lojaDb, 'pedidos'));
-    const orders = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((order) => String(order.sellerId || order.vendedorId || '') === cleanSellerId);
-    return calculateSellerFinancials(orders);
+    const snap = await getDocs(query(collection(lojaDb, 'pedidos'), where('sellerId', '==', cleanSellerId)));
+    const orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    return calculateSellerFinancials(orders, {});
   } catch (err) {
     console.warn('Não foi possível carregar vendas públicas do vendedor:', err);
     return { totalVendasEntregues: 0 };
@@ -680,17 +754,19 @@ async function getSellerPublicStats(sellerId) {
 async function openProductModal(productId) {
   const product = products.find((item) => String(item.id) === String(productId));
   if (!product || !els.productModal || !els.productModalBody || !els.productModalTitle) return;
-
   els.productModalTitle.textContent = product.titulo;
-
   const image = product.imagem
     ? `<img src="${escapeHtml(product.imagem)}" alt="${escapeHtml(product.titulo)}" class="h-56 w-full rounded-3xl object-cover border border-gray-100 bg-gray-50">`
     : '<div class="h-56 w-full rounded-3xl border border-gray-100 bg-gray-50 flex items-center justify-center"><i data-lucide="package" class="h-12 w-12 text-gray-300"></i></div>';
-
   const statusHtml = product.disponivel
     ? '<span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200">DISPONÍVEL</span>'
     : '<span class="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-black text-red-700 ring-1 ring-red-200">ESGOTADO</span>';
-
+  const buyerInfoHtml = categoryRequiresBuyerInfo(product.categoriaId) ? `
+    <div class="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+      <label for="buyer-order-info" class="block text-xs font-black uppercase tracking-wider text-amber-800 mb-1.5">Informações para o pedido</label>
+      <textarea id="buyer-order-info" rows="3" maxlength="300" class="w-full resize-none rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-amber-200" placeholder="${escapeHtml(getBuyerInfoLabel(product.categoriaId))}"></textarea>
+      <p class="mt-1 text-xs font-semibold text-amber-800">Obrigatório para essa categoria.</p>
+    </div>` : '';
   els.productModalBody.innerHTML = `
     ${image}
     <div>
@@ -705,16 +781,12 @@ async function openProductModal(productId) {
       <p class="mt-4 text-sm leading-relaxed text-gray-600">${escapeHtml(product.descricao || 'Produto disponível na loja.')}</p>
       <p class="mt-5 text-3xl font-black text-emerald-700">${moneyBRL(product.preco)}</p>
     </div>
-    <button type="button" data-buy-product="${escapeHtml(product.id)}" class="w-full rounded-2xl bg-slate-900 px-5 py-4 text-sm font-black text-white shadow-lg shadow-slate-900/10 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
-      Comprar agora
-    </button>
-  `;
-
+    ${buyerInfoHtml}
+    <button type="button" data-buy-product="${escapeHtml(product.id)}" class="w-full rounded-2xl bg-slate-900 px-5 py-4 text-sm font-black text-white shadow-lg shadow-slate-900/10 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">Comprar agora</button>`;
   els.productModal.classList.remove('hidden');
   els.productModal.classList.add('flex');
   els.productModalBody.querySelector('[data-buy-product]')?.addEventListener('click', () => createOrder(product.id));
   initIcons();
-
   const stats = await getSellerPublicStats(product.sellerId);
   const salesEl = qs('modal-seller-sales');
   if (salesEl) {
@@ -835,121 +907,72 @@ async function handleTopSellerClick() {
 async function createOrder(productId) {
   const product = products.find((item) => String(item.id) === String(productId));
   if (!product) return;
-
-  if (!currentUser) {
-    localToast('error', 'Entre na GuildaHub para comprar.');
+  if (!currentUser) { localToast('error', 'Entre na GuildaHub para comprar.'); return; }
+  if (!ghubProfile?.gameId) { localToast('error', 'Conclua seu perfil da GuildaHub antes de comprar.'); return; }
+  if (!product.disponivel) { localToast('error', 'Esse produto está esgotado.'); return; }
+  const buyerInfoText = String(qs('buyer-order-info')?.value || '').trim();
+  if (categoryRequiresBuyerInfo(product.categoriaId) && !buyerInfoText) {
+    localToast('error', 'Envie as informações necessárias para esse pedido.');
+    qs('buyer-order-info')?.focus();
     return;
   }
-
-  if (!ghubProfile?.gameId) {
-    localToast('error', 'Conclua seu perfil da GuildaHub antes de comprar.');
-    return;
-  }
-
-  if (!product.disponivel) {
-    localToast('error', 'Esse produto está esgotado.');
-    return;
-  }
-
   const btn = els.productModalBody?.querySelector('[data-buy-product]');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i> Criando pedido...';
-    initIcons();
-  }
-
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i> Criando pedido...'; initIcons(); }
   try {
     const buyer = lojaStatus?.comprador || await ensureBuyerProfile({ silent: true });
     if (!buyer) throw new Error('buyer-required');
-
     const productRef = doc(lojaDb, 'produtos', product.id);
     const orderRef = doc(collection(lojaDb, 'pedidos'));
-
     await runTransaction(lojaDb, async (transaction) => {
       const productSnap = await transaction.get(productRef);
       if (!productSnap.exists()) throw new Error('product-not-found');
-
       const currentProduct = normalizeProduct(productSnap);
       if (currentProduct.ativo === false) throw new Error('product-inactive');
-
       const estoqueAtual = Number(currentProduct.estoqueQuantidade ?? 0);
-      if (currentProduct.estoqueAtivo !== false && estoqueAtual <= 0) {
-        throw new Error('out-of-stock');
-      }
-
-      const orderPayload = {
+      if (currentProduct.estoqueAtivo !== false && estoqueAtual <= 0) throw new Error('out-of-stock');
+      transaction.set(orderRef, {
         buyerId: ghubProfile.gameId,
         buyerUid: currentUser.uid || '',
         buyerEmail: normalizeEmail(currentUser.email || ghubProfile.email || ''),
         buyerName: ghubProfile.nick || '',
         buyerNick: ghubProfile.nick || '',
         buyerPhoto: ghubProfile.foto || '',
-
         sellerId: currentProduct.sellerId || 'ghub',
         sellerName: currentProduct.sellerName || 'GuildaHub',
         sellerPhoto: currentProduct.sellerPhoto || '',
-
         produtoId: currentProduct.id,
         produtoTitulo: currentProduct.titulo,
         produtoImagem: currentProduct.imagem || '',
         categoriaId: currentProduct.categoriaId || '',
         categoriaNome: currentProduct.categoriaNome || '',
-
         quantidade: 1,
         precoUnitario: Number(currentProduct.preco || 0),
         total: Number(currentProduct.preco || 0),
         moeda: currentProduct.moeda || 'BRL',
-
+        buyerInfoRequired: categoryRequiresBuyerInfo(currentProduct.categoriaId),
+        buyerInfo: buyerInfoText,
+        buyerInfoUpdatedAtMs: buyerInfoText ? Date.now() : null,
+        deliveryInfoRequired: categoryRequiresSellerDeliveryInfo(currentProduct.categoriaId),
+        deliveryInfo: '',
+        deliveryInfoUpdatedAtMs: null,
         status: 'pendente',
         finalizado: false,
-        pagamento: {
-          metodo: 'pix',
-          provider: '',
-          status: 'pendente',
-          paymentId: '',
-          qrCode: '',
-          copiaCola: '',
-          aprovadoEm: null,
-          reembolsadoEm: null
-        },
-        entrega: {
-          tipo: currentProduct.entregaTipo || 'manual',
-          status: 'aguardando_pagamento',
-          observacao: '',
-          entregueEm: null,
-          entregueEmMs: null,
-          canceladoEm: null
-        },
-
+        pagamento: { metodo: 'pix', provider: '', status: 'pendente', paymentId: '', qrCode: '', copiaCola: '', aprovadoEm: null, reembolsadoEm: null },
+        entrega: { tipo: currentProduct.entregaTipo || 'manual', status: 'aguardando_pagamento', observacao: '', informacoes: '', entregueEm: null, entregueEmMs: null, canceladoEm: null },
         createdAt: serverTimestamp(),
         createdAtMs: Date.now(),
         updatedAt: serverTimestamp()
-      };
-
-      transaction.set(orderRef, orderPayload);
-
-      if (currentProduct.estoqueAtivo !== false) {
-        transaction.set(productRef, {
-          estoqueQuantidade: Math.max(0, estoqueAtual - 1),
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      }
+      });
+      if (currentProduct.estoqueAtivo !== false) transaction.set(productRef, { estoqueQuantidade: Math.max(0, estoqueAtual - 1), updatedAt: serverTimestamp() }, { merge: true });
     });
-
     closeProductModal();
     localToast('success', 'Pedido criado: ' + orderRef.id);
-    await loadProducts();
+    await Promise.all([loadProducts(), loadBuyerOrders()]);
   } catch (err) {
     console.error(err);
-    const msg = err?.message === 'out-of-stock'
-      ? 'Esse produto ficou sem estoque.'
-      : 'Não foi possível criar o pedido. Confira se as regras do Firebase da loja permitem escrita.';
-    localToast('error', msg);
+    localToast('error', err?.message === 'out-of-stock' ? 'Esse produto ficou sem estoque.' : 'Não foi possível criar o pedido. Confira se as regras do Firebase da loja permitem escrita.');
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = 'Comprar agora';
-    }
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Comprar agora'; }
   }
 }
 
@@ -967,96 +990,45 @@ function closeSellerModal() {
 function renderSellerProfileCard() {
   const seller = lojaStatus?.vendedor;
   if (!els.sellerProfileCard) return;
-
-  if (!seller) {
-    els.sellerProfileCard.innerHTML = '<p class="text-sm font-bold text-red-700">Perfil de vendedor não encontrado.</p>';
-    return;
-  }
-
+  if (!seller) { els.sellerProfileCard.innerHTML = '<p class="text-sm font-bold text-red-700">Perfil de vendedor não encontrado.</p>'; return; }
   const photo = seller.foto || ghubProfile?.foto || '';
-  const finances = calculateSellerFinancials(sellerOrders);
-  const canWithdraw = finances.saldo >= 20;
-
+  const finances = calculateSellerFinancials(sellerOrders, seller);
+  const canWithdraw = finances.saldoAtual >= SELLER_WITHDRAW_MIN;
   els.sellerProfileCard.innerHTML = `
-    <div class="flex items-start gap-3">
-      <div class="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center text-emerald-700">
-        ${photo ? `<img src="${escapeHtml(photo)}" alt="" class="h-full w-full object-cover">` : '<i data-lucide="user" class="w-6 h-6"></i>'}
-      </div>
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2 flex-wrap">
-          <p class="font-black text-gray-900 truncate">${escapeHtml(seller.nome || seller.nick || 'Vendedor')}</p>
-          <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i> VENDEDOR</span>
-        </div>
-        <p class="mt-1 text-xs font-semibold text-gray-400">ID: ${escapeHtml(seller.id || seller.gameId || ghubProfile?.gameId || '-')}</p>
-        <p class="mt-1 text-xs font-semibold text-gray-400 truncate">${escapeHtml(seller.email || currentUser?.email || '')}</p>
-      </div>
-    </div>
-
-    <div class="mt-4 grid grid-cols-2 gap-2">
-      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100">
-        <p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saldo atual</p>
-        <p class="mt-1 text-lg font-black text-emerald-700">${moneyBRL(finances.saldo)}</p>
-      </div>
-      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100">
-        <p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saldo pendente</p>
-        <p class="mt-1 text-lg font-black text-amber-600">${moneyBRL(finances.saldoPendente)}</p>
-      </div>
-      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100">
-        <p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Vendas entregues</p>
-        <p class="mt-1 text-lg font-black text-gray-900">${Number(finances.totalVendasEntregues || 0)}</p>
-      </div>
-      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100">
-        <p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saque mínimo</p>
-        <p class="mt-1 text-lg font-black ${canWithdraw ? 'text-emerald-700' : 'text-gray-900'}">R$ 20,00</p>
-      </div>
-    </div>
-
-    <div class="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-800">
-      Será cobrada taxa de 5% por venda. O saldo só é liberado 3 dias após o pedido ser marcado como entregue. Saque mínimo: R$ 20,00.
-    </div>
-  `;
+    <div class="flex items-start gap-3"><div class="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center text-emerald-700">${photo ? `<img src="${escapeHtml(photo)}" alt="" class="h-full w-full object-cover">` : '<i data-lucide="user" class="w-6 h-6"></i>'}</div><div class="min-w-0 flex-1"><div class="flex items-center gap-2 flex-wrap"><p class="font-black text-gray-900 truncate">${escapeHtml(seller.nome || seller.nick || 'Vendedor')}</p><span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i> VENDEDOR</span></div><p class="mt-1 text-xs font-semibold text-gray-400">ID: ${escapeHtml(seller.id || seller.gameId || ghubProfile?.gameId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-400 truncate">${escapeHtml(seller.email || currentUser?.email || '')}</p></div></div>
+    <div class="mt-4 grid grid-cols-2 gap-2"><div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saldo atual</p><p class="mt-1 text-lg font-black text-emerald-700">${moneyBRL(finances.saldoAtual)}</p></div><div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saldo pendente</p><p class="mt-1 text-lg font-black text-amber-600">${moneyBRL(finances.saldoPendente)}</p></div><div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Em saque</p><p class="mt-1 text-lg font-black text-sky-700">${moneyBRL(finances.saldoEmSaque)}</p></div><div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Vendas entregues</p><p class="mt-1 text-lg font-black text-gray-900">${Number(finances.totalVendasEntregues || 0)}</p></div></div>
+    <div class="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-800">Será cobrada taxa de ${SELLER_FEE_PERCENT}% por venda. O saldo só é liberado ${SELLER_RELEASE_DAYS} dias após o pedido ser marcado como entregue. Saque mínimo: R$ 20,00.</div>
+    <div class="mt-3 rounded-2xl border border-gray-200 bg-white p-3"><label for="seller-withdraw-pix" class="block text-xs font-black uppercase tracking-wider text-gray-400 mb-1.5">Pix para saque</label><input id="seller-withdraw-pix" type="text" value="${escapeHtml(seller.ultimoPixSaque || '')}" placeholder="Chave Pix" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"><button id="btn-seller-withdraw" type="button" class="mt-2 w-full rounded-xl px-3 py-2 text-xs font-black ${canWithdraw ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}" ${canWithdraw ? '' : 'disabled'}>Solicitar saque ${moneyBRL(finances.saldoAtual)}</button></div>`;
+  qs('btn-seller-withdraw')?.addEventListener('click', requestSellerWithdraw);
   initIcons();
 }
 
 async function loadSellerProducts() {
   const sellerId = ghubProfile?.gameId;
   if (!sellerId) return;
-
   try {
-    const snap = await getDocs(collection(lojaDb, 'produtos'));
-    sellerProducts = snap.docs
-      .map(normalizeProduct)
-      .filter((product) => String(product.sellerId || product.vendedorId || '') === String(sellerId))
-      .sort((a, b) => a.titulo.localeCompare(b.titulo));
+    const snap = await getDocs(query(collection(lojaDb, 'produtos'), where('sellerId', '==', String(sellerId))));
+    sellerProducts = snap.docs.map(normalizeProduct).sort((a, b) => a.titulo.localeCompare(b.titulo));
   } catch (err) {
     console.error('Erro ao carregar produtos do vendedor:', err?.code || err?.message || err, err);
     sellerProducts = [];
-    localToast('error', `Não foi possível carregar seus produtos. Erro: ${err?.code || err?.message || 'verifique as regras'}`);
+    localToast('error', `Não foi possível carregar seus produtos. Erro: ${err?.code || err?.message || 'verifique as regras/índices'}`);
   }
-
   renderSellerProducts();
 }
 
 async function loadSellerOrders() {
   const sellerId = ghubProfile?.gameId;
   if (!sellerId) return;
-
   try {
-    const snap = await getDocs(collection(lojaDb, 'pedidos'));
-    sellerOrders = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((order) => String(order.sellerId || order.vendedorId || '') === String(sellerId))
-      .sort((a, b) => {
-        const ad = Number(a?.createdAtMs || a?.createdAt?.seconds || 0);
-        const bd = Number(b?.createdAtMs || b?.createdAt?.seconds || 0);
-        return bd - ad;
-      });
+    const snap = await getDocs(query(collection(lojaDb, 'pedidos'), where('sellerId', '==', String(sellerId))));
+    sellerOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
+    await syncSellerFinancialsToFirebase();
   } catch (err) {
     console.error('Erro ao carregar pedidos do vendedor:', err?.code || err?.message || err, err);
     sellerOrders = [];
-    localToast('error', `Não foi possível carregar seus pedidos. Erro: ${err?.code || err?.message || 'verifique as regras'}`);
+    localToast('error', `Não foi possível carregar seus pedidos. Erro: ${err?.code || err?.message || 'verifique as regras/índices'}`);
   }
-
   renderSellerOrders();
   renderSellerProfileCard();
 }
@@ -1166,50 +1138,20 @@ function getOrderStatusClass(status) {
 }
 
 function renderSellerOrders() {
-  if (els.sellerOrdersCounter) {
-    const total = sellerOrders.length;
-    els.sellerOrdersCounter.textContent = total === 1 ? '1 pedido recebido' : `${total} pedidos recebidos`;
-  }
-
+  if (els.sellerOrdersCounter) els.sellerOrdersCounter.textContent = sellerOrders.length === 1 ? '1 pedido recebido' : `${sellerOrders.length} pedidos recebidos`;
   if (!els.sellerOrdersList) return;
-  if (!sellerOrders.length) {
-    els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhum pedido recebido ainda.</div>';
-    return;
-  }
-
+  if (!sellerOrders.length) { els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhum pedido recebido ainda.</div>'; return; }
   els.sellerOrdersList.innerHTML = sellerOrders.map((order) => {
     const status = String(order.status || 'pendente').toLowerCase();
     const locked = isFinalOrderStatus(status) || order.finalizado === true;
     const created = formatDateTimeBR(order.createdAtMs || order.createdAt);
-    return `
-      <div class="rounded-2xl border border-gray-100 bg-gray-50 p-3">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p>
-            <p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p>
-            <p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || '-')}</p>
-            <p class="mt-1 text-xs font-semibold text-gray-500">ID comprador: ${escapeHtml(order.buyerId || '-')}</p>
-            <p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p>
-          </div>
-          <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span>
-        </div>
-        <div class="mt-3 flex items-center justify-between gap-3">
-          <p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p>
-          <div class="flex flex-wrap justify-end gap-2">
-            ${locked
-              ? '<span class="rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-500">Finalizado</span>'
-              : `<button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button>
-                 <button type="button" data-order-action="reembolsado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Reembolso</button>`
-            }
-          </div>
-        </div>
-      </div>
-    `;
+    const needsSellerInfo = categoryRequiresSellerDeliveryInfo(order.categoriaId);
+    const needsBuyerInfo = categoryRequiresBuyerInfo(order.categoriaId);
+    const currentDeliveryInfo = order.deliveryInfo || order.entrega?.informacoes || '';
+    const buyerInfo = order.buyerInfo || '';
+    return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-3"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">ID comprador: ${escapeHtml(order.buyerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p></div><span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span></div>${needsBuyerInfo ? `<div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-amber-800">Informações do comprador</p><p class="mt-1 whitespace-pre-wrap text-xs font-semibold text-amber-900">${escapeHtml(buyerInfo || 'Ainda não informado.')}</p></div>` : ''}${needsSellerInfo ? `<div class="mt-3"><label class="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Informações para entregar ao comprador</label><textarea data-delivery-info-for="${escapeHtml(order.id)}" rows="3" maxlength="500" ${locked ? 'readonly' : ''} class="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" placeholder="${escapeHtml(getSellerDeliveryInfoLabel(order.categoriaId))}">${escapeHtml(currentDeliveryInfo)}</textarea></div>` : ''}<div class="mt-3 flex items-center justify-between gap-3"><p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p><div class="flex flex-wrap justify-end gap-2">${locked ? '<span class="rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-500">Finalizado</span>' : `<button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button><button type="button" data-order-action="reembolsado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Reembolso</button>`}</div></div></div>`;
   }).join('');
-
-  els.sellerOrdersList.querySelectorAll('[data-order-action]').forEach((btn) => {
-    btn.addEventListener('click', () => updateOrderStatus(btn.getAttribute('data-order-id') || '', btn.getAttribute('data-order-action') || ''));
-  });
+  els.sellerOrdersList.querySelectorAll('[data-order-action]').forEach((btn) => btn.addEventListener('click', () => updateOrderStatus(btn.getAttribute('data-order-id') || '', btn.getAttribute('data-order-action') || '')));
 }
 
 async function openSellerPanel() {
@@ -1361,69 +1303,96 @@ async function toggleSellerProduct(productId, nextActive) {
 
 async function updateOrderStatus(orderId, action) {
   if (!orderId || !action) return;
-
   const order = sellerOrders.find((item) => String(item.id) === String(orderId));
   if (!order) return;
-
-  if (String(order.sellerId) !== String(ghubProfile?.gameId || '')) {
-    localToast('error', 'Esse pedido não pertence ao seu vendedor.');
-    return;
-  }
-
-  if (isFinalOrderStatus(order.status) || order.finalizado === true) {
-    localToast('error', 'Esse pedido já foi finalizado e não pode ser alterado.');
-    return;
-  }
-
+  if (String(order.sellerId) !== String(ghubProfile?.gameId || '')) { localToast('error', 'Esse pedido não pertence ao seu vendedor.'); return; }
+  if (isFinalOrderStatus(order.status) || order.finalizado === true) { localToast('error', 'Esse pedido já foi finalizado e não pode ser alterado.'); return; }
   const nowMs = Date.now();
-  const updates = {
-    status: action,
-    finalizado: true,
-    updatedAt: serverTimestamp()
-  };
-
+  const deliveryInfoText = String(document.querySelector(`[data-delivery-info-for="${CSS.escape(String(orderId))}"]`)?.value || '').trim();
+  if (action === 'entregue' && categoryRequiresSellerDeliveryInfo(order.categoriaId) && !deliveryInfoText) { localToast('error', 'Preencha as informações de entrega antes de marcar como entregue.'); document.querySelector(`[data-delivery-info-for="${CSS.escape(String(orderId))}"]`)?.focus(); return; }
+  const updates = { status: action, finalizado: true, updatedAt: serverTimestamp() };
   if (action === 'entregue') {
     updates.entregueEmMs = nowMs;
-    updates.entrega = {
-      ...(order?.entrega || {}),
-      status: 'entregue',
-      entregueEm: serverTimestamp(),
-      entregueEmMs: nowMs
-    };
+    updates.deliveryInfo = deliveryInfoText || order.deliveryInfo || '';
+    updates.deliveryInfoUpdatedAtMs = deliveryInfoText ? nowMs : (order.deliveryInfoUpdatedAtMs || null);
+    updates.entrega = { ...(order?.entrega || {}), status: 'entregue', informacoes: deliveryInfoText || order.entrega?.informacoes || '', entregueEm: serverTimestamp(), entregueEmMs: nowMs };
   }
-
   if (action === 'reembolsado') {
     updates.reembolsadoEmMs = nowMs;
-    updates.pagamento = {
-      ...(order?.pagamento || {}),
-      status: 'reembolsado',
-      reembolsadoEm: serverTimestamp(),
-      reembolsadoEmMs: nowMs
-    };
-    updates.entrega = {
-      ...(order?.entrega || {}),
-      status: 'reembolso_emitido'
-    };
+    updates.pagamento = { ...(order?.pagamento || {}), status: 'reembolsado', reembolsadoEm: serverTimestamp(), reembolsadoEmMs: nowMs };
+    updates.entrega = { ...(order?.entrega || {}), status: 'reembolso_emitido' };
   }
-
   try {
     await setDoc(doc(lojaDb, 'pedidos', orderId), updates, { merge: true });
-
     if (action === 'entregue' && order.produtoId) {
       const productRef = doc(lojaDb, 'produtos', String(order.produtoId));
       const currentProduct = sellerProducts.find((p) => String(p.id) === String(order.produtoId)) || products.find((p) => String(p.id) === String(order.produtoId));
-      await setDoc(productRef, {
-        totalVendas: Number(currentProduct?.totalVendas || 0) + 1,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      await setDoc(productRef, { totalVendas: Number(currentProduct?.totalVendas || 0) + 1, updatedAt: serverTimestamp() }, { merge: true });
     }
-
     localToast('success', action === 'reembolsado' ? 'Pedido marcado como reembolsado.' : 'Pedido marcado como entregue.');
-    await Promise.all([loadSellerOrders(), loadProducts(), loadSellerProducts()]);
-  } catch (err) {
-    console.error(err);
-    localToast('error', 'Não foi possível atualizar o pedido.');
-  }
+    await Promise.all([loadSellerOrders(), loadProducts(), loadSellerProducts(), loadBuyerOrders()]);
+  } catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar o pedido.'); }
+}
+
+async function requestSellerWithdraw() {
+  if (!lojaStatus?.vendedor || !ghubProfile?.gameId) return;
+  const finances = calculateSellerFinancials(sellerOrders, lojaStatus.vendedor);
+  if (finances.saldoAtual < SELLER_WITHDRAW_MIN) { localToast('error', 'Saque disponível apenas com saldo atual mínimo de R$ 20,00.'); return; }
+  const pix = String(qs('seller-withdraw-pix')?.value || '').trim();
+  if (!pix) { localToast('error', 'Informe sua chave Pix para solicitar o saque.'); qs('seller-withdraw-pix')?.focus(); return; }
+  const amount = Number(finances.saldoAtual || 0);
+  const previousPending = Number(lojaStatus.vendedor?.saquePendente || lojaStatus.vendedor?.financeiro?.saldoEmSaque || 0);
+  const nextPending = previousPending + amount;
+  try {
+    await addDoc(collection(lojaDb, 'saques'), { sellerId: ghubProfile.gameId, sellerName: lojaStatus.vendedor.nome || lojaStatus.vendedor.nick || ghubProfile.nick || '', sellerEmail: normalizeEmail(currentUser?.email || ghubProfile.email || ''), pix, valor: amount, status: 'pendente', createdAt: serverTimestamp(), createdAtMs: Date.now(), updatedAt: serverTimestamp() });
+    await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), { saquePendente: nextPending, saldoEmSaque: nextPending, saldoAtual: 0, ultimoPixSaque: pix, updatedAt: serverTimestamp() }, { merge: true });
+    lojaStatus.vendedor = { ...lojaStatus.vendedor, saquePendente: nextPending, saldoEmSaque: nextPending, saldoAtual: 0, ultimoPixSaque: pix };
+    localToast('success', 'Solicitação de saque enviada.');
+    await loadSellerOrders();
+  } catch (err) { console.error(err); localToast('error', 'Não foi possível solicitar o saque. Confira as regras do Firebase.'); }
+}
+
+function openBuyerModal() { if (!currentUser) { localToast('error', 'Entre na GuildaHub para ver suas compras.'); return; } els.buyerModal?.classList.remove('hidden'); els.buyerModal?.classList.add('flex'); initIcons(); loadBuyerOrders(); }
+
+function closeBuyerModal() { els.buyerModal?.classList.add('hidden'); els.buyerModal?.classList.remove('flex'); }
+
+async function loadBuyerOrders() {
+  if (!currentUser || !ghubProfile?.gameId) { buyerOrders = []; renderBuyerOrders(); return; }
+  if (els.buyerOrdersList) els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando compras...</div>';
+  try {
+    const snap = await getDocs(query(collection(lojaDb, 'pedidos'), where('buyerId', '==', String(ghubProfile.gameId))));
+    buyerOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
+  } catch (err) { console.error('Erro ao carregar compras:', err?.code || err?.message || err, err); buyerOrders = []; localToast('error', `Não foi possível carregar suas compras. Erro: ${err?.code || err?.message || 'verifique as regras/índices'}`); }
+  renderBuyerOrders();
+}
+
+function renderBuyerOrders() {
+  if (els.buyerOrdersCounter) els.buyerOrdersCounter.textContent = buyerOrders.length === 1 ? '1 compra encontrada' : `${buyerOrders.length} compras encontradas`;
+  if (!els.buyerOrdersList) return;
+  if (!currentUser) { els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-center text-sm font-semibold text-gray-500">Entre na GuildaHub para ver suas compras.</div>'; return; }
+  if (!buyerOrders.length) { els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-center text-sm font-semibold text-gray-500">Nenhuma compra encontrada ainda.</div>'; return; }
+  els.buyerOrdersList.innerHTML = buyerOrders.map((order) => {
+    const status = String(order.status || 'pendente').toLowerCase();
+    const locked = isFinalOrderStatus(status) || order.finalizado === true;
+    const created = formatDateTimeBR(order.createdAtMs || order.createdAt);
+    const needsBuyerInfo = categoryRequiresBuyerInfo(order.categoriaId);
+    const needsSellerInfo = categoryRequiresSellerDeliveryInfo(order.categoriaId);
+    const buyerInfo = order.buyerInfo || '';
+    const deliveryInfo = order.deliveryInfo || order.entrega?.informacoes || '';
+    return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs font-semibold text-gray-500">Vendedor: ${escapeHtml(order.sellerName || order.sellerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p></div><span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span></div><div class="mt-3 flex items-center justify-between gap-3"><p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p><span class="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black text-gray-500">${escapeHtml(order.categoriaNome || order.categoriaId || 'Categoria')}</span></div>${needsBuyerInfo ? `<div class="mt-3"><label class="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Suas informações para entrega</label><textarea data-buyer-info-for="${escapeHtml(order.id)}" rows="3" maxlength="300" ${locked ? 'readonly' : ''} class="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" placeholder="${escapeHtml(getBuyerInfoLabel(order.categoriaId))}">${escapeHtml(buyerInfo)}</textarea>${locked ? '' : `<button type="button" data-save-buyer-info="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Salvar informações</button>`}</div>` : ''}${needsSellerInfo ? `<div class="mt-3 rounded-xl border ${deliveryInfo ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'} p-3"><p class="text-[10px] font-black uppercase tracking-wider ${deliveryInfo ? 'text-emerald-800' : 'text-amber-800'}">Informações recebidas do vendedor</p><p class="mt-1 whitespace-pre-wrap text-xs font-semibold ${deliveryInfo ? 'text-emerald-900' : 'text-amber-900'}">${escapeHtml(deliveryInfo || 'Aguardando o vendedor enviar as informações.')}</p></div>` : ''}</div>`;
+  }).join('');
+  els.buyerOrdersList.querySelectorAll('[data-save-buyer-info]').forEach((btn) => btn.addEventListener('click', () => updateBuyerOrderInfo(btn.getAttribute('data-save-buyer-info') || '')));
+}
+
+async function updateBuyerOrderInfo(orderId) {
+  const order = buyerOrders.find((item) => String(item.id) === String(orderId));
+  if (!order) return;
+  if (String(order.buyerId || '') !== String(ghubProfile?.gameId || '')) { localToast('error', 'Esse pedido não pertence ao seu perfil.'); return; }
+  if (isFinalOrderStatus(order.status) || order.finalizado === true) { localToast('error', 'Esse pedido já foi finalizado e não pode ser alterado.'); return; }
+  const textValue = String(document.querySelector(`[data-buyer-info-for="${CSS.escape(String(orderId))}"]`)?.value || '').trim();
+  if (!textValue) { localToast('error', 'Preencha as informações do pedido.'); document.querySelector(`[data-buyer-info-for="${CSS.escape(String(orderId))}"]`)?.focus(); return; }
+  try { await setDoc(doc(lojaDb, 'pedidos', orderId), { buyerInfo: textValue, buyerInfoUpdatedAtMs: Date.now(), updatedAt: serverTimestamp() }, { merge: true }); localToast('success', 'Informações do pedido atualizadas.'); await loadBuyerOrders(); }
+  catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar as informações do pedido.'); }
 }
 
 function bindEvents() {
@@ -1439,6 +1408,7 @@ function bindEvents() {
     applyFilters();
   });
 
+  els.buyerProfileBtn?.addEventListener('click', openBuyerModal);
   els.topSellerBtn?.addEventListener('click', handleTopSellerClick);
   els.sellerProfileBtn?.addEventListener('click', openSellerPanel);
   els.sellerForm?.addEventListener('submit', handleSellerProductSubmit);
@@ -1474,10 +1444,15 @@ function bindEvents() {
     btn.addEventListener('click', closeSellerModal);
   });
 
+  document.querySelectorAll('[data-close-buyer-modal]').forEach((btn) => {
+    btn.addEventListener('click', closeBuyerModal);
+  });
+
   window.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     closeProductModal();
     closeSellerModal();
+    closeBuyerModal();
   });
 }
 
@@ -1487,6 +1462,7 @@ async function handleAuthState(user) {
   lojaStatus = { comprador: null, vendedor: null };
   sellerProducts = [];
   sellerOrders = [];
+  buyerOrders = [];
 
   if (!currentUser) {
     applySidebarUser(null);
@@ -1499,6 +1475,7 @@ async function handleAuthState(user) {
     applySidebarUser(ghubProfile);
     renderSellerTop();
     await loadStoreStatus();
+    await loadBuyerOrders();
   } catch (err) {
     console.error(err);
     applySidebarUser(null);
