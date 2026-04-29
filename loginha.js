@@ -440,14 +440,18 @@ async function loadProducts() {
   setProductsLoading(true);
 
   try {
-    const snap = await getDocs(query(collection(lojaDb, 'produtos'), where('ativo', '==', true)));
+    // Carrega a coleção inteira e filtra no front.
+    // Isso evita erro quando o produto foi criado manualmente sem índice/campo esperado
+    // e também facilita teste com regras abertas.
+    const snap = await getDocs(collection(lojaDb, 'produtos'));
     products = snap.docs
       .map(normalizeProduct)
+      .filter((product) => product.ativo !== false)
       .sort((a, b) => Number(b.destaque) - Number(a.destaque) || (a.ordem || 999) - (b.ordem || 999) || a.titulo.localeCompare(b.titulo));
   } catch (err) {
-    console.error(err);
+    console.error('Erro ao carregar produtos da loja:', err?.code || err?.message || err, err);
     products = [];
-    localToast('error', 'Não foi possível carregar os produtos da loja. Verifique as regras de leitura do Firebase.');
+    localToast('error', `Não foi possível carregar os produtos da loja. Erro: ${err?.code || err?.message || 'verifique as regras de leitura'}`);
   } finally {
     setProductsLoading(false);
     applyFilters();
@@ -806,12 +810,15 @@ async function loadSellerProducts() {
   if (!sellerId) return;
 
   try {
-    const snap = await getDocs(query(collection(lojaDb, 'produtos'), where('sellerId', '==', sellerId)));
-    sellerProducts = snap.docs.map(normalizeProduct).sort((a, b) => a.titulo.localeCompare(b.titulo));
+    const snap = await getDocs(collection(lojaDb, 'produtos'));
+    sellerProducts = snap.docs
+      .map(normalizeProduct)
+      .filter((product) => String(product.sellerId || product.vendedorId || '') === String(sellerId))
+      .sort((a, b) => a.titulo.localeCompare(b.titulo));
   } catch (err) {
-    console.error(err);
+    console.error('Erro ao carregar produtos do vendedor:', err?.code || err?.message || err, err);
     sellerProducts = [];
-    localToast('error', 'Não foi possível carregar seus produtos.');
+    localToast('error', `Não foi possível carregar seus produtos. Erro: ${err?.code || err?.message || 'verifique as regras'}`);
   }
 
   renderSellerProducts();
@@ -822,16 +829,19 @@ async function loadSellerOrders() {
   if (!sellerId) return;
 
   try {
-    const snap = await getDocs(query(collection(lojaDb, 'pedidos'), where('sellerId', '==', sellerId)));
-    sellerOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => {
-      const ad = Number(a?.createdAt?.seconds || 0);
-      const bd = Number(b?.createdAt?.seconds || 0);
-      return bd - ad;
-    });
+    const snap = await getDocs(collection(lojaDb, 'pedidos'));
+    sellerOrders = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((order) => String(order.sellerId || order.vendedorId || '') === String(sellerId))
+      .sort((a, b) => {
+        const ad = Number(a?.createdAt?.seconds || 0);
+        const bd = Number(b?.createdAt?.seconds || 0);
+        return bd - ad;
+      });
   } catch (err) {
-    console.error(err);
+    console.error('Erro ao carregar pedidos do vendedor:', err?.code || err?.message || err, err);
     sellerOrders = [];
-    localToast('error', 'Não foi possível carregar seus pedidos.');
+    localToast('error', `Não foi possível carregar seus pedidos. Erro: ${err?.code || err?.message || 'verifique as regras'}`);
   }
 
   renderSellerOrders();
