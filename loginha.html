@@ -124,9 +124,6 @@
             <button id="btn-buyer-profile" type="button" class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed transition">
               <i data-lucide="shopping-bag" class="w-4 h-4"></i> <span class="hidden sm:inline">Minhas compras</span>
             </button>
-            <button id="btn-support-panel" type="button" class="hidden inline-flex items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm font-bold text-sky-700 shadow-sm hover:bg-sky-100 disabled:opacity-60 disabled:cursor-not-allowed transition">
-              <i data-lucide="shield-check" class="w-4 h-4"></i> <span class="hidden sm:inline">Suporte</span>
-            </button>
             <button id="btn-top-seller" type="button" class="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed transition">
               <i data-lucide="store" class="w-4 h-4"></i> Quero vender
             </button>
@@ -324,6 +321,14 @@
             </div>
             <div id="seller-orders-list" class="mt-4 space-y-3"></div>
           </div>
+
+          <div class="rounded-3xl border border-sky-100 bg-white p-4 shadow-sm">
+            <div>
+              <p class="text-sm font-black text-gray-900">Chats do suporte</p>
+              <p id="seller-support-chats-counter" class="text-xs font-semibold text-gray-400 mt-0.5">Carregando...</p>
+            </div>
+            <div id="seller-support-chats-list" class="mt-4 space-y-3"></div>
+          </div>
         </section>
       </div>
     </div>
@@ -400,7 +405,7 @@
     </div>
   </div>
 
-  <div id="problem-modal" class="fixed inset-0 z-[79] hidden items-end sm:items-center justify-center p-0 sm:p-4">
+  <div id="problem-modal" class="fixed inset-0 z-[100] hidden items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-close-problem-modal></div>
     <div class="relative z-10 w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
       <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 rounded-t-3xl">
@@ -416,7 +421,7 @@
       <div class="p-5 space-y-4">
         <div id="problem-order-summary" class="rounded-2xl border border-gray-100 bg-gray-50 p-3 text-sm font-semibold text-gray-600">Pedido selecionado.</div>
         <div id="problem-chat-status" class="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-800">
-          O chat com o vendedor abre automaticamente após a compra e fica ativo por 24 horas. Depois disso, você poderá abrir um chat com o suporte por 48 horas.
+          O chat com o vendedor fica disponível por 24 horas. Se não resolver, você poderá abrir um chat com o suporte por 48 horas.
         </div>
 
         <div id="problem-chat-messages" class="max-h-[360px] overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-2">
@@ -432,7 +437,7 @@
             <button id="btn-submit-problem" type="submit" class="w-full rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-black text-white shadow-sm hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed transition">
               Enviar mensagem
             </button>
-            <button id="btn-resolve-chat" type="button" class="hidden rounded-2xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-black text-gray-700 hover:bg-gray-50 transition">
+            <button id="btn-resolve-chat" type="button" class="hidden rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3.5 text-sm font-black text-emerald-700 hover:bg-emerald-100 transition">
               Terminar chat
             </button>
             <button id="btn-escalate-chat" type="button" class="hidden rounded-2xl border border-red-200 bg-red-50 px-5 py-3.5 text-sm font-black text-red-700 hover:bg-red-100 transition">
@@ -444,29 +449,28 @@
     </div>
   </div>
 
+
   <div id="support-modal" class="fixed inset-0 z-[82] hidden items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-close-support-modal></div>
-    <div class="relative z-10 w-full sm:max-w-6xl max-h-[94vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
+    <div class="relative z-10 w-full sm:max-w-7xl max-h-[94vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
       <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 rounded-t-3xl">
         <div>
           <h3 class="text-lg font-black text-gray-900">Painel de suporte</h3>
-          <p id="support-modal-subtitle" class="text-xs font-semibold text-gray-400">Administração da loginha, verificações e chats de suporte.</p>
+          <p id="support-modal-subtitle" class="text-xs font-semibold text-gray-400">Administracao da loginha, verificacoes, denuncias e chats.</p>
         </div>
         <button type="button" data-close-support-modal class="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
 
-      <div class="grid lg:grid-cols-2 gap-5 p-5">
+      <div class="grid lg:grid-cols-3 gap-5 p-5">
         <section class="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
           <div class="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <p class="text-sm font-black text-gray-900">Solicitações de vendedor</p>
+              <p class="text-sm font-black text-gray-900">Solicitacoes de vendedor</p>
               <p id="support-verifications-counter" class="text-xs font-semibold text-gray-400 mt-0.5">Carregando...</p>
             </div>
-            <button id="btn-reload-support-panel" type="button" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50 transition">
-              Atualizar
-            </button>
+            <button id="btn-reload-support-panel" type="button" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50 transition">Atualizar</button>
           </div>
           <div id="support-verifications-list" class="mt-4 space-y-3"></div>
         </section>
@@ -478,8 +482,21 @@
           </div>
           <div id="support-chats-list" class="mt-4 space-y-3"></div>
         </section>
+
+        <section class="rounded-3xl border border-red-100 bg-white p-4 shadow-sm">
+          <div>
+            <p class="text-sm font-black text-gray-900">Denuncias de produtos</p>
+            <p id="support-reports-counter" class="text-xs font-semibold text-gray-400 mt-0.5">Carregando...</p>
+          </div>
+          <div id="support-reports-list" class="mt-4 space-y-3"></div>
+        </section>
       </div>
     </div>
+  </div>
+
+  <div id="image-viewer-modal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-slate-950/80 p-4">
+    <button type="button" data-close-image-viewer class="absolute right-4 top-4 rounded-xl bg-white/10 p-3 text-white hover:bg-white/20"><i data-lucide="x" class="w-5 h-5"></i></button>
+    <img id="image-viewer-img" src="" alt="Visualizacao" class="max-h-[92vh] max-w-[96vw] rounded-2xl bg-white object-contain shadow-2xl">
   </div>
 
   <div id="toast-container" class="fixed top-5 right-5 z-[90] flex flex-col gap-2"></div>
