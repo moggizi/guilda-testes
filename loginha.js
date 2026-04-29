@@ -12,6 +12,7 @@ import {
   getDoc,
   setDoc,
   addDoc,
+  runTransaction,
   serverTimestamp,
   limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -75,14 +76,19 @@ const els = {
   sellerModalSubtitle: qs('seller-modal-subtitle'),
   sellerProfileCard: qs('seller-profile-card'),
   sellerForm: qs('seller-product-form'),
+  sellerFormTitle: qs('seller-product-form-title'),
+  sellerFormSubtitle: qs('seller-product-form-subtitle'),
   sellerTitle: qs('seller-product-title'),
   sellerPrice: qs('seller-product-price'),
   sellerStock: qs('seller-product-stock'),
   sellerImage: qs('seller-product-image'),
+  sellerProductFile: qs('seller-product-file'),
+  sellerProductPhotoStatus: qs('seller-product-photo-status'),
   sellerDescription: qs('seller-product-description'),
   sellerActive: qs('seller-product-active'),
   sellerFeatured: qs('seller-product-featured'),
   saveSellerProductBtn: qs('btn-save-seller-product'),
+  cancelProductEditBtn: qs('btn-cancel-product-edit'),
   reloadSellerDataBtn: qs('btn-reload-seller-data'),
   sellerProductsCounter: qs('seller-products-counter'),
   sellerProductsList: qs('seller-products-list'),
@@ -106,6 +112,8 @@ let sellerOrders = [];
 let loadingProducts = false;
 let loadingStatus = false;
 let loadingSellerPanel = false;
+let editingProductId = '';
+let selectedProductImageBase64 = '';
 
 function localToast(type, message) {
   if (typeof showToast === 'function') {
@@ -152,6 +160,141 @@ function setProductsLoading(visible) {
     if (els.grid) els.grid.innerHTML = '';
   }
 }
+
+
+function dataUrlSizeBytes(dataUrl = '') {
+  if (!dataUrl || !dataUrl.includes(',')) return 0;
+  const base64 = dataUrl.split(',')[1] || '';
+  const padding = (base64.match(/=*$/)?.[0]?.length) || 0;
+  return Math.ceil((base64.length * 3) / 4) - padding;
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Imagem inválida.'));
+      img.src = String(reader.result || '');
+    };
+    reader.onerror = () => reject(new Error('Falha ao ler a imagem.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function compressImageToBase64(file, maxBytes = 950 * 1024) {
+  if (!file || !String(file.type || '').startsWith('image/')) {
+    throw new Error('Selecione uma imagem válida.');
+  }
+
+  const img = await loadImageFromFile(file);
+  let width = img.width || 0;
+  let height = img.height || 0;
+  const maxDim = 1400;
+
+  if (width > maxDim || height > maxDim) {
+    const scale = Math.min(maxDim / width, maxDim / height);
+    width = Math.max(1, Math.round(width * scale));
+    height = Math.max(1, Math.round(height * scale));
+  }
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  if (!ctx) throw new Error('Canvas indisponível.');
+
+  let quality = 0.82;
+  let output = '';
+  let attempts = 0;
+
+  while (attempts < 14) {
+    canvas.width = width;
+    canvas.height = height;
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+    output = canvas.toDataURL('image/jpeg', quality);
+
+    if (dataUrlSizeBytes(output) <= maxBytes) return output;
+
+    if (quality > 0.48) {
+      quality -= 0.08;
+    } else {
+      width = Math.max(480, Math.round(width * 0.88));
+      height = Math.max(480, Math.round(height * 0.88));
+    }
+    attempts += 1;
+  }
+
+  throw new Error('Não foi possível comprimir a imagem abaixo de 1 MB.');
+}
+
+function setProductPhotoStatus(message = 'Se enviar arquivo, ele será comprimido abaixo de 1 MB e terá prioridade sobre o link.') {
+  if (els.sellerProductPhotoStatus) els.sellerProductPhotoStatus.textContent = message;
+}
+
+function timestampToMs(value) {
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value?.toDate === 'function') return value.toDate().getTime();
+  if (typeof value?.seconds === 'number') return value.seconds * 1000;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatDateTimeBR(value) {
+  const ms = timestampToMs(value);
+  if (!ms) return '-';
+  return new Date(ms).toLocaleDateString('pt-BR') + ' ' + new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function getDeliveredAtMs(order = {}) {
+  return Number(order.entregueEmMs || order.entrega?.entregueEmMs || 0)
+    || timestampToMs(order.entrega?.entregueEm)
+    || timestampToMs(order.entregueEm)
+    || timestampToMs(order.updatedAt);
+}
+
+function isFinalOrderStatus(status) {
+  const s = String(status || '').toLowerCase();
+  return s === 'entregue' || s === 'reembolsado';
+}
+
+function calculateSellerFinancials(orders = []) {
+  const now = Date.now();
+  const releaseMs = 3 * 24 * 60 * 60 * 1000;
+  let saldo = 0;
+  let saldoPendente = 0;
+  let totalLiquidoEntregue = 0;
+  let totalBrutoEntregue = 0;
+  let totalVendasEntregues = 0;
+
+  orders.forEach((order) => {
+    if (String(order.status || '').toLowerCase() !== 'entregue') return;
+
+    const gross = Number(order.total || order.precoUnitario || 0);
+    if (!Number.isFinite(gross) || gross <= 0) return;
+
+    const net = gross * 0.95;
+    const deliveredAt = getDeliveredAtMs(order);
+
+    totalVendasEntregues += 1;
+    totalBrutoEntregue += gross;
+    totalLiquidoEntregue += net;
+
+    if (deliveredAt && now - deliveredAt >= releaseMs) saldo += net;
+    else saldoPendente += net;
+  });
+
+  return {
+    saldo,
+    saldoPendente,
+    totalLiquidoEntregue,
+    totalBrutoEntregue,
+    totalVendasEntregues
+  };
+}
+
 
 function sameEmail(a, b) {
   const ea = normalizeEmail(a);
@@ -296,7 +439,8 @@ function normalizeProduct(docSnap) {
     estoqueAtivo,
     estoqueQuantidade,
     disponivel: estoqueAtivo ? estoqueQuantidade > 0 : true,
-    ativo: data.ativo !== false
+    ativo: data.ativo !== false,
+    totalVendas: Number(data.totalVendas || data.totalVendasEntregues || 0)
   };
 }
 
@@ -489,37 +633,20 @@ function renderProducts() {
   }
 
   els.grid.innerHTML = filteredProducts.map((product) => {
-    const stockLabel = product.disponivel
-      ? '<span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200">DISPONÍVEL</span>'
-      : '<span class="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-black text-red-700 ring-1 ring-red-200">ESGOTADO</span>';
     const image = product.imagem
       ? `<img src="${escapeHtml(product.imagem)}" alt="${escapeHtml(product.titulo)}" class="h-full w-full object-cover">`
-      : '<i data-lucide="package" class="h-10 w-10 text-gray-300"></i>';
+      : '<i data-lucide="package" class="h-8 w-8 sm:h-10 sm:w-10 text-gray-300"></i>';
 
     return `
-      <article class="group overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+      <article class="group overflow-hidden rounded-2xl sm:rounded-3xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
         <button type="button" data-open-product="${escapeHtml(product.id)}" class="block w-full text-left">
-          <div class="relative h-44 bg-gray-50 flex items-center justify-center overflow-hidden">
+          <div class="relative h-28 sm:h-44 bg-gray-50 flex items-center justify-center overflow-hidden">
             ${image}
-            <div class="absolute left-3 top-3 flex flex-wrap gap-2">
-              ${stockLabel}
-              ${product.destaque ? '<span class="inline-flex items-center rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-black text-white">DESTAQUE</span>' : ''}
-            </div>
           </div>
-          <div class="p-4">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <h4 class="line-clamp-2 text-base font-black text-gray-900">${escapeHtml(product.titulo)}</h4>
-                <p class="mt-1 text-xs font-bold text-gray-400">${escapeHtml(product.sellerName)}</p>
-              </div>
-              <span class="shrink-0 rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-black text-gray-500 ring-1 ring-gray-200">${escapeHtml(product.categoriaNome)}</span>
-            </div>
-            <p class="mt-3 line-clamp-2 min-h-[40px] text-sm text-gray-500">${escapeHtml(product.descricao || 'Produto disponível na loja.')}</p>
-            <div class="mt-4 flex items-center justify-between gap-3">
-              <p class="text-xl font-black text-emerald-700">${moneyBRL(product.preco)}</p>
-              <span class="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white group-hover:bg-emerald-700">
-                Ver <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
-              </span>
+          <div class="p-2.5 sm:p-4">
+            <h4 class="line-clamp-2 min-h-[34px] sm:min-h-0 text-xs sm:text-base font-black text-gray-900">${escapeHtml(product.titulo)}</h4>
+            <div class="mt-2 flex items-center justify-between gap-2">
+              <span class="min-w-0 truncate rounded-full bg-gray-50 px-2 py-0.5 text-[10px] sm:text-[11px] font-black text-gray-500 ring-1 ring-gray-200">${escapeHtml(product.categoriaNome)}</span>
             </div>
           </div>
         </button>
@@ -534,11 +661,28 @@ function renderProducts() {
   initIcons();
 }
 
-function openProductModal(productId) {
+async function getSellerPublicStats(sellerId) {
+  const cleanSellerId = String(sellerId || '').trim();
+  if (!cleanSellerId) return { totalVendasEntregues: 0 };
+
+  try {
+    const snap = await getDocs(collection(lojaDb, 'pedidos'));
+    const orders = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((order) => String(order.sellerId || order.vendedorId || '') === cleanSellerId);
+    return calculateSellerFinancials(orders);
+  } catch (err) {
+    console.warn('Não foi possível carregar vendas públicas do vendedor:', err);
+    return { totalVendasEntregues: 0 };
+  }
+}
+
+async function openProductModal(productId) {
   const product = products.find((item) => String(item.id) === String(productId));
   if (!product || !els.productModal || !els.productModalBody || !els.productModalTitle) return;
 
   els.productModalTitle.textContent = product.titulo;
+
   const image = product.imagem
     ? `<img src="${escapeHtml(product.imagem)}" alt="${escapeHtml(product.titulo)}" class="h-56 w-full rounded-3xl object-cover border border-gray-100 bg-gray-50">`
     : '<div class="h-56 w-full rounded-3xl border border-gray-100 bg-gray-50 flex items-center justify-center"><i data-lucide="package" class="h-12 w-12 text-gray-300"></i></div>';
@@ -550,9 +694,14 @@ function openProductModal(productId) {
   els.productModalBody.innerHTML = `
     ${image}
     <div>
-      <div class="flex flex-wrap items-center gap-2">${statusHtml}<span class="inline-flex items-center rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-black text-gray-500 ring-1 ring-gray-200">${escapeHtml(product.categoriaNome)}</span></div>
+      <div class="flex flex-wrap items-center gap-2">
+        ${statusHtml}
+        <span class="inline-flex items-center rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-black text-gray-500 ring-1 ring-gray-200">${escapeHtml(product.categoriaNome)}</span>
+        <span class="inline-flex items-center rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-black text-gray-500 ring-1 ring-gray-200">Estoque: ${Number(product.estoqueQuantidade || 0)}</span>
+      </div>
       <h4 class="mt-3 text-2xl font-black text-gray-900">${escapeHtml(product.titulo)}</h4>
       <p class="mt-1 text-sm font-bold text-gray-400">Vendedor: ${escapeHtml(product.sellerName)}</p>
+      <p id="modal-seller-sales" class="mt-1 text-xs font-black text-emerald-700">Carregando vendas do vendedor...</p>
       <p class="mt-4 text-sm leading-relaxed text-gray-600">${escapeHtml(product.descricao || 'Produto disponível na loja.')}</p>
       <p class="mt-5 text-3xl font-black text-emerald-700">${moneyBRL(product.preco)}</p>
     </div>
@@ -565,6 +714,13 @@ function openProductModal(productId) {
   els.productModal.classList.add('flex');
   els.productModalBody.querySelector('[data-buy-product]')?.addEventListener('click', () => createOrder(product.id));
   initIcons();
+
+  const stats = await getSellerPublicStats(product.sellerId);
+  const salesEl = qs('modal-seller-sales');
+  if (salesEl) {
+    const total = Number(stats.totalVendasEntregues || 0);
+    salesEl.textContent = total === 1 ? 'Vendedor com 1 venda entregue' : `Vendedor com ${total} vendas entregues`;
+  }
 }
 
 function closeProductModal() {
@@ -706,58 +862,89 @@ async function createOrder(productId) {
     const buyer = lojaStatus?.comprador || await ensureBuyerProfile({ silent: true });
     if (!buyer) throw new Error('buyer-required');
 
-    const orderPayload = {
-      buyerId: ghubProfile.gameId,
-      buyerUid: currentUser.uid || '',
-      buyerEmail: normalizeEmail(currentUser.email || ghubProfile.email || ''),
-      buyerName: ghubProfile.nick || '',
-      buyerNick: ghubProfile.nick || '',
-      buyerPhoto: ghubProfile.foto || '',
+    const productRef = doc(lojaDb, 'produtos', product.id);
+    const orderRef = doc(collection(lojaDb, 'pedidos'));
 
-      sellerId: product.sellerId || 'ghub',
-      sellerName: product.sellerName || 'GuildaHub',
-      sellerPhoto: product.sellerPhoto || '',
+    await runTransaction(lojaDb, async (transaction) => {
+      const productSnap = await transaction.get(productRef);
+      if (!productSnap.exists()) throw new Error('product-not-found');
 
-      produtoId: product.id,
-      produtoTitulo: product.titulo,
-      produtoImagem: product.imagem || '',
-      categoriaId: product.categoriaId || '',
-      categoriaNome: product.categoriaNome || '',
+      const currentProduct = normalizeProduct(productSnap);
+      if (currentProduct.ativo === false) throw new Error('product-inactive');
 
-      quantidade: 1,
-      precoUnitario: Number(product.preco || 0),
-      total: Number(product.preco || 0),
-      moeda: product.moeda || 'BRL',
+      const estoqueAtual = Number(currentProduct.estoqueQuantidade ?? 0);
+      if (currentProduct.estoqueAtivo !== false && estoqueAtual <= 0) {
+        throw new Error('out-of-stock');
+      }
 
-      status: 'pendente',
-      pagamento: {
-        metodo: 'pix',
-        provider: '',
+      const orderPayload = {
+        buyerId: ghubProfile.gameId,
+        buyerUid: currentUser.uid || '',
+        buyerEmail: normalizeEmail(currentUser.email || ghubProfile.email || ''),
+        buyerName: ghubProfile.nick || '',
+        buyerNick: ghubProfile.nick || '',
+        buyerPhoto: ghubProfile.foto || '',
+
+        sellerId: currentProduct.sellerId || 'ghub',
+        sellerName: currentProduct.sellerName || 'GuildaHub',
+        sellerPhoto: currentProduct.sellerPhoto || '',
+
+        produtoId: currentProduct.id,
+        produtoTitulo: currentProduct.titulo,
+        produtoImagem: currentProduct.imagem || '',
+        categoriaId: currentProduct.categoriaId || '',
+        categoriaNome: currentProduct.categoriaNome || '',
+
+        quantidade: 1,
+        precoUnitario: Number(currentProduct.preco || 0),
+        total: Number(currentProduct.preco || 0),
+        moeda: currentProduct.moeda || 'BRL',
+
         status: 'pendente',
-        paymentId: '',
-        qrCode: '',
-        copiaCola: '',
-        aprovadoEm: null,
-        reembolsadoEm: null
-      },
-      entrega: {
-        tipo: product.entregaTipo || 'manual',
-        status: 'aguardando_pagamento',
-        observacao: '',
-        entregueEm: null,
-        canceladoEm: null
-      },
+        finalizado: false,
+        pagamento: {
+          metodo: 'pix',
+          provider: '',
+          status: 'pendente',
+          paymentId: '',
+          qrCode: '',
+          copiaCola: '',
+          aprovadoEm: null,
+          reembolsadoEm: null
+        },
+        entrega: {
+          tipo: currentProduct.entregaTipo || 'manual',
+          status: 'aguardando_pagamento',
+          observacao: '',
+          entregueEm: null,
+          entregueEmMs: null,
+          canceladoEm: null
+        },
 
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    };
+        createdAt: serverTimestamp(),
+        createdAtMs: Date.now(),
+        updatedAt: serverTimestamp()
+      };
 
-    const orderRef = await addDoc(collection(lojaDb, 'pedidos'), orderPayload);
+      transaction.set(orderRef, orderPayload);
+
+      if (currentProduct.estoqueAtivo !== false) {
+        transaction.set(productRef, {
+          estoqueQuantidade: Math.max(0, estoqueAtual - 1),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+    });
+
     closeProductModal();
     localToast('success', 'Pedido criado: ' + orderRef.id);
+    await loadProducts();
   } catch (err) {
     console.error(err);
-    localToast('error', 'Não foi possível criar o pedido. Confira se as regras do Firebase da loja permitem escrita.');
+    const msg = err?.message === 'out-of-stock'
+      ? 'Esse produto ficou sem estoque.'
+      : 'Não foi possível criar o pedido. Confira se as regras do Firebase da loja permitem escrita.';
+    localToast('error', msg);
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -787,6 +974,9 @@ function renderSellerProfileCard() {
   }
 
   const photo = seller.foto || ghubProfile?.foto || '';
+  const finances = calculateSellerFinancials(sellerOrders);
+  const canWithdraw = finances.saldo >= 20;
+
   els.sellerProfileCard.innerHTML = `
     <div class="flex items-start gap-3">
       <div class="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center text-emerald-700">
@@ -800,6 +990,29 @@ function renderSellerProfileCard() {
         <p class="mt-1 text-xs font-semibold text-gray-400">ID: ${escapeHtml(seller.id || seller.gameId || ghubProfile?.gameId || '-')}</p>
         <p class="mt-1 text-xs font-semibold text-gray-400 truncate">${escapeHtml(seller.email || currentUser?.email || '')}</p>
       </div>
+    </div>
+
+    <div class="mt-4 grid grid-cols-2 gap-2">
+      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100">
+        <p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saldo atual</p>
+        <p class="mt-1 text-lg font-black text-emerald-700">${moneyBRL(finances.saldo)}</p>
+      </div>
+      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100">
+        <p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saldo pendente</p>
+        <p class="mt-1 text-lg font-black text-amber-600">${moneyBRL(finances.saldoPendente)}</p>
+      </div>
+      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100">
+        <p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Vendas entregues</p>
+        <p class="mt-1 text-lg font-black text-gray-900">${Number(finances.totalVendasEntregues || 0)}</p>
+      </div>
+      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100">
+        <p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saque mínimo</p>
+        <p class="mt-1 text-lg font-black ${canWithdraw ? 'text-emerald-700' : 'text-gray-900'}">R$ 20,00</p>
+      </div>
+    </div>
+
+    <div class="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-800">
+      Será cobrada taxa de 5% por venda. O saldo só é liberado 3 dias após o pedido ser marcado como entregue. Saque mínimo: R$ 20,00.
     </div>
   `;
   initIcons();
@@ -834,8 +1047,8 @@ async function loadSellerOrders() {
       .map((d) => ({ id: d.id, ...d.data() }))
       .filter((order) => String(order.sellerId || order.vendedorId || '') === String(sellerId))
       .sort((a, b) => {
-        const ad = Number(a?.createdAt?.seconds || 0);
-        const bd = Number(b?.createdAt?.seconds || 0);
+        const ad = Number(a?.createdAtMs || a?.createdAt?.seconds || 0);
+        const bd = Number(b?.createdAtMs || b?.createdAt?.seconds || 0);
         return bd - ad;
       });
   } catch (err) {
@@ -845,6 +1058,7 @@ async function loadSellerOrders() {
   }
 
   renderSellerOrders();
+  renderSellerProfileCard();
 }
 
 function renderSellerProducts() {
@@ -879,8 +1093,11 @@ function renderSellerProducts() {
             <p class="mt-1 text-xs font-bold text-gray-400">${moneyBRL(product.preco)} • ${escapeHtml(product.categoriaNome)} • estoque ${Number(product.estoqueQuantidade || 0)}</p>
           </div>
         </div>
-        <div class="mt-3 flex gap-2">
-          <button type="button" data-toggle-product="${escapeHtml(product.id)}" data-next-active="${product.ativo ? 'false' : 'true'}" class="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50">
+        <div class="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" data-edit-product="${escapeHtml(product.id)}" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">
+            Editar
+          </button>
+          <button type="button" data-toggle-product="${escapeHtml(product.id)}" data-next-active="${product.ativo ? 'false' : 'true'}" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50">
             ${product.ativo ? 'Pausar' : 'Ativar'}
           </button>
         </div>
@@ -892,13 +1109,58 @@ function renderSellerProducts() {
     btn.addEventListener('click', () => toggleSellerProduct(btn.getAttribute('data-toggle-product') || '', btn.getAttribute('data-next-active') === 'true'));
   });
 
+  els.sellerProductsList.querySelectorAll('[data-edit-product]').forEach((btn) => {
+    btn.addEventListener('click', () => startEditProduct(btn.getAttribute('data-edit-product') || ''));
+  });
+
   initIcons();
+}
+
+function resetSellerProductForm() {
+  editingProductId = '';
+  selectedProductImageBase64 = '';
+  els.sellerForm?.reset();
+  if (els.sellerStock) els.sellerStock.value = '1';
+  if (els.sellerActive) els.sellerActive.checked = true;
+  if (els.sellerFeatured) els.sellerFeatured.checked = false;
+  if (els.sellerProductFile) els.sellerProductFile.value = '';
+  if (els.sellerFormTitle) els.sellerFormTitle.textContent = 'Cadastrar produto';
+  if (els.sellerFormSubtitle) els.sellerFormSubtitle.textContent = 'O produto já entra na vitrine se estiver ativo.';
+  if (els.saveSellerProductBtn) els.saveSellerProductBtn.textContent = 'Cadastrar produto';
+  els.cancelProductEditBtn?.classList.add('hidden');
+  setProductPhotoStatus();
+}
+
+function startEditProduct(productId) {
+  const product = sellerProducts.find((item) => String(item.id) === String(productId));
+  if (!product) return;
+
+  editingProductId = product.id;
+  selectedProductImageBase64 = String(product.imagem || '').startsWith('data:image/') ? String(product.imagem || '') : '';
+
+  if (els.sellerTitle) els.sellerTitle.value = product.titulo || '';
+  if (els.sellerPrice) els.sellerPrice.value = Number(product.preco || 0);
+  if (els.sellerStock) els.sellerStock.value = Number(product.estoqueQuantidade || 0);
+  if (els.sellerCategory) els.sellerCategory.value = product.categoriaId || '';
+  if (els.sellerImage) els.sellerImage.value = String(product.imagem || '').startsWith('http') ? product.imagem : '';
+  if (els.sellerDescription) els.sellerDescription.value = product.descricao || '';
+  if (els.sellerActive) els.sellerActive.checked = product.ativo !== false;
+  if (els.sellerFeatured) els.sellerFeatured.checked = product.destaque === true;
+  if (els.sellerProductFile) els.sellerProductFile.value = '';
+
+  if (els.sellerFormTitle) els.sellerFormTitle.textContent = 'Editar produto';
+  if (els.sellerFormSubtitle) els.sellerFormSubtitle.textContent = `Editando: ${product.titulo}`;
+  if (els.saveSellerProductBtn) els.saveSellerProductBtn.textContent = 'Salvar alterações';
+  els.cancelProductEditBtn?.classList.remove('hidden');
+  setProductPhotoStatus(selectedProductImageBase64 ? 'Imagem atual em base64 será mantida se você não enviar outra.' : 'Você pode trocar a imagem por link ou enviar novo arquivo.');
+
+  els.sellerForm?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function getOrderStatusClass(status) {
   const s = String(status || '').toLowerCase();
   if (s === 'entregue') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
-  if (s === 'cancelado' || s === 'reembolsado') return 'bg-red-50 text-red-700 ring-red-200';
+  if (s === 'reembolsado') return 'bg-red-50 text-red-700 ring-red-200';
   if (s === 'pago' || s === 'em_entrega') return 'bg-sky-50 text-sky-700 ring-sky-200';
   return 'bg-amber-50 text-amber-700 ring-amber-200';
 }
@@ -917,22 +1179,28 @@ function renderSellerOrders() {
 
   els.sellerOrdersList.innerHTML = sellerOrders.map((order) => {
     const status = String(order.status || 'pendente').toLowerCase();
+    const locked = isFinalOrderStatus(status) || order.finalizado === true;
+    const created = formatDateTimeBR(order.createdAtMs || order.createdAt);
     return `
       <div class="rounded-2xl border border-gray-100 bg-gray-50 p-3">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p>
             <p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p>
-            <p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || order.buyerId || '-')}</p>
+            <p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || '-')}</p>
+            <p class="mt-1 text-xs font-semibold text-gray-500">ID comprador: ${escapeHtml(order.buyerId || '-')}</p>
+            <p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p>
           </div>
           <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span>
         </div>
         <div class="mt-3 flex items-center justify-between gap-3">
           <p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p>
           <div class="flex flex-wrap justify-end gap-2">
-            <button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button>
-            <button type="button" data-order-action="cancelado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50">Cancelar</button>
-            <button type="button" data-order-action="reembolsado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Reembolso</button>
+            ${locked
+              ? '<span class="rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-500">Finalizado</span>'
+              : `<button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button>
+                 <button type="button" data-order-action="reembolsado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Reembolso</button>`
+            }
           </div>
         </div>
       </div>
@@ -982,7 +1250,8 @@ async function handleSellerProductSubmit(event) {
   const stock = Math.max(0, Math.floor(Number(els.sellerStock?.value || 0)));
   const categoryId = String(els.sellerCategory?.value || '').trim();
   const categoryName = getCategoryName(categoryId);
-  const image = String(els.sellerImage?.value || '').trim();
+  const imageFromUrl = String(els.sellerImage?.value || '').trim();
+  const image = selectedProductImageBase64 || imageFromUrl;
   const description = String(els.sellerDescription?.value || '').trim().slice(0, 300);
   const ativo = !!els.sellerActive?.checked;
   const destaque = !!els.sellerFeatured?.checked;
@@ -1002,11 +1271,11 @@ async function handleSellerProductSubmit(event) {
     return;
   }
 
-  setButtonLoading(els.saveSellerProductBtn, true, 'Cadastrar produto');
+  setButtonLoading(els.saveSellerProductBtn, true, editingProductId ? 'Salvar alterações' : 'Cadastrar produto');
 
   try {
     const seller = lojaStatus.vendedor;
-    const payload = {
+    const basePayload = {
       sellerId: ghubProfile.gameId,
       sellerName: seller.nome || seller.nick || ghubProfile.nick || 'Vendedor',
       sellerPhoto: seller.foto || ghubProfile.foto || '',
@@ -1028,31 +1297,42 @@ async function handleSellerProductSubmit(event) {
       estoqueQuantidade: stock,
       ativo,
       destaque,
-      visualizacoes: 0,
-      totalVendas: 0,
-      createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
 
-    const productRef = await addDoc(collection(lojaDb, 'produtos'), payload);
-    await setDoc(productRef, { id: productRef.id }, { merge: true });
+    if (editingProductId) {
+      const existing = sellerProducts.find((item) => String(item.id) === String(editingProductId));
+      if (existing && String(existing.sellerId) !== String(ghubProfile.gameId)) {
+        throw new Error('Produto não pertence ao vendedor.');
+      }
 
-    await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), {
-      totalProdutos: sellerProducts.length + 1,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+      await setDoc(doc(lojaDb, 'produtos', editingProductId), basePayload, { merge: true });
+      localToast('success', 'Produto atualizado.');
+    } else {
+      const payload = {
+        ...basePayload,
+        visualizacoes: 0,
+        totalVendas: 0,
+        createdAt: serverTimestamp()
+      };
+      const productRef = await addDoc(collection(lojaDb, 'produtos'), payload);
+      await setDoc(productRef, { id: productRef.id }, { merge: true });
 
-    els.sellerForm?.reset();
-    if (els.sellerStock) els.sellerStock.value = '1';
-    if (els.sellerActive) els.sellerActive.checked = true;
+      await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), {
+        totalProdutos: sellerProducts.length + 1,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
 
-    localToast('success', 'Produto cadastrado na loja.');
+      localToast('success', 'Produto cadastrado na loja.');
+    }
+
+    resetSellerProductForm();
     await Promise.all([loadProducts(), loadSellerProducts()]);
   } catch (err) {
     console.error(err);
-    localToast('error', 'Não foi possível cadastrar o produto. Confira se as regras do Firebase permitem escrita.');
+    localToast('error', editingProductId ? 'Não foi possível atualizar o produto.' : 'Não foi possível cadastrar o produto. Confira se as regras do Firebase permitem escrita.');
   } finally {
-    setButtonLoading(els.saveSellerProductBtn, false, 'Cadastrar produto');
+    setButtonLoading(els.saveSellerProductBtn, false, editingProductId ? 'Salvar alterações' : 'Cadastrar produto');
   }
 }
 
@@ -1083,37 +1363,42 @@ async function updateOrderStatus(orderId, action) {
   if (!orderId || !action) return;
 
   const order = sellerOrders.find((item) => String(item.id) === String(orderId));
-  if (order && String(order.sellerId) !== String(ghubProfile?.gameId || '')) {
+  if (!order) return;
+
+  if (String(order.sellerId) !== String(ghubProfile?.gameId || '')) {
     localToast('error', 'Esse pedido não pertence ao seu vendedor.');
     return;
   }
 
+  if (isFinalOrderStatus(order.status) || order.finalizado === true) {
+    localToast('error', 'Esse pedido já foi finalizado e não pode ser alterado.');
+    return;
+  }
+
+  const nowMs = Date.now();
   const updates = {
     status: action,
+    finalizado: true,
     updatedAt: serverTimestamp()
   };
 
   if (action === 'entregue') {
+    updates.entregueEmMs = nowMs;
     updates.entrega = {
       ...(order?.entrega || {}),
       status: 'entregue',
-      entregueEm: serverTimestamp()
-    };
-  }
-
-  if (action === 'cancelado') {
-    updates.entrega = {
-      ...(order?.entrega || {}),
-      status: 'cancelado',
-      canceladoEm: serverTimestamp()
+      entregueEm: serverTimestamp(),
+      entregueEmMs: nowMs
     };
   }
 
   if (action === 'reembolsado') {
+    updates.reembolsadoEmMs = nowMs;
     updates.pagamento = {
       ...(order?.pagamento || {}),
       status: 'reembolsado',
-      reembolsadoEm: serverTimestamp()
+      reembolsadoEm: serverTimestamp(),
+      reembolsadoEmMs: nowMs
     };
     updates.entrega = {
       ...(order?.entrega || {}),
@@ -1123,8 +1408,18 @@ async function updateOrderStatus(orderId, action) {
 
   try {
     await setDoc(doc(lojaDb, 'pedidos', orderId), updates, { merge: true });
-    localToast('success', action === 'reembolsado' ? 'Pedido marcado como reembolsado.' : `Pedido marcado como ${action}.`);
-    await loadSellerOrders();
+
+    if (action === 'entregue' && order.produtoId) {
+      const productRef = doc(lojaDb, 'produtos', String(order.produtoId));
+      const currentProduct = sellerProducts.find((p) => String(p.id) === String(order.produtoId)) || products.find((p) => String(p.id) === String(order.produtoId));
+      await setDoc(productRef, {
+        totalVendas: Number(currentProduct?.totalVendas || 0) + 1,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+
+    localToast('success', action === 'reembolsado' ? 'Pedido marcado como reembolsado.' : 'Pedido marcado como entregue.');
+    await Promise.all([loadSellerOrders(), loadProducts(), loadSellerProducts()]);
   } catch (err) {
     console.error(err);
     localToast('error', 'Não foi possível atualizar o pedido.');
@@ -1147,6 +1442,28 @@ function bindEvents() {
   els.topSellerBtn?.addEventListener('click', handleTopSellerClick);
   els.sellerProfileBtn?.addEventListener('click', openSellerPanel);
   els.sellerForm?.addEventListener('submit', handleSellerProductSubmit);
+  els.cancelProductEditBtn?.addEventListener('click', resetSellerProductForm);
+  els.sellerProductFile?.addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      selectedProductImageBase64 = '';
+      setProductPhotoStatus();
+      return;
+    }
+
+    try {
+      setProductPhotoStatus('Comprimindo imagem...');
+      selectedProductImageBase64 = await compressImageToBase64(file, 950 * 1024);
+      const kb = Math.max(1, Math.round(dataUrlSizeBytes(selectedProductImageBase64) / 1024));
+      setProductPhotoStatus(`Imagem pronta em base64 (${kb} KB).`);
+    } catch (err) {
+      console.error(err);
+      selectedProductImageBase64 = '';
+      if (els.sellerProductFile) els.sellerProductFile.value = '';
+      setProductPhotoStatus();
+      localToast('error', err?.message || 'Não foi possível processar a imagem.');
+    }
+  });
   els.reloadSellerDataBtn?.addEventListener('click', reloadSellerPanelData);
 
   document.querySelectorAll('[data-close-product-modal]').forEach((btn) => {
