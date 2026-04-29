@@ -1617,12 +1617,15 @@ function renderSellerProducts() {
             <p class="mt-1 text-xs font-bold text-gray-400">${moneyBRL(product.preco)} • ${escapeHtml(product.categoriaNome)} • estoque ${Number(product.estoqueQuantidade || 0)}</p>
           </div>
         </div>
-        <div class="mt-3 grid grid-cols-2 gap-2">
+        <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
           <button type="button" data-edit-product="${escapeHtml(product.id)}" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">
             Editar
           </button>
           <button type="button" data-toggle-product="${escapeHtml(product.id)}" data-next-active="${product.ativo ? 'false' : 'true'}" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50">
             ${product.ativo ? 'Pausar' : 'Ativar'}
+          </button>
+          <button type="button" data-delete-seller-product="${escapeHtml(product.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">
+            Excluir
           </button>
         </div>
       </div>
@@ -1635,6 +1638,10 @@ function renderSellerProducts() {
 
   els.sellerProductsList.querySelectorAll('[data-edit-product]').forEach((btn) => {
     btn.addEventListener('click', () => startEditProduct(btn.getAttribute('data-edit-product') || ''));
+  });
+
+  els.sellerProductsList.querySelectorAll('[data-delete-seller-product]').forEach((btn) => {
+    btn.addEventListener('click', () => deleteSellerProduct(btn.getAttribute('data-delete-seller-product') || ''));
   });
 
   initIcons();
@@ -1874,6 +1881,46 @@ async function toggleSellerProduct(productId, nextActive) {
   } catch (err) {
     console.error(err);
     localToast('error', 'Não foi possível atualizar o produto.');
+  }
+}
+
+async function deleteSellerProduct(productId) {
+  if (!productId || !ghubProfile?.gameId) return;
+
+  const product = sellerProducts.find((item) => String(item.id) === String(productId));
+  if (!product) {
+    localToast('error', 'Produto não encontrado no seu painel.');
+    return;
+  }
+
+  if (String(product.sellerId || '') !== String(ghubProfile.gameId)) {
+    localToast('error', 'Esse produto não pertence ao seu vendedor.');
+    return;
+  }
+
+  const confirmed = await confirmTypedDelete({
+    title: 'Excluir produto',
+    message: `Essa ação vai remover definitivamente o produto "${product.titulo || product.id}" da loja. Isso não apaga pedidos já existentes.`
+  });
+  if (!confirmed) return;
+
+  try {
+    await deleteDoc(doc(lojaDb, 'produtos', productId));
+
+    if (editingProductId && String(editingProductId) === String(productId)) {
+      resetSellerProductForm();
+    }
+
+    await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), {
+      totalProdutos: Math.max(0, sellerProducts.length - 1),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    localToast('success', 'Produto excluído.');
+    await Promise.all([loadProducts(), loadSellerProducts()]);
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível excluir o produto.');
   }
 }
 
