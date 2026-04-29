@@ -638,6 +638,8 @@ async function loadStoreStatus() {
   if (!currentUser || !ghubProfile?.gameId) {
     lojaStatus = { comprador: null, vendedor: null };
     renderSellerTop();
+    isSupportAdmin = false;
+    renderSupportTop();
     return;
   }
 
@@ -2044,6 +2046,7 @@ const CHAT_TYPE_SUPPORT_SELLER = 'suporte_vendedor';
 let supportReports = [];
 let sellerSupportChats = [];
 
+els.supportModal = qs('support-modal');
 els.supportReportsCounter = qs('support-reports-counter');
 els.supportReportsList = qs('support-reports-list');
 els.sellerSupportChatsCounter = qs('seller-support-chats-counter');
@@ -2385,6 +2388,85 @@ async function reloadSellerPanelData() {
   }
 }
 
+
+function renderSupportTop() {
+  if (!els.supportPanelBtn) return;
+  els.supportPanelBtn.classList.toggle('hidden', !isSupportAdmin);
+  initIcons();
+}
+
+async function checkSupportAdmin() {
+  isSupportAdmin = false;
+  if (!currentUser || !ghubProfile?.gameId) {
+    renderSupportTop();
+    return false;
+  }
+
+  try {
+    const snap = await getDoc(doc(lojaDb, ADMIN_COLLECTION, ADMIN_DOC_ID));
+    if (!snap.exists()) {
+      renderSupportTop();
+      return false;
+    }
+
+    const data = snap.data() || {};
+    const ids = Array.isArray(data.id) ? data.id : Array.isArray(data.ids) ? data.ids : [];
+    const cleanIds = ids.map((v) => String(v || '').trim()).filter(Boolean);
+    const userIds = [
+      ghubProfile.gameId,
+      ghubProfile.id,
+      currentUser.uid,
+      currentUser.email,
+      normalizeEmail(currentUser.email || '')
+    ].map((v) => String(v || '').trim()).filter(Boolean);
+
+    isSupportAdmin = userIds.some((item) => cleanIds.includes(item));
+  } catch (err) {
+    console.warn('Admin/security indisponível ou sem permissão:', err);
+    isSupportAdmin = false;
+  }
+
+  renderSupportTop();
+  return isSupportAdmin;
+}
+
+function openSupportModal() {
+  if (!isSupportAdmin) {
+    localToast('error', 'Acesso restrito ao suporte.');
+    return;
+  }
+  els.supportModal?.classList.remove('hidden');
+  els.supportModal?.classList.add('flex');
+  loadSupportPanelData().catch((err) => {
+    console.error(err);
+    localToast('error', 'Não foi possível carregar o painel de suporte.');
+  });
+  initIcons();
+}
+
+function closeSupportModal() {
+  els.supportModal?.classList.add('hidden');
+  els.supportModal?.classList.remove('flex');
+}
+
+async function updateVerificationStatus(id, status) {
+  if (!id || !isSupportAdmin) return;
+  const normalized = getVerificationStatusLabel(status) || status;
+  try {
+    await setDoc(doc(lojaDb, VERIFICATION_COLLECTION, id), {
+      status: normalized,
+      analisadoPor: ghubProfile?.gameId || currentUser?.uid || '',
+      analisadoEmMs: Date.now(),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    localToast('success', normalized === 'aprovado' ? 'Verificação aprovada.' : 'Verificação recusada.');
+    await loadSupportVerifications();
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível atualizar a verificação.');
+  }
+}
+
 async function loadSupportPanelData() {
   if (!isSupportAdmin) return;
   if (els.supportVerificationsList) els.supportVerificationsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando verificacoes...</div>';
@@ -2570,6 +2652,7 @@ function bindEvents() {
   });
 
   els.buyerProfileBtn?.addEventListener('click', openBuyerModal);
+  els.supportPanelBtn?.addEventListener('click', openSupportModal);
   els.toggleSellerFormBtn?.addEventListener('click', () => {
     const willOpen = els.sellerForm?.classList.contains('hidden');
     setMobileCollapsibleState(els.sellerForm, els.toggleSellerFormBtn, willOpen, 'Fechar cadastro de produto', 'Abrir/editar cadastro de produto');
@@ -2604,6 +2687,7 @@ function bindEvents() {
     }
   });
   els.reloadSellerDataBtn?.addEventListener('click', reloadSellerPanelData);
+  els.reloadSupportPanelBtn?.addEventListener('click', () => loadSupportPanelData().catch((err) => { console.error(err); localToast('error', 'Não foi possível atualizar o suporte.'); }));
   els.verificationForm?.addEventListener('submit', submitSellerVerification);
   els.verificationRgFront?.addEventListener('change', (event) => handleVerificationFileChange('front', event.target.files?.[0] || null));
   els.verificationRgBack?.addEventListener('change', (event) => handleVerificationFileChange('back', event.target.files?.[0] || null));
@@ -2631,6 +2715,10 @@ function bindEvents() {
     btn.addEventListener('click', closeProblemModal);
   });
 
+  document.querySelectorAll('[data-close-support-modal]').forEach((btn) => {
+    btn.addEventListener('click', closeSupportModal);
+  });
+
   document.querySelectorAll('[data-close-image-viewer]').forEach((btn) => {
     btn.addEventListener('click', closeImageViewer);
   });
@@ -2646,6 +2734,7 @@ function bindEvents() {
     closeBuyerModal();
     closeVerificationModal();
     closeProblemModal();
+    closeSupportModal();
   });
 }
 
@@ -2668,6 +2757,7 @@ async function handleAuthState(user) {
     applySidebarUser(ghubProfile);
     renderSellerTop();
     await loadStoreStatus();
+    await checkSupportAdmin();
     await loadBuyerOrders();
   } catch (err) {
     console.error(err);
@@ -2678,12 +2768,25 @@ async function handleAuthState(user) {
 }
 
 (async function boot() {
-  bindEvents();
-  initIcons();
-  renderSellerTop();
+  try {
+    bindEvents();
+    initIcons();
+    renderSellerTop();
+    renderSupportTop();
 
-  await loadCategories();
-  await loadProducts();
+    await Promise.all([
+      loadCategories().catch((err) => console.warn('Falha ao carregar categorias:', err)),
+      loadProducts().catch((err) => console.warn('Falha ao carregar produtos:', err))
+    ]);
 
-  onAuthStateChanged(auth, handleAuthState);
+    onAuthStateChanged(auth, (user) => {
+      handleAuthState(user).catch((err) => {
+        console.error('Erro ao processar autenticação:', err);
+        localToast('error', 'Não foi possível carregar seus dados da loja.');
+      });
+    });
+  } catch (err) {
+    console.error('Falha ao iniciar a loginha:', err);
+    localToast('error', 'Não foi possível iniciar a loginha. Verifique o console.');
+  }
 })();
