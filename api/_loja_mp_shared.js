@@ -1,8 +1,8 @@
 // api/_loja_mp_shared.js
 // Helper seguro para Pix da Loginha via Mercado Pago + Firebase Admin.
-// Compatível com o padrão da sua API atual: MP_ACCESS_TOKEN e FIREBASE_SERVICE_ACCOUNT.
+// Compatível com Vercel Serverless.
 // Recomendado para a loja separada:
-// - MP_ACCESS_TOKEN ou LOJA_MP_ACCESS_TOKEN
+// - LOJA_MP_ACCESS_TOKEN
 // - LOJA_FIREBASE_SERVICE_ACCOUNT ou LOJA_FIREBASE_SERVICE_ACCOUNT_JSON
 // - GHUB_FIREBASE_SERVICE_ACCOUNT ou GHUB_FIREBASE_SERVICE_ACCOUNT_JSON
 // Fallback: FIREBASE_SERVICE_ACCOUNT é aceito, mas se a loja usa outro projeto, use LOJA_*.
@@ -273,8 +273,8 @@ function getBaseUrl(req) {
 }
 
 function getMpAccessToken() {
-  const token = getEnv('LOJA_MP_ACCESS_TOKEN') || getEnv('MP_ACCESS_TOKEN') || getEnv('MERCADO_PAGO_ACCESS_TOKEN');
-  if (!token) throw new Error('MP_ACCESS_TOKEN ausente (ENV).');
+  const token = getEnv('LOJA_MP_ACCESS_TOKEN');
+  if (!token) throw new Error('LOJA_MP_ACCESS_TOKEN ausente (ENV).');
   return token;
 }
 
