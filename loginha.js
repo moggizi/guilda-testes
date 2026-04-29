@@ -51,22 +51,44 @@ const DEFAULT_CATEGORIES = [
 ];
 
 const els = {
-  refreshBtn: qs('btn-refresh-store'),
-  profileTitle: qs('store-profile-title'),
-  profileBox: qs('store-profile-box'),
-  syncBuyerBtn: qs('btn-sync-buyer'),
-  requestSellerBtn: qs('btn-request-seller'),
+  topSellerBtn: qs('btn-top-seller'),
+  topSellerAvatarWrap: qs('seller-top-avatar-wrap'),
+  topSellerAvatar: qs('seller-top-avatar'),
+  topSellerAvatarIcon: qs('seller-top-avatar-icon'),
+  sellerProfileBtn: qs('btn-seller-profile'),
+
   search: qs('store-search'),
   category: qs('store-category'),
+  sellerCategory: qs('seller-product-category'),
   clearFiltersBtn: qs('btn-clear-filters'),
   chips: qs('category-chips'),
   counter: qs('products-counter'),
   loading: qs('products-loading'),
   empty: qs('products-empty'),
   grid: qs('products-grid'),
-  modal: qs('product-modal'),
-  modalTitle: qs('modal-product-title'),
-  modalBody: qs('modal-product-body'),
+
+  productModal: qs('product-modal'),
+  productModalTitle: qs('modal-product-title'),
+  productModalBody: qs('modal-product-body'),
+
+  sellerModal: qs('seller-modal'),
+  sellerModalSubtitle: qs('seller-modal-subtitle'),
+  sellerProfileCard: qs('seller-profile-card'),
+  sellerForm: qs('seller-product-form'),
+  sellerTitle: qs('seller-product-title'),
+  sellerPrice: qs('seller-product-price'),
+  sellerStock: qs('seller-product-stock'),
+  sellerImage: qs('seller-product-image'),
+  sellerDescription: qs('seller-product-description'),
+  sellerActive: qs('seller-product-active'),
+  sellerFeatured: qs('seller-product-featured'),
+  saveSellerProductBtn: qs('btn-save-seller-product'),
+  reloadSellerDataBtn: qs('btn-reload-seller-data'),
+  sellerProductsCounter: qs('seller-products-counter'),
+  sellerProductsList: qs('seller-products-list'),
+  sellerOrdersCounter: qs('seller-orders-counter'),
+  sellerOrdersList: qs('seller-orders-list'),
+
   userRole: qs('user-role'),
   userEmail: qs('user-email'),
   sidebarAvatar: qs('sidebar-avatar'),
@@ -79,8 +101,11 @@ let lojaStatus = { comprador: null, vendedor: null };
 let categories = [...DEFAULT_CATEGORIES];
 let products = [];
 let filteredProducts = [];
+let sellerProducts = [];
+let sellerOrders = [];
 let loadingProducts = false;
 let loadingStatus = false;
+let loadingSellerPanel = false;
 
 function localToast(type, message) {
   if (typeof showToast === 'function') {
@@ -227,15 +252,107 @@ function getProfilePayload() {
   };
 }
 
+function normalizeCategoryId(value) {
+  return String(value || '').trim().toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function getCategoryName(categoryId) {
+  if (!categoryId) return 'Sem categoria';
+  return categories.find((cat) => cat.id === categoryId)?.nome || categoryId;
+}
+
+function getProductCategoryId(product) {
+  return normalizeCategoryId(product.categoriaId || product.categoryId || product.categoria || product.category || '');
+}
+
+function normalizeProduct(docSnap) {
+  const data = docSnap.data() || {};
+  const categoryId = getProductCategoryId(data);
+  const image = data.imagem || data.image || (Array.isArray(data.imagens) ? data.imagens[0] : '') || '';
+  const title = String(data.titulo || data.title || data.nome || data.name || 'Produto sem nome').trim();
+  const sellerName = String(data.sellerName || data.vendedorNome || data.sellerNome || data.sellerId || 'Vendedor').trim();
+  const estoqueAtivo = data.estoqueAtivo !== false;
+  const estoqueQuantidade = Number(data.estoqueQuantidade ?? data.estoque ?? 999);
+
+  return {
+    id: docSnap.id,
+    ...data,
+    titulo: title,
+    descricao: String(data.descricao || data.description || '').trim(),
+    preco: Number(data.preco ?? data.price ?? 0),
+    moeda: data.moeda || data.currency || 'BRL',
+    imagem: image,
+    categoriaId,
+    categoriaNome: data.categoriaNome || getCategoryName(categoryId),
+    sellerId: String(data.sellerId || data.vendedorId || '').trim(),
+    sellerName,
+    sellerPhoto: data.sellerPhoto || data.vendedorFoto || '',
+    destaque: data.destaque === true,
+    ordem: Number(data.ordem || data.order || 999),
+    estoqueAtivo,
+    estoqueQuantidade,
+    disponivel: estoqueAtivo ? estoqueQuantidade > 0 : true,
+    ativo: data.ativo !== false
+  };
+}
+
+function getSellerReadyHtml() {
+  const seller = lojaStatus?.vendedor;
+  const readySeller = !!seller;
+  if (!currentUser) return '<i data-lucide="store" class="w-4 h-4"></i> Quero vender';
+  if (loadingStatus) return '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Verificando';
+  return readySeller
+    ? '<i data-lucide="badge-check" class="w-4 h-4"></i> Vendedor'
+    : '<i data-lucide="store" class="w-4 h-4"></i> Quero vender';
+}
+
+function renderSellerTop() {
+  const seller = lojaStatus?.vendedor;
+  const readySeller = !!seller;
+
+  if (els.topSellerBtn) {
+    els.topSellerBtn.disabled = loadingStatus;
+    els.topSellerBtn.className = readySeller
+      ? 'inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition'
+      : 'inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed transition';
+    els.topSellerBtn.innerHTML = getSellerReadyHtml();
+  }
+
+  if (els.topSellerAvatarWrap) {
+    els.topSellerAvatarWrap.classList.toggle('hidden', !readySeller);
+  }
+
+  const photo = seller?.foto || seller?.sellerPhoto || ghubProfile?.foto || '';
+  if (readySeller && photo && els.topSellerAvatar && els.topSellerAvatarIcon) {
+    els.topSellerAvatar.src = photo;
+    els.topSellerAvatar.classList.remove('hidden');
+    els.topSellerAvatarIcon.classList.add('hidden');
+  } else if (els.topSellerAvatar && els.topSellerAvatarIcon) {
+    els.topSellerAvatar.src = '';
+    els.topSellerAvatar.classList.add('hidden');
+    els.topSellerAvatarIcon.classList.remove('hidden');
+  }
+
+  if (els.sellerProfileBtn) {
+    els.sellerProfileBtn.classList.toggle('hidden', !readySeller);
+  }
+
+  initIcons();
+}
+
 async function loadStoreStatus() {
   if (!currentUser || !ghubProfile?.gameId) {
     lojaStatus = { comprador: null, vendedor: null };
-    renderStoreProfile();
+    renderSellerTop();
     return;
   }
 
   loadingStatus = true;
-  renderStoreProfile();
+  renderSellerTop();
 
   try {
     const [buyerSnap, sellerSnap] = await Promise.all([
@@ -253,89 +370,8 @@ async function loadStoreStatus() {
     localToast('error', 'Não foi possível verificar seu cadastro na loja. Confira as regras do Firebase da loja.');
   } finally {
     loadingStatus = false;
-    renderStoreProfile();
+    renderSellerTop();
   }
-}
-
-function renderStoreProfile() {
-  const readyBuyer = !!lojaStatus?.comprador;
-  const readySeller = !!lojaStatus?.vendedor;
-
-  if (!currentUser) {
-    if (els.profileTitle) els.profileTitle.textContent = 'Entre para comprar';
-    if (els.profileBox) {
-      els.profileBox.innerHTML = '<p class="font-semibold text-gray-700">A vitrine é pública, mas a compra exige login na GuildaHub.</p><p class="mt-1 text-xs text-gray-400">Entre na sua conta e volte para criar o perfil de comprador.</p>';
-    }
-    if (els.syncBuyerBtn) els.syncBuyerBtn.disabled = true;
-    if (els.requestSellerBtn) els.requestSellerBtn.disabled = true;
-    return;
-  }
-
-  if (!ghubProfile?.gameId) {
-    if (els.profileTitle) els.profileTitle.textContent = 'Perfil sem ID de jogo';
-    if (els.profileBox) {
-      els.profileBox.innerHTML = '<p class="font-semibold text-red-700">Não encontrei o ID do seu perfil da GuildaHub.</p><p class="mt-1 text-xs text-gray-400">Conclua seu perfil antes de usar a loja.</p><a href="perfil.html" class="mt-3 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white">Abrir perfil</a>';
-    }
-    if (els.syncBuyerBtn) els.syncBuyerBtn.disabled = true;
-    if (els.requestSellerBtn) els.requestSellerBtn.disabled = true;
-    return;
-  }
-
-  if (els.profileTitle) {
-    els.profileTitle.textContent = loadingStatus
-      ? 'Verificando cadastro...'
-      : readyBuyer || readySeller
-        ? `ID ${ghubProfile.gameId}`
-        : 'Cadastre-se na loja';
-  }
-
-  const buyerBadge = readyBuyer
-    ? '<span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200">COMPRADOR ATIVO</span>'
-    : '<span class="inline-flex items-center rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-black text-gray-500 ring-1 ring-gray-200">SEM COMPRADOR</span>';
-
-  const sellerStatus = String(lojaStatus?.vendedor?.status || '').toLowerCase();
-  const sellerBadge = readySeller
-    ? `<span class="inline-flex items-center rounded-full ${sellerStatus === 'pendente' ? 'bg-amber-50 text-amber-700 ring-amber-200' : 'bg-slate-900 text-white ring-slate-900'} px-2.5 py-1 text-[11px] font-black ring-1">${sellerStatus === 'pendente' ? 'VENDEDOR PENDENTE' : 'VENDEDOR'}</span>`
-    : '<span class="inline-flex items-center rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-black text-gray-500 ring-1 ring-gray-200">SEM VENDEDOR</span>';
-
-  if (els.profileBox) {
-    els.profileBox.innerHTML = `
-      <div class="flex items-start gap-3">
-        <div class="h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center text-emerald-700">
-          ${ghubProfile.foto ? `<img src="${escapeHtml(ghubProfile.foto)}" alt="" class="h-full w-full object-cover">` : '<i data-lucide="user" class="w-5 h-5"></i>'}
-        </div>
-        <div class="min-w-0 flex-1">
-          <p class="font-black text-gray-900 truncate">${escapeHtml(ghubProfile.nick || 'Sem nick')}</p>
-          <p class="mt-0.5 text-xs font-semibold text-gray-400">ID: ${escapeHtml(ghubProfile.gameId)}</p>
-          <div class="mt-3 flex flex-wrap gap-2">${buyerBadge}${sellerBadge}</div>
-        </div>
-      </div>
-    `;
-  }
-
-  if (els.syncBuyerBtn) {
-    els.syncBuyerBtn.disabled = loadingStatus || readyBuyer;
-    els.syncBuyerBtn.innerHTML = readyBuyer
-      ? '<i data-lucide="check-circle" class="w-4 h-4"></i> Comprador ativo'
-      : '<i data-lucide="user-plus" class="w-4 h-4"></i> Criar comprador';
-  }
-
-  if (els.requestSellerBtn) {
-    els.requestSellerBtn.disabled = loadingStatus || readySeller;
-    els.requestSellerBtn.innerHTML = readySeller
-      ? '<i data-lucide="check-circle" class="w-4 h-4"></i> Vendedor cadastrado'
-      : '<i data-lucide="store" class="w-4 h-4"></i> Quero vender';
-  }
-
-  initIcons();
-}
-
-function normalizeCategoryId(value) {
-  return String(value || '').trim().toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
 
 async function loadCategories() {
@@ -378,6 +414,14 @@ function renderCategories() {
     els.category.value = current;
   }
 
+  if (els.sellerCategory) {
+    const current = els.sellerCategory.value;
+    els.sellerCategory.innerHTML = '<option value="">Selecione</option>' + categories
+      .map((cat) => `<option value="${escapeHtml(cat.id)}">${escapeHtml(cat.nome)}</option>`)
+      .join('');
+    els.sellerCategory.value = current;
+  }
+
   if (els.chips) {
     els.chips.innerHTML = '<button type="button" class="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200" data-category-chip="">Todas</button>' + categories
       .map((cat) => `<button type="button" class="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50" data-category-chip="${escapeHtml(cat.id)}">${escapeHtml(cat.nome)}</button>`)
@@ -390,44 +434,6 @@ function renderCategories() {
       });
     });
   }
-}
-
-function getProductCategoryId(product) {
-  return normalizeCategoryId(product.categoriaId || product.categoryId || product.categoria || product.category || '');
-}
-
-function getCategoryName(categoryId) {
-  if (!categoryId) return 'Sem categoria';
-  return categories.find((cat) => cat.id === categoryId)?.nome || categoryId;
-}
-
-function normalizeProduct(docSnap) {
-  const data = docSnap.data() || {};
-  const categoryId = getProductCategoryId(data);
-  const image = data.imagem || data.image || (Array.isArray(data.imagens) ? data.imagens[0] : '') || '';
-  const title = String(data.titulo || data.title || data.nome || data.name || 'Produto sem nome').trim();
-  const sellerName = String(data.sellerName || data.vendedorNome || data.sellerNome || data.sellerId || 'Vendedor').trim();
-  const estoqueAtivo = data.estoqueAtivo !== false;
-  const estoqueQuantidade = Number(data.estoqueQuantidade ?? data.estoque ?? 999);
-
-  return {
-    id: docSnap.id,
-    ...data,
-    titulo: title,
-    descricao: String(data.descricao || data.description || '').trim(),
-    preco: Number(data.preco ?? data.price ?? 0),
-    moeda: data.moeda || data.currency || 'BRL',
-    imagem: image,
-    categoriaId: categoryId,
-    categoriaNome: data.categoriaNome || getCategoryName(categoryId),
-    sellerId: String(data.sellerId || data.vendedorId || '').trim(),
-    sellerName,
-    destaque: data.destaque === true,
-    ordem: Number(data.ordem || data.order || 999),
-    estoqueAtivo,
-    estoqueQuantidade,
-    disponivel: estoqueAtivo ? estoqueQuantidade > 0 : true
-  };
 }
 
 async function loadProducts() {
@@ -526,9 +532,9 @@ function renderProducts() {
 
 function openProductModal(productId) {
   const product = products.find((item) => String(item.id) === String(productId));
-  if (!product || !els.modal || !els.modalBody || !els.modalTitle) return;
+  if (!product || !els.productModal || !els.productModalBody || !els.productModalTitle) return;
 
-  els.modalTitle.textContent = product.titulo;
+  els.productModalTitle.textContent = product.titulo;
   const image = product.imagem
     ? `<img src="${escapeHtml(product.imagem)}" alt="${escapeHtml(product.titulo)}" class="h-56 w-full rounded-3xl object-cover border border-gray-100 bg-gray-50">`
     : '<div class="h-56 w-full rounded-3xl border border-gray-100 bg-gray-50 flex items-center justify-center"><i data-lucide="package" class="h-12 w-12 text-gray-300"></i></div>';
@@ -537,7 +543,7 @@ function openProductModal(productId) {
     ? '<span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200">DISPONÍVEL</span>'
     : '<span class="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-black text-red-700 ring-1 ring-red-200">ESGOTADO</span>';
 
-  els.modalBody.innerHTML = `
+  els.productModalBody.innerHTML = `
     ${image}
     <div>
       <div class="flex flex-wrap items-center gap-2">${statusHtml}<span class="inline-flex items-center rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-black text-gray-500 ring-1 ring-gray-200">${escapeHtml(product.categoriaNome)}</span></div>
@@ -546,23 +552,20 @@ function openProductModal(productId) {
       <p class="mt-4 text-sm leading-relaxed text-gray-600">${escapeHtml(product.descricao || 'Produto disponível na loja.')}</p>
       <p class="mt-5 text-3xl font-black text-emerald-700">${moneyBRL(product.preco)}</p>
     </div>
-    <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-xs font-semibold leading-relaxed text-emerald-800">
-      A compra exige login na GuildaHub. Se você ainda não tiver perfil de comprador na loja, ele será criado automaticamente com seu ID do jogo.
-    </div>
     <button type="button" data-buy-product="${escapeHtml(product.id)}" class="w-full rounded-2xl bg-slate-900 px-5 py-4 text-sm font-black text-white shadow-lg shadow-slate-900/10 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
       Comprar agora
     </button>
   `;
 
-  els.modal.classList.remove('hidden');
-  els.modal.classList.add('flex');
-  els.modalBody.querySelector('[data-buy-product]')?.addEventListener('click', () => createOrder(product.id));
+  els.productModal.classList.remove('hidden');
+  els.productModal.classList.add('flex');
+  els.productModalBody.querySelector('[data-buy-product]')?.addEventListener('click', () => createOrder(product.id));
   initIcons();
 }
 
 function closeProductModal() {
-  els.modal?.classList.add('hidden');
-  els.modal?.classList.remove('flex');
+  els.productModal?.classList.add('hidden');
+  els.productModal?.classList.remove('flex');
 }
 
 async function ensureBuyerProfile({ silent = false } = {}) {
@@ -599,40 +602,26 @@ async function ensureBuyerProfile({ silent = false } = {}) {
 
   await setDoc(buyerRef, buyerPayload, { merge: true });
   lojaStatus.comprador = { id: payload.gameId, ...buyerPayload };
-  renderStoreProfile();
 
   if (!silent) localToast('success', buyerSnap.exists() ? 'Perfil de comprador atualizado.' : 'Perfil de comprador criado.');
   return lojaStatus.comprador;
 }
 
-async function syncBuyer() {
-  setButtonLoading(els.syncBuyerBtn, true, '<i data-lucide="user-plus" class="w-4 h-4"></i> Criar comprador');
-
-  try {
-    await ensureBuyerProfile({ silent: false });
-  } catch (err) {
-    console.error(err);
-    localToast('error', 'Não foi possível criar o comprador. Confira se as regras do Firebase da loja permitem escrita.');
-  } finally {
-    renderStoreProfile();
-  }
-}
-
-async function requestSeller() {
+async function createOrUpdateSellerProfile() {
   if (!currentUser) {
-    localToast('error', 'Entre na GuildaHub para solicitar cadastro como vendedor.');
-    return;
+    localToast('error', 'Entre na GuildaHub para criar seu perfil de vendedor.');
+    return null;
   }
 
   let payload;
   try {
     payload = getProfilePayload();
   } catch (_) {
-    localToast('error', 'Conclua seu perfil da GuildaHub antes de solicitar vendedor.');
-    return;
+    localToast('error', 'Conclua seu perfil da GuildaHub antes de criar vendedor.');
+    return null;
   }
 
-  setButtonLoading(els.requestSellerBtn, true, '<i data-lucide="store" class="w-4 h-4"></i> Quero vender');
+  setButtonLoading(els.topSellerBtn, true, getSellerReadyHtml());
 
   try {
     const sellerRef = doc(lojaDb, 'vendedor', payload.gameId);
@@ -650,8 +639,8 @@ async function requestSeller() {
       nick: payload.nick || existing?.nick || '',
       foto: payload.foto || existing?.foto || '',
       tipo: existing?.tipo || 'externo',
-      status: existing?.status || 'pendente',
-      ativo: existing?.ativo === true,
+      status: existing?.status || 'ativo',
+      ativo: existing?.ativo !== false,
       verificado: existing?.verificado === true,
       totalProdutos: Number(existing?.totalProdutos || 0),
       totalVendas: Number(existing?.totalVendas || 0),
@@ -661,14 +650,26 @@ async function requestSeller() {
 
     await setDoc(sellerRef, sellerPayload, { merge: true });
     lojaStatus.vendedor = { id: payload.gameId, ...sellerPayload };
-    renderStoreProfile();
-    localToast('success', sellerSnap.exists() ? 'Cadastro de vendedor atualizado.' : 'Solicitação de vendedor criada.');
+    renderSellerTop();
+    localToast('success', sellerSnap.exists() ? 'Perfil de vendedor atualizado.' : 'Perfil de vendedor criado.');
+    return lojaStatus.vendedor;
   } catch (err) {
     console.error(err);
-    localToast('error', 'Não foi possível solicitar cadastro como vendedor. Confira se as regras do Firebase da loja permitem escrita.');
+    localToast('error', 'Não foi possível criar o vendedor. Confira se as regras do Firebase da loja permitem escrita.');
+    return null;
   } finally {
-    renderStoreProfile();
+    renderSellerTop();
   }
+}
+
+async function handleTopSellerClick() {
+  if (lojaStatus?.vendedor) {
+    await openSellerPanel();
+    return;
+  }
+
+  const seller = await createOrUpdateSellerProfile();
+  if (seller) await openSellerPanel();
 }
 
 async function createOrder(productId) {
@@ -690,7 +691,7 @@ async function createOrder(productId) {
     return;
   }
 
-  const btn = els.modalBody?.querySelector('[data-buy-product]');
+  const btn = els.productModalBody?.querySelector('[data-buy-product]');
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i> Criando pedido...';
@@ -711,6 +712,7 @@ async function createOrder(productId) {
 
       sellerId: product.sellerId || 'ghub',
       sellerName: product.sellerName || 'GuildaHub',
+      sellerPhoto: product.sellerPhoto || '',
 
       produtoId: product.id,
       produtoTitulo: product.titulo,
@@ -731,13 +733,15 @@ async function createOrder(productId) {
         paymentId: '',
         qrCode: '',
         copiaCola: '',
-        aprovadoEm: null
+        aprovadoEm: null,
+        reembolsadoEm: null
       },
       entrega: {
         tipo: product.entregaTipo || 'manual',
         status: 'aguardando_pagamento',
         observacao: '',
-        entregueEm: null
+        entregueEm: null,
+        canceladoEm: null
       },
 
       createdAt: serverTimestamp(),
@@ -758,14 +762,368 @@ async function createOrder(productId) {
   }
 }
 
+function openSellerModal() {
+  els.sellerModal?.classList.remove('hidden');
+  els.sellerModal?.classList.add('flex');
+  initIcons();
+}
+
+function closeSellerModal() {
+  els.sellerModal?.classList.add('hidden');
+  els.sellerModal?.classList.remove('flex');
+}
+
+function renderSellerProfileCard() {
+  const seller = lojaStatus?.vendedor;
+  if (!els.sellerProfileCard) return;
+
+  if (!seller) {
+    els.sellerProfileCard.innerHTML = '<p class="text-sm font-bold text-red-700">Perfil de vendedor não encontrado.</p>';
+    return;
+  }
+
+  const photo = seller.foto || ghubProfile?.foto || '';
+  els.sellerProfileCard.innerHTML = `
+    <div class="flex items-start gap-3">
+      <div class="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center text-emerald-700">
+        ${photo ? `<img src="${escapeHtml(photo)}" alt="" class="h-full w-full object-cover">` : '<i data-lucide="user" class="w-6 h-6"></i>'}
+      </div>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="font-black text-gray-900 truncate">${escapeHtml(seller.nome || seller.nick || 'Vendedor')}</p>
+          <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i> VENDEDOR</span>
+        </div>
+        <p class="mt-1 text-xs font-semibold text-gray-400">ID: ${escapeHtml(seller.id || seller.gameId || ghubProfile?.gameId || '-')}</p>
+        <p class="mt-1 text-xs font-semibold text-gray-400 truncate">${escapeHtml(seller.email || currentUser?.email || '')}</p>
+      </div>
+    </div>
+  `;
+  initIcons();
+}
+
+async function loadSellerProducts() {
+  const sellerId = ghubProfile?.gameId;
+  if (!sellerId) return;
+
+  try {
+    const snap = await getDocs(query(collection(lojaDb, 'produtos'), where('sellerId', '==', sellerId)));
+    sellerProducts = snap.docs.map(normalizeProduct).sort((a, b) => a.titulo.localeCompare(b.titulo));
+  } catch (err) {
+    console.error(err);
+    sellerProducts = [];
+    localToast('error', 'Não foi possível carregar seus produtos.');
+  }
+
+  renderSellerProducts();
+}
+
+async function loadSellerOrders() {
+  const sellerId = ghubProfile?.gameId;
+  if (!sellerId) return;
+
+  try {
+    const snap = await getDocs(query(collection(lojaDb, 'pedidos'), where('sellerId', '==', sellerId)));
+    sellerOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => {
+      const ad = Number(a?.createdAt?.seconds || 0);
+      const bd = Number(b?.createdAt?.seconds || 0);
+      return bd - ad;
+    });
+  } catch (err) {
+    console.error(err);
+    sellerOrders = [];
+    localToast('error', 'Não foi possível carregar seus pedidos.');
+  }
+
+  renderSellerOrders();
+}
+
+function renderSellerProducts() {
+  if (els.sellerProductsCounter) {
+    const total = sellerProducts.length;
+    els.sellerProductsCounter.textContent = total === 1 ? '1 produto cadastrado' : `${total} produtos cadastrados`;
+  }
+
+  if (!els.sellerProductsList) return;
+  if (!sellerProducts.length) {
+    els.sellerProductsList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhum produto cadastrado ainda.</div>';
+    return;
+  }
+
+  els.sellerProductsList.innerHTML = sellerProducts.map((product) => {
+    const image = product.imagem
+      ? `<img src="${escapeHtml(product.imagem)}" alt="" class="h-12 w-12 rounded-xl object-cover bg-gray-50 border border-gray-100">`
+      : '<div class="h-12 w-12 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center"><i data-lucide="package" class="w-5 h-5 text-gray-300"></i></div>';
+    const status = product.ativo
+      ? '<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-200">ATIVO</span>'
+      : '<span class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-black text-gray-500 ring-1 ring-gray-200">PAUSADO</span>';
+
+    return `
+      <div class="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+        <div class="flex items-start gap-3">
+          ${image}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <p class="font-black text-sm text-gray-900 truncate">${escapeHtml(product.titulo)}</p>
+              ${status}
+            </div>
+            <p class="mt-1 text-xs font-bold text-gray-400">${moneyBRL(product.preco)} • ${escapeHtml(product.categoriaNome)} • estoque ${Number(product.estoqueQuantidade || 0)}</p>
+          </div>
+        </div>
+        <div class="mt-3 flex gap-2">
+          <button type="button" data-toggle-product="${escapeHtml(product.id)}" data-next-active="${product.ativo ? 'false' : 'true'}" class="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50">
+            ${product.ativo ? 'Pausar' : 'Ativar'}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  els.sellerProductsList.querySelectorAll('[data-toggle-product]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleSellerProduct(btn.getAttribute('data-toggle-product') || '', btn.getAttribute('data-next-active') === 'true'));
+  });
+
+  initIcons();
+}
+
+function getOrderStatusClass(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'entregue') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+  if (s === 'cancelado' || s === 'reembolsado') return 'bg-red-50 text-red-700 ring-red-200';
+  if (s === 'pago' || s === 'em_entrega') return 'bg-sky-50 text-sky-700 ring-sky-200';
+  return 'bg-amber-50 text-amber-700 ring-amber-200';
+}
+
+function renderSellerOrders() {
+  if (els.sellerOrdersCounter) {
+    const total = sellerOrders.length;
+    els.sellerOrdersCounter.textContent = total === 1 ? '1 pedido recebido' : `${total} pedidos recebidos`;
+  }
+
+  if (!els.sellerOrdersList) return;
+  if (!sellerOrders.length) {
+    els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhum pedido recebido ainda.</div>';
+    return;
+  }
+
+  els.sellerOrdersList.innerHTML = sellerOrders.map((order) => {
+    const status = String(order.status || 'pendente').toLowerCase();
+    return `
+      <div class="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p>
+            <p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p>
+            <p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || order.buyerId || '-')}</p>
+          </div>
+          <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span>
+        </div>
+        <div class="mt-3 flex items-center justify-between gap-3">
+          <p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p>
+          <div class="flex flex-wrap justify-end gap-2">
+            <button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button>
+            <button type="button" data-order-action="cancelado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50">Cancelar</button>
+            <button type="button" data-order-action="reembolsado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Reembolso</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  els.sellerOrdersList.querySelectorAll('[data-order-action]').forEach((btn) => {
+    btn.addEventListener('click', () => updateOrderStatus(btn.getAttribute('data-order-id') || '', btn.getAttribute('data-order-action') || ''));
+  });
+}
+
+async function openSellerPanel() {
+  if (!lojaStatus?.vendedor) {
+    const seller = await createOrUpdateSellerProfile();
+    if (!seller) return;
+  }
+
+  openSellerModal();
+  renderSellerProfileCard();
+  await reloadSellerPanelData();
+}
+
+async function reloadSellerPanelData() {
+  if (!lojaStatus?.vendedor || loadingSellerPanel) return;
+  loadingSellerPanel = true;
+
+  if (els.sellerProductsList) els.sellerProductsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando produtos...</div>';
+  if (els.sellerOrdersList) els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando pedidos...</div>';
+
+  try {
+    await Promise.all([loadSellerProducts(), loadSellerOrders()]);
+  } finally {
+    loadingSellerPanel = false;
+  }
+}
+
+async function handleSellerProductSubmit(event) {
+  event.preventDefault();
+
+  if (!lojaStatus?.vendedor || !ghubProfile?.gameId) {
+    localToast('error', 'Crie seu perfil de vendedor antes de cadastrar produtos.');
+    return;
+  }
+
+  const title = String(els.sellerTitle?.value || '').trim();
+  const price = Number(els.sellerPrice?.value || 0);
+  const stock = Math.max(0, Math.floor(Number(els.sellerStock?.value || 0)));
+  const categoryId = String(els.sellerCategory?.value || '').trim();
+  const categoryName = getCategoryName(categoryId);
+  const image = String(els.sellerImage?.value || '').trim();
+  const description = String(els.sellerDescription?.value || '').trim().slice(0, 300);
+  const ativo = !!els.sellerActive?.checked;
+  const destaque = !!els.sellerFeatured?.checked;
+
+  if (!title) {
+    localToast('error', 'Digite o nome do produto.');
+    return;
+  }
+
+  if (!Number.isFinite(price) || price < 0) {
+    localToast('error', 'Digite um preço válido.');
+    return;
+  }
+
+  if (!categoryId) {
+    localToast('error', 'Selecione uma categoria.');
+    return;
+  }
+
+  setButtonLoading(els.saveSellerProductBtn, true, 'Cadastrar produto');
+
+  try {
+    const seller = lojaStatus.vendedor;
+    const payload = {
+      sellerId: ghubProfile.gameId,
+      sellerName: seller.nome || seller.nick || ghubProfile.nick || 'Vendedor',
+      sellerPhoto: seller.foto || ghubProfile.foto || '',
+      vendedorId: ghubProfile.gameId,
+      vendedorNome: seller.nome || seller.nick || ghubProfile.nick || 'Vendedor',
+      vendedorFoto: seller.foto || ghubProfile.foto || '',
+
+      titulo: title,
+      descricao: description,
+      preco: price,
+      moeda: 'BRL',
+      imagem: image,
+      imagens: image ? [image] : [],
+      categoriaId,
+      categoriaNome: categoryName,
+      tipoProduto: 'digital',
+      entregaTipo: 'manual',
+      estoqueAtivo: true,
+      estoqueQuantidade: stock,
+      ativo,
+      destaque,
+      visualizacoes: 0,
+      totalVendas: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+
+    const productRef = await addDoc(collection(lojaDb, 'produtos'), payload);
+    await setDoc(productRef, { id: productRef.id }, { merge: true });
+
+    await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), {
+      totalProdutos: sellerProducts.length + 1,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    els.sellerForm?.reset();
+    if (els.sellerStock) els.sellerStock.value = '1';
+    if (els.sellerActive) els.sellerActive.checked = true;
+
+    localToast('success', 'Produto cadastrado na loja.');
+    await Promise.all([loadProducts(), loadSellerProducts()]);
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível cadastrar o produto. Confira se as regras do Firebase permitem escrita.');
+  } finally {
+    setButtonLoading(els.saveSellerProductBtn, false, 'Cadastrar produto');
+  }
+}
+
+async function toggleSellerProduct(productId, nextActive) {
+  if (!productId || !ghubProfile?.gameId) return;
+
+  try {
+    const product = sellerProducts.find((item) => String(item.id) === String(productId));
+    if (product && String(product.sellerId) !== String(ghubProfile.gameId)) {
+      localToast('error', 'Esse produto não pertence ao seu vendedor.');
+      return;
+    }
+
+    await setDoc(doc(lojaDb, 'produtos', productId), {
+      ativo: !!nextActive,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    localToast('success', nextActive ? 'Produto ativado.' : 'Produto pausado.');
+    await Promise.all([loadProducts(), loadSellerProducts()]);
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível atualizar o produto.');
+  }
+}
+
+async function updateOrderStatus(orderId, action) {
+  if (!orderId || !action) return;
+
+  const order = sellerOrders.find((item) => String(item.id) === String(orderId));
+  if (order && String(order.sellerId) !== String(ghubProfile?.gameId || '')) {
+    localToast('error', 'Esse pedido não pertence ao seu vendedor.');
+    return;
+  }
+
+  const updates = {
+    status: action,
+    updatedAt: serverTimestamp()
+  };
+
+  if (action === 'entregue') {
+    updates.entrega = {
+      ...(order?.entrega || {}),
+      status: 'entregue',
+      entregueEm: serverTimestamp()
+    };
+  }
+
+  if (action === 'cancelado') {
+    updates.entrega = {
+      ...(order?.entrega || {}),
+      status: 'cancelado',
+      canceladoEm: serverTimestamp()
+    };
+  }
+
+  if (action === 'reembolsado') {
+    updates.pagamento = {
+      ...(order?.pagamento || {}),
+      status: 'reembolsado',
+      reembolsadoEm: serverTimestamp()
+    };
+    updates.entrega = {
+      ...(order?.entrega || {}),
+      status: 'reembolso_emitido'
+    };
+  }
+
+  try {
+    await setDoc(doc(lojaDb, 'pedidos', orderId), updates, { merge: true });
+    localToast('success', action === 'reembolsado' ? 'Pedido marcado como reembolsado.' : `Pedido marcado como ${action}.`);
+    await loadSellerOrders();
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível atualizar o pedido.');
+  }
+}
+
 function bindEvents() {
   qs('btn-logout')?.addEventListener('click', logout);
   setupSidebar();
-
-  els.refreshBtn?.addEventListener('click', async () => {
-    await Promise.all([loadCategories(), loadProducts(), loadStoreStatus()]);
-    localToast('success', 'Loginha atualizada.');
-  });
 
   els.search?.addEventListener('input', applyFilters);
   els.category?.addEventListener('change', applyFilters);
@@ -776,15 +1134,23 @@ function bindEvents() {
     applyFilters();
   });
 
-  els.syncBuyerBtn?.addEventListener('click', syncBuyer);
-  els.requestSellerBtn?.addEventListener('click', requestSeller);
+  els.topSellerBtn?.addEventListener('click', handleTopSellerClick);
+  els.sellerProfileBtn?.addEventListener('click', openSellerPanel);
+  els.sellerForm?.addEventListener('submit', handleSellerProductSubmit);
+  els.reloadSellerDataBtn?.addEventListener('click', reloadSellerPanelData);
 
   document.querySelectorAll('[data-close-product-modal]').forEach((btn) => {
     btn.addEventListener('click', closeProductModal);
   });
 
+  document.querySelectorAll('[data-close-seller-modal]').forEach((btn) => {
+    btn.addEventListener('click', closeSellerModal);
+  });
+
   window.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeProductModal();
+    if (event.key !== 'Escape') return;
+    closeProductModal();
+    closeSellerModal();
   });
 }
 
@@ -792,22 +1158,24 @@ async function handleAuthState(user) {
   currentUser = user || null;
   ghubProfile = null;
   lojaStatus = { comprador: null, vendedor: null };
+  sellerProducts = [];
+  sellerOrders = [];
 
   if (!currentUser) {
     applySidebarUser(null);
-    renderStoreProfile();
+    renderSellerTop();
     return;
   }
 
   try {
     ghubProfile = await findGuildaHubProfile(currentUser);
     applySidebarUser(ghubProfile);
-    renderStoreProfile();
+    renderSellerTop();
     await loadStoreStatus();
   } catch (err) {
     console.error(err);
     applySidebarUser(null);
-    renderStoreProfile();
+    renderSellerTop();
     localToast('error', 'Não foi possível carregar seu perfil da GuildaHub.');
   }
 }
@@ -815,7 +1183,7 @@ async function handleAuthState(user) {
 (async function boot() {
   bindEvents();
   initIcons();
-  renderStoreProfile();
+  renderSellerTop();
 
   await loadCategories();
   await loadProducts();
