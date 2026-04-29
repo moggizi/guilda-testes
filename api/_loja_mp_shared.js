@@ -5,7 +5,7 @@
 // - LOJA_MP_ACCESS_TOKEN
 // - LOJA_FIREBASE_SERVICE_ACCOUNT ou LOJA_FIREBASE_SERVICE_ACCOUNT_JSON
 // - GHUB_FIREBASE_SERVICE_ACCOUNT ou GHUB_FIREBASE_SERVICE_ACCOUNT_JSON
-// Fallback: FIREBASE_SERVICE_ACCOUNT é aceito, mas se a loja usa outro projeto, use LOJA_*.
+// A loja NÃO deve cair no FIREBASE_SERVICE_ACCOUNT da API antiga; use LOJA_* para evitar ler o projeto errado.
 // Opcional: MP_WEBHOOK_SECRET ou LOJA_MP_WEBHOOK_SECRET.
 
 const admin = require('firebase-admin');
@@ -89,7 +89,23 @@ function getAdminApp(appName, prefix, allowFallback = true) {
 }
 
 function getLojaAdmin() {
-  return getAdminApp('loja-ghub-admin', 'LOJA', true);
+  const existing = admin.apps.find((app) => app.name === 'loja-ghub-admin');
+  if (existing) return existing;
+
+  const serviceAccount = readServiceAccount('LOJA');
+  if (!serviceAccount) {
+    throw new Error('LOJA_FIREBASE_SERVICE_ACCOUNT ausente. Configure o JSON do Firebase da loja na Vercel.');
+  }
+
+  const expectedProjectId = getEnv('LOJA_FIREBASE_EXPECTED_PROJECT_ID') || 'loja-ghub';
+  if (expectedProjectId && serviceAccount.project_id !== expectedProjectId) {
+    throw new Error(`LOJA_FIREBASE_SERVICE_ACCOUNT aponta para ${serviceAccount.project_id || 'projeto-desconhecido'}, mas a loja esperava ${expectedProjectId}.`);
+  }
+
+  return admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    projectId: serviceAccount.project_id,
+  }, 'loja-ghub-admin');
 }
 
 function getGhubAdmin() {
