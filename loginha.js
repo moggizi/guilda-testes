@@ -160,6 +160,7 @@ const els = {
   supportReportsList: qs('support-reports-list'),
   supportWithdrawalsCounter: qs('support-withdrawals-counter'),
   supportWithdrawalsList: qs('support-withdrawals-list'),
+  supportSellersTotal: qs('support-sellers-total'),
   supportSellerSearch: qs('support-seller-search'),
   supportSellerSearchBtn: qs('btn-support-search-seller'),
   supportSellerResults: qs('support-seller-results'),
@@ -191,6 +192,7 @@ let supportChats = [];
 let supportVerifications = [];
 let supportReports = [];
 let supportWithdrawals = [];
+let supportSellerTotal = 0;
 let supportSellerResults = [];
 let supportProductResults = [];
 let buyerRatings = [];
@@ -426,16 +428,22 @@ function calculateSellerFinancials(orders = [], sellerData = {}) {
     else saldoBrutoPendente += net;
   });
 
-  const saquePendente = Number(sellerData?.saquePendente ?? sellerData?.financeiro?.saldoEmSaque ?? 0);
+  const saquePendente = Number(sellerData?.saquePendente ?? sellerData?.saldoEmSaque ?? sellerData?.financeiro?.saldoEmSaque ?? 0);
   const totalSacado = Number(sellerData?.totalSacado ?? sellerData?.financeiro?.totalSacado ?? 0);
-  const saldo = Math.max(0, saldoBrutoLiberado - saquePendente - totalSacado);
+  const reservadoOuSacado = Math.max(0, saquePendente) + Math.max(0, totalSacado);
+
+  const saldoAtual = Math.max(0, saldoBrutoLiberado - reservadoOuSacado);
+  const reservaQuePassouDoLiberado = Math.max(0, reservadoOuSacado - saldoBrutoLiberado);
+  const saldoPendente = Math.max(0, saldoBrutoPendente - reservaQuePassouDoLiberado);
+  const saldoTotalDisponivelAdmin = Math.max(0, saldoAtual + saldoPendente);
 
   return {
-    saldo,
-    saldoAtual: saldo,
-    saldoPendente: saldoBrutoPendente,
+    saldo: saldoAtual,
+    saldoAtual,
+    saldoPendente,
     saldoEmSaque: Math.max(0, saquePendente),
     totalSacado: Math.max(0, totalSacado),
+    saldoTotalDisponivelAdmin,
     totalLiquidoEntregue,
     totalBrutoEntregue,
     totalVendasEntregues,
@@ -1436,13 +1444,29 @@ function renderSellerProfileCard() {
   if (!seller) { els.sellerProfileCard.innerHTML = '<p class="text-sm font-bold text-red-700">Perfil de vendedor não encontrado.</p>'; return; }
   const photo = seller.foto || ghubProfile?.foto || '';
   const finances = calculateSellerFinancials(sellerOrders, seller);
-  const canWithdraw = finances.saldoAtual >= SELLER_WITHDRAW_MIN;
+  const withdrawAvailable = isSupportAdmin ? finances.saldoTotalDisponivelAdmin : finances.saldoAtual;
+  const canWithdraw = isSupportAdmin ? withdrawAvailable > 0 : withdrawAvailable >= SELLER_WITHDRAW_MIN;
+  const defaultWithdrawValue = canWithdraw ? Number(withdrawAvailable || 0).toFixed(2) : '';
+
   els.sellerProfileCard.innerHTML = `
     <div class="flex items-start gap-3"><div class="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center text-emerald-700">${photo ? `<img src="${escapeHtml(photo)}" alt="" class="h-full w-full object-cover">` : '<i data-lucide="user" class="w-6 h-6"></i>'}</div><div class="min-w-0 flex-1"><div class="flex items-center gap-2 flex-wrap"><p class="font-black text-gray-900 truncate">${escapeHtml(seller.nome || seller.nick || 'Vendedor')}</p><span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i> VENDEDOR</span></div><p class="mt-1 text-xs font-semibold text-gray-400">ID: ${escapeHtml(seller.id || seller.gameId || ghubProfile?.gameId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-400 truncate">${escapeHtml(seller.email || currentUser?.email || '')}</p></div></div>
-    <div class="mt-4 grid grid-cols-2 gap-2"><div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saldo atual</p><p class="mt-1 text-lg font-black text-emerald-700">${moneyBRL(finances.saldoAtual)}</p></div><div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saldo pendente</p><p class="mt-1 text-lg font-black text-amber-600">${moneyBRL(finances.saldoPendente)}</p></div><div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Em saque</p><p class="mt-1 text-lg font-black text-sky-700">${moneyBRL(finances.saldoEmSaque)}</p></div><div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Vendas entregues</p><p class="mt-1 text-lg font-black text-gray-900">${Number(finances.totalVendasEntregues || 0)}</p></div></div>
+    <div class="mt-4 grid grid-cols-2 gap-2">
+      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saldo disponível</p><p class="mt-1 text-lg font-black text-emerald-700">${moneyBRL(finances.saldoAtual)}</p><p class="mt-1 text-[10px] font-semibold text-gray-400">Liberado para saque</p></div>
+      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Saldo pendente</p><p class="mt-1 text-lg font-black text-amber-600">${moneyBRL(finances.saldoPendente)}</p><p class="mt-1 text-[10px] font-semibold text-gray-400">Aguardando liberação</p></div>
+      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Em saque</p><p class="mt-1 text-lg font-black text-sky-700">${moneyBRL(finances.saldoEmSaque)}</p><p class="mt-1 text-[10px] font-semibold text-gray-400">Solicitado e não pago</p></div>
+      <div class="rounded-2xl bg-white p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Total já sacado</p><p class="mt-1 text-lg font-black text-gray-900">${moneyBRL(finances.totalSacado)}</p><p class="mt-1 text-[10px] font-semibold text-gray-400">Pagamentos concluídos</p></div>
+      <div class="col-span-2 rounded-2xl bg-gray-50 p-3 ring-1 ring-gray-100"><p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Vendas entregues</p><p class="mt-1 text-lg font-black text-gray-900">${Number(finances.totalVendasEntregues || 0)}</p></div>
+    </div>
     <div class="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-800">Será cobrada taxa de ${SELLER_FEE_PERCENT}% por venda. O saldo só é liberado ${SELLER_RELEASE_DAYS} dias após o pedido ser marcado como entregue. Saque mínimo: R$ 20,00.</div>
-    <div class="mt-3 rounded-2xl border border-gray-200 bg-white p-3"><label for="seller-withdraw-pix" class="block text-xs font-black uppercase tracking-wider text-gray-400 mb-1.5">Pix para saque</label><input id="seller-withdraw-pix" type="text" value="${escapeHtml(seller.ultimoPixSaque || '')}" placeholder="Chave Pix" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"><button id="btn-seller-withdraw" type="button" class="mt-2 w-full rounded-xl px-3 py-2 text-xs font-black ${canWithdraw ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}" ${canWithdraw ? '' : 'disabled'}>Solicitar saque ${moneyBRL(finances.saldoAtual)}</button></div>
-    <div class="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-semibold leading-relaxed text-red-800"><p class="font-black">Excluir conta de vendedor</p><p class="mt-1">A exclusão é irreversível. Todos os produtos serão excluídos e qualquer saldo atual, pendente ou em saque será perdido.</p><button id="btn-delete-own-seller" type="button" class="mt-3 w-full rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700">Excluir minha conta de vendedor</button></div>`;
+    <div class="mt-3 rounded-2xl border border-gray-200 bg-white p-3 space-y-2">
+      <label for="seller-withdraw-pix" class="block text-xs font-black uppercase tracking-wider text-gray-400">Pix para saque</label>
+      <input id="seller-withdraw-pix" type="text" value="${escapeHtml(seller.ultimoPixSaque || '')}" placeholder="Chave Pix" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100">
+      <label for="seller-withdraw-amount" class="block text-xs font-black uppercase tracking-wider text-gray-400">Valor do saque</label>
+      <input id="seller-withdraw-amount" type="number" min="0" step="0.01" max="${Number(withdrawAvailable || 0).toFixed(2)}" value="${escapeHtml(defaultWithdrawValue)}" placeholder="0,00" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100">
+      <p class="text-[11px] font-semibold text-gray-500">Disponível para saque agora: <b>${moneyBRL(withdrawAvailable)}</b></p>
+      <button id="btn-seller-withdraw" type="button" class="w-full rounded-xl px-3 py-2 text-xs font-black ${canWithdraw ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}" ${canWithdraw ? '' : 'disabled'}>Solicitar saque</button>
+    </div>
+    <div class="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-semibold leading-relaxed text-red-800"><p class="font-black">Excluir conta de vendedor</p><p class="mt-1">A exclusão é irreversível. Todos os produtos, pedidos vinculados, chats abertos e qualquer saldo atual, pendente ou em saque serão excluídos.</p><button id="btn-delete-own-seller" type="button" class="mt-3 w-full rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700">Excluir minha conta de vendedor</button></div>`;
   qs('btn-seller-withdraw')?.addEventListener('click', requestSellerWithdraw);
   qs('btn-delete-own-seller')?.addEventListener('click', deleteOwnSellerAccount);
   initIcons();
@@ -1805,41 +1829,89 @@ async function updateOrderStatus(orderId, action) {
 async function requestSellerWithdraw() {
   if (!lojaStatus?.vendedor || !ghubProfile?.gameId) return;
   const finances = calculateSellerFinancials(sellerOrders, lojaStatus.vendedor);
-  if (finances.saldoAtual < SELLER_WITHDRAW_MIN) { localToast('error', 'Saque disponível apenas com saldo atual mínimo de R$ 20,00.'); return; }
+  const withdrawAvailable = isSupportAdmin ? finances.saldoTotalDisponivelAdmin : finances.saldoAtual;
   const pix = String(qs('seller-withdraw-pix')?.value || '').trim();
+  const amountRaw = String(qs('seller-withdraw-amount')?.value || '').replace(',', '.');
+  const amount = Number(amountRaw);
+
   if (!pix) { localToast('error', 'Informe sua chave Pix para solicitar o saque.'); qs('seller-withdraw-pix')?.focus(); return; }
-  const amount = Number(finances.saldoAtual || 0);
-  const previousPending = Number(lojaStatus.vendedor?.saquePendente || lojaStatus.vendedor?.financeiro?.saldoEmSaque || 0);
+  if (!Number.isFinite(amount) || amount <= 0) { localToast('error', 'Informe um valor de saque válido.'); qs('seller-withdraw-amount')?.focus(); return; }
+  if (!isSupportAdmin && amount < SELLER_WITHDRAW_MIN) { localToast('error', 'O valor mínimo para saque é R$ 20,00.'); qs('seller-withdraw-amount')?.focus(); return; }
+  if (amount > withdrawAvailable + 0.0001) { localToast('error', `O valor solicitado não pode passar do saldo disponível: ${moneyBRL(withdrawAvailable)}.`); qs('seller-withdraw-amount')?.focus(); return; }
+
+  const previousPending = Number(lojaStatus.vendedor?.saquePendente ?? lojaStatus.vendedor?.saldoEmSaque ?? lojaStatus.vendedor?.financeiro?.saldoEmSaque ?? 0);
   const nextPending = previousPending + amount;
   try {
-    await addDoc(collection(lojaDb, 'saques'), { sellerId: ghubProfile.gameId, sellerName: lojaStatus.vendedor.nome || lojaStatus.vendedor.nick || ghubProfile.nick || '', sellerEmail: normalizeEmail(currentUser?.email || ghubProfile.email || ''), pix, valor: amount, status: 'pendente', createdAt: serverTimestamp(), createdAtMs: Date.now(), updatedAt: serverTimestamp() });
-    await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), { saquePendente: nextPending, saldoEmSaque: nextPending, saldoAtual: 0, ultimoPixSaque: pix, updatedAt: serverTimestamp() }, { merge: true });
-    lojaStatus.vendedor = { ...lojaStatus.vendedor, saquePendente: nextPending, saldoEmSaque: nextPending, saldoAtual: 0, ultimoPixSaque: pix };
+    await addDoc(collection(lojaDb, WITHDRAW_COLLECTION), {
+      sellerId: ghubProfile.gameId,
+      sellerName: lojaStatus.vendedor.nome || lojaStatus.vendedor.nick || ghubProfile.nick || '',
+      sellerEmail: normalizeEmail(currentUser?.email || ghubProfile.email || ''),
+      pix,
+      valor: amount,
+      status: 'pendente',
+      adminSolicitante: isSupportAdmin === true,
+      createdAt: serverTimestamp(),
+      createdAtMs: Date.now(),
+      updatedAt: serverTimestamp()
+    });
+    const updatedFinance = {
+      ...(lojaStatus.vendedor?.financeiro || {}),
+      saldoEmSaque: nextPending
+    };
+    await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), {
+      saquePendente: nextPending,
+      saldoEmSaque: nextPending,
+      ultimoPixSaque: pix,
+      financeiro: updatedFinance,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    lojaStatus.vendedor = { ...lojaStatus.vendedor, saquePendente: nextPending, saldoEmSaque: nextPending, ultimoPixSaque: pix, financeiro: updatedFinance };
     localToast('success', 'Solicitação de saque enviada.');
     await loadSellerOrders();
   } catch (err) { console.error(err); localToast('error', 'Não foi possível solicitar o saque. Confira as regras do Firebase.'); }
 }
 
-async function deleteProductsBySellerId(sellerId) {
-  const cleanSellerId = String(sellerId || '').trim();
-  if (!cleanSellerId) return 0;
-  const snap = await getDocs(query(collection(lojaDb, 'produtos'), where('sellerId', '==', cleanSellerId)));
-  await Promise.all(snap.docs.map((d) => deleteDoc(doc(lojaDb, 'produtos', d.id))));
+async function deleteDocsByField(collectionName, fieldName, value) {
+  const cleanValue = String(value || '').trim();
+  if (!cleanValue) return 0;
+  const snap = await getDocs(query(collection(lojaDb, collectionName), where(fieldName, '==', cleanValue)));
+  await Promise.all(snap.docs.map((d) => deleteDoc(doc(lojaDb, collectionName, d.id))));
   return snap.size;
+}
+
+async function deleteProductsBySellerId(sellerId) {
+  return deleteDocsByField('produtos', 'sellerId', sellerId);
+}
+
+async function deleteOrdersBySellerId(sellerId) {
+  return deleteDocsByField('pedidos', 'sellerId', sellerId);
+}
+
+async function deleteChatsBySellerId(sellerId) {
+  return deleteDocsByField(CHAT_COLLECTION, 'sellerId', sellerId);
+}
+
+async function deleteWithdrawalsBySellerId(sellerId) {
+  return deleteDocsByField(WITHDRAW_COLLECTION, 'sellerId', sellerId);
 }
 
 async function deleteSellerAccountAndProducts(sellerId, { bySupport = false } = {}) {
   const cleanSellerId = String(sellerId || '').trim();
   if (!cleanSellerId) return;
   if (bySupport && !isSupportAdmin) return;
-  await deleteProductsBySellerId(cleanSellerId);
+  await Promise.all([
+    deleteProductsBySellerId(cleanSellerId),
+    deleteOrdersBySellerId(cleanSellerId),
+    deleteChatsBySellerId(cleanSellerId),
+    deleteWithdrawalsBySellerId(cleanSellerId)
+  ]);
   await deleteDoc(doc(lojaDb, 'vendedor', cleanSellerId));
 }
 
 async function deleteOwnSellerAccount() {
   if (!lojaStatus?.vendedor || !ghubProfile?.gameId) return;
   const finances = calculateSellerFinancials(sellerOrders, lojaStatus.vendedor);
-  const warning = `Excluir sua conta de vendedor é irreversível. Todos os seus produtos serão apagados e qualquer saldo atual, pendente ou em saque será perdido.\n\nSaldo atual: ${moneyBRL(finances.saldoAtual)}\nSaldo pendente: ${moneyBRL(finances.saldoPendente)}\nEm saque: ${moneyBRL(finances.saldoEmSaque)}\n\nDigite EXCLUIR para confirmar.`;
+  const warning = `Excluir sua conta de vendedor é irreversível. Todos os seus produtos, pedidos vinculados, chats abertos e qualquer saldo atual, pendente ou em saque serão perdidos.\n\nSaldo atual: ${moneyBRL(finances.saldoAtual)}\nSaldo pendente: ${moneyBRL(finances.saldoPendente)}\nEm saque: ${moneyBRL(finances.saldoEmSaque)}\n\nDigite EXCLUIR para confirmar.`;
   const confirmText = window.prompt(warning, '');
   if (String(confirmText || '').trim().toUpperCase() !== 'EXCLUIR') return;
   try {
@@ -1847,10 +1919,12 @@ async function deleteOwnSellerAccount() {
     lojaStatus.vendedor = null;
     sellerProducts = [];
     sellerOrders = [];
+    sellerChats = [];
+    supportWithdrawals = [];
     closeSellerModal();
     renderSellerTop();
     await loadProducts();
-    localToast('success', 'Conta de vendedor e produtos excluídos.');
+    localToast('success', 'Conta de vendedor, produtos, pedidos, chats e saques excluídos.');
   } catch (err) {
     console.error(err);
     localToast('error', 'Não foi possível excluir sua conta de vendedor.');
@@ -2364,13 +2438,26 @@ function closeSupportModal() {
   els.supportModal?.classList.remove('flex');
 }
 
+async function loadSupportSellerCount() {
+  if (!isSupportAdmin) return;
+  try {
+    const snap = await getDocs(collection(lojaDb, 'vendedor'));
+    supportSellerTotal = snap.size;
+    if (els.supportSellersTotal) els.supportSellersTotal.textContent = supportSellerTotal === 1 ? 'Vendedores: 1 conta' : `Vendedores: ${supportSellerTotal} contas`;
+  } catch (err) {
+    console.warn('Não foi possível contar vendedores:', err);
+    supportSellerTotal = 0;
+    if (els.supportSellersTotal) els.supportSellersTotal.textContent = 'Vendedores: indisponível';
+  }
+}
+
 async function loadSupportPanelData() {
   if (!isSupportAdmin) return;
   if (els.supportVerificationsList) els.supportVerificationsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando verificações...</div>';
   if (els.supportChatsList) els.supportChatsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando chats...</div>';
   if (els.supportReportsList) els.supportReportsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando denúncias...</div>';
   if (els.supportWithdrawalsList) els.supportWithdrawalsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando saques...</div>';
-  await Promise.all([loadSupportVerifications(), loadSupportChats(), loadSupportReports(), loadSupportWithdrawals()]);
+  await Promise.all([loadSupportSellerCount(), loadSupportVerifications(), loadSupportChats(), loadSupportReports(), loadSupportWithdrawals()]);
 }
 
 async function loadSupportVerifications() {
@@ -2534,7 +2621,7 @@ function renderSupportSellerResults() {
     const sid = String(seller.id || seller.gameId || '');
     const active = seller.ativo !== false && String(seller.status || '').toLowerCase() !== 'inativo';
     return `<div class="rounded-2xl border border-gray-100 bg-white p-3">
-      <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(seller.nome || seller.nick || sid || 'Vendedor')}</p><p class="mt-1 text-xs font-bold text-gray-400">ID: ${escapeHtml(sid)}</p><p class="mt-1 text-xs font-semibold text-gray-500 truncate">${escapeHtml(seller.email || '')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Nota: ${seller.notaTotal ? Number(seller.notaMedia || 0).toFixed(1) + '/10 • ' + seller.notaTotal + ' avaliações' : 'sem avaliações'}</p><div class="mt-2 grid grid-cols-3 gap-1"><span class="rounded-lg bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">Atual: ${moneyBRL(seller.saldoAtual ?? seller.financeiro?.saldoAtual ?? 0)}</span><span class="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700 ring-1 ring-amber-100">Pendente: ${moneyBRL(seller.saldoPendente ?? seller.financeiro?.saldoPendente ?? 0)}</span><span class="rounded-lg bg-sky-50 px-2 py-1 text-[10px] font-black text-sky-700 ring-1 ring-sky-100">Saque: ${moneyBRL(seller.saquePendente ?? seller.saldoEmSaque ?? seller.financeiro?.saldoEmSaque ?? 0)}</span></div></div><span class="rounded-full bg-${active ? 'emerald' : 'red'}-50 px-2.5 py-1 text-[10px] font-black text-${active ? 'emerald' : 'red'}-700 ring-1 ring-${active ? 'emerald' : 'red'}-200">${active ? 'ATIVO' : 'INATIVO'}</span></div>
+      <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(seller.nome || seller.nick || sid || 'Vendedor')}</p><p class="mt-1 text-xs font-bold text-gray-400">ID: ${escapeHtml(sid)}</p><p class="mt-1 text-xs font-semibold text-gray-500 truncate">${escapeHtml(seller.email || '')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Nota: ${seller.notaTotal ? Number(seller.notaMedia || 0).toFixed(1) + '/10 • ' + seller.notaTotal + ' avaliações' : 'sem avaliações'}</p><div class="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-1"><span class="rounded-lg bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">Atual: ${moneyBRL(seller.saldoAtual ?? seller.financeiro?.saldoAtual ?? 0)}</span><span class="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700 ring-1 ring-amber-100">Pendente: ${moneyBRL(seller.saldoPendente ?? seller.financeiro?.saldoPendente ?? 0)}</span><span class="rounded-lg bg-sky-50 px-2 py-1 text-[10px] font-black text-sky-700 ring-1 ring-sky-100">Em saque: ${moneyBRL(seller.saquePendente ?? seller.saldoEmSaque ?? seller.financeiro?.saldoEmSaque ?? 0)}</span><span class="rounded-lg bg-gray-50 px-2 py-1 text-[10px] font-black text-gray-700 ring-1 ring-gray-100">Já sacado: ${moneyBRL(seller.totalSacado ?? seller.financeiro?.totalSacado ?? 0)}</span></div></div><span class="rounded-full bg-${active ? 'emerald' : 'red'}-50 px-2.5 py-1 text-[10px] font-black text-${active ? 'emerald' : 'red'}-700 ring-1 ring-${active ? 'emerald' : 'red'}-200">${active ? 'ATIVO' : 'INATIVO'}</span></div>
       <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2"><button type="button" data-admin-chat-seller="${escapeHtml(sid)}" data-admin-chat-seller-name="${escapeHtml(seller.nome || seller.nick || '')}" class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Chat</button><button type="button" data-admin-toggle-seller="${escapeHtml(sid)}" data-admin-next-active="${active ? 'false' : 'true'}" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-700 hover:bg-gray-50">${active ? 'Inativar' : 'Ativar'}</button><button type="button" data-admin-delete-seller="${escapeHtml(sid)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Excluir conta</button><button type="button" data-admin-search-products-seller="${escapeHtml(sid)}" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 hover:bg-amber-100">Produtos</button></div>
     </div>`;
   }).join('');
@@ -2553,19 +2640,19 @@ async function setSellerActiveFromSupport(sellerId, active) {
     await setDoc(doc(lojaDb, 'vendedor', cleanSellerId), { ativo: !!active, status: active ? 'ativo' : 'inativo', updatedAt: serverTimestamp(), alteradoPor: ghubProfile?.gameId || currentUser?.uid || '' }, { merge: true });
     if (!active) await deleteProductsBySellerId(cleanSellerId);
     localToast('success', active ? 'Vendedor ativado.' : 'Vendedor inativado e anúncios excluídos.');
-    await Promise.all([searchSupportSellers(), loadProducts(), loadSupportReports()]);
+    await Promise.all([searchSupportSellers(), loadProducts(), loadSupportReports(), loadSupportSellerCount(), loadSupportWithdrawals(), loadSupportChats()]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar o vendedor.'); }
 }
 
 async function deleteSellerFromSupport(sellerId) {
   const cleanSellerId = String(sellerId || '').trim();
   if (!cleanSellerId || !isSupportAdmin) return;
-  const confirmText = window.prompt('Excluir a conta de vendedor e todos os produtos? Digite EXCLUIR para confirmar.', '');
+  const confirmText = window.prompt('Excluir a conta de vendedor, todos os produtos, pedidos, chats e saques vinculados? Digite EXCLUIR para confirmar.', '');
   if (String(confirmText || '').trim().toUpperCase() !== 'EXCLUIR') return;
   try {
     await deleteSellerAccountAndProducts(cleanSellerId, { bySupport: true });
-    localToast('success', 'Conta de vendedor e produtos excluídos.');
-    await Promise.all([searchSupportSellers(), loadProducts(), loadSupportReports()]);
+    localToast('success', 'Conta de vendedor, produtos, pedidos, chats e saques excluídos.');
+    await Promise.all([searchSupportSellers(), loadProducts(), loadSupportReports(), loadSupportSellerCount(), loadSupportWithdrawals(), loadSupportChats()]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível excluir o vendedor.'); }
 }
 
