@@ -66,6 +66,8 @@ const SELLER_CHAT_HOURS = 24;
 const SUPPORT_CHAT_HOURS = 48;
 const ADMIN_COLLECTION = 'admin';
 const ADMIN_DOC_ID = 'security';
+const PRODUCT_REPORT_COLLECTION = 'denunciasProdutos';
+const SELLER_RATING_COLLECTION = 'avaliacoesVendedores';
 
 const els = {
   topSellerBtn: qs('btn-top-seller'),
@@ -151,6 +153,8 @@ const els = {
   supportChatsCounter: qs('support-chats-counter'),
   supportChatsList: qs('support-chats-list'),
   reloadSupportPanelBtn: qs('btn-reload-support-panel'),
+  supportReportsCounter: qs('support-reports-counter'),
+  supportReportsList: qs('support-reports-list'),
   imageViewerModal: qs('image-viewer-modal'),
   imageViewerImg: qs('image-viewer-img'),
 
@@ -173,6 +177,7 @@ let buyerProblems = [];
 let sellerChats = [];
 let supportChats = [];
 let supportVerifications = [];
+let supportReports = [];
 let isSupportAdmin = false;
 let sellerVerification = null;
 let activeProblemOrderId = '';
@@ -840,14 +845,21 @@ async function getSellerPublicStats(sellerId) {
 async function openProductModal(productId) {
   const product = products.find((item) => String(item.id) === String(productId));
   if (!product || !els.productModal || !els.productModalBody || !els.productModalTitle) return;
+
+  const isOwnProduct = !!ghubProfile?.gameId && String(product.sellerId || '') === String(ghubProfile.gameId);
   els.productModalTitle.textContent = product.titulo;
+
   const image = product.imagem
     ? `<img src="${escapeHtml(product.imagem)}" alt="${escapeHtml(product.titulo)}" class="h-56 w-full rounded-3xl object-cover border border-gray-100 bg-gray-50">`
     : '<div class="h-56 w-full rounded-3xl border border-gray-100 bg-gray-50 flex items-center justify-center"><i data-lucide="package" class="h-12 w-12 text-gray-300"></i></div>';
   const statusHtml = product.disponivel
     ? '<span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200">DISPONÍVEL</span>'
     : '<span class="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-black text-red-700 ring-1 ring-red-200">ESGOTADO</span>';
-  const buyerInfoHtml = '';
+
+  const buyButtonHtml = isOwnProduct
+    ? '<button type="button" disabled class="w-full rounded-2xl bg-gray-200 px-5 py-4 text-sm font-black text-gray-500 disabled:cursor-not-allowed">Você não pode comprar seu próprio produto</button>'
+    : `<button type="button" data-buy-product="${escapeHtml(product.id)}" class="w-full rounded-2xl bg-slate-900 px-5 py-4 text-sm font-black text-white shadow-lg shadow-slate-900/10 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">Comprar agora</button>`;
+
   els.productModalBody.innerHTML = `
     ${image}
     <div>
@@ -858,21 +870,129 @@ async function openProductModal(productId) {
       </div>
       <h4 class="mt-3 text-2xl font-black text-gray-900">${escapeHtml(product.titulo)}</h4>
       <p class="mt-1 text-sm font-bold text-gray-400">Vendedor: ${escapeHtml(product.sellerName)}</p>
-      <p id="modal-seller-sales" class="mt-1 text-xs font-black text-emerald-700">Carregando vendas do vendedor...</p>
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        <p id="modal-seller-sales" class="text-xs font-black text-emerald-700">Carregando vendas do vendedor...</p>
+        <p id="modal-seller-rating" class="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black text-amber-700 ring-1 ring-amber-200">Nota: carregando...</p>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <button type="button" data-rate-seller="10" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">Curtir vendedor</button>
+        <button type="button" data-rate-seller="0" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Descurtir</button>
+        <button type="button" data-report-product="${escapeHtml(product.id)}" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 hover:bg-amber-100">Denunciar produto</button>
+      </div>
       <p class="mt-4 text-sm leading-relaxed text-gray-600">${escapeHtml(product.descricao || 'Produto disponível na loja.')}</p>
       <p class="mt-5 text-3xl font-black text-emerald-700">${moneyBRL(product.preco)}</p>
     </div>
-    ${buyerInfoHtml}
-    <button type="button" data-buy-product="${escapeHtml(product.id)}" class="w-full rounded-2xl bg-slate-900 px-5 py-4 text-sm font-black text-white shadow-lg shadow-slate-900/10 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">Comprar agora</button>`;
+    ${buyButtonHtml}`;
+
   els.productModal.classList.remove('hidden');
   els.productModal.classList.add('flex');
   els.productModalBody.querySelector('[data-buy-product]')?.addEventListener('click', () => createOrder(product.id));
+  els.productModalBody.querySelectorAll('[data-rate-seller]').forEach((btn) => btn.addEventListener('click', () => rateSeller(product.sellerId, Number(btn.getAttribute('data-rate-seller') || 0))));
+  els.productModalBody.querySelector('[data-report-product]')?.addEventListener('click', () => reportProduct(product.id));
   initIcons();
+
   const stats = await getSellerPublicStats(product.sellerId);
   const salesEl = qs('modal-seller-sales');
   if (salesEl) {
     const total = Number(stats.totalVendasEntregues || 0);
     salesEl.textContent = total === 1 ? 'Vendedor com 1 venda entregue' : `Vendedor com ${total} vendas entregues`;
+  }
+
+  const rating = await getSellerRatingStats(product.sellerId);
+  renderSellerRatingBlock(rating);
+}
+
+async function getSellerRatingStats(sellerId) {
+  const cleanSellerId = String(sellerId || '').trim();
+  if (!cleanSellerId) return { count: 0, avg: null, likes: 0, dislikes: 0 };
+  try {
+    const snap = await getDocs(query(collection(lojaDb, SELLER_RATING_COLLECTION), where('sellerId', '==', cleanSellerId)));
+    const ratings = snap.docs.map((d) => Number(d.data()?.nota ?? d.data()?.rating ?? 0)).filter((n) => Number.isFinite(n));
+    const count = ratings.length;
+    const avg = count ? ratings.reduce((a, b) => a + b, 0) / count : null;
+    return { count, avg, likes: ratings.filter((n) => n >= 5).length, dislikes: ratings.filter((n) => n < 5).length };
+  } catch (err) {
+    console.warn('Não foi possível carregar avaliação do vendedor:', err);
+    return { count: 0, avg: null, likes: 0, dislikes: 0 };
+  }
+}
+
+function renderSellerRatingBlock(rating) {
+  const el = qs('modal-seller-rating');
+  if (!el) return;
+  if (!rating || !rating.count) {
+    el.textContent = 'Nota: sem avaliações';
+    return;
+  }
+  el.textContent = `Nota: ${Number(rating.avg || 0).toFixed(1)}/10 • ${rating.count} avaliação${rating.count === 1 ? '' : 'ões'}`;
+}
+
+async function rateSeller(sellerId, nota) {
+  if (!currentUser || !ghubProfile?.gameId) { localToast('error', 'Entre na GuildaHub para avaliar o vendedor.'); return; }
+  const cleanSellerId = String(sellerId || '').trim();
+  if (!cleanSellerId) return;
+  if (cleanSellerId === String(ghubProfile.gameId)) { localToast('error', 'Você não pode avaliar a si mesmo.'); return; }
+  const normalized = Number(nota) >= 5 ? 10 : 0;
+  const id = `${cleanSellerId}_${ghubProfile.gameId}`;
+  try {
+    await setDoc(doc(lojaDb, SELLER_RATING_COLLECTION, id), {
+      id,
+      sellerId: cleanSellerId,
+      buyerId: ghubProfile.gameId,
+      buyerUid: currentUser.uid || '',
+      buyerName: ghubProfile.nick || '',
+      nota: normalized,
+      tipo: normalized >= 5 ? 'like' : 'dislike',
+      updatedAt: serverTimestamp(),
+      updatedAtMs: Date.now()
+    }, { merge: true });
+    const stats = await getSellerRatingStats(cleanSellerId);
+    await setDoc(doc(lojaDb, 'vendedor', cleanSellerId), {
+      notaMedia: stats.avg ?? 0,
+      notaTotal: stats.count,
+      totalLikes: stats.likes,
+      totalDislikes: stats.dislikes,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    renderSellerRatingBlock(stats);
+    localToast('success', 'Avaliação registrada.');
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível registrar a avaliação.');
+  }
+}
+
+async function reportProduct(productId) {
+  if (!currentUser || !ghubProfile?.gameId) { localToast('error', 'Entre na GuildaHub para denunciar um produto.'); return; }
+  const product = products.find((item) => String(item.id) === String(productId));
+  if (!product) return;
+  const motivo = window.prompt('Descreva o motivo da denúncia:', '');
+  if (!String(motivo || '').trim()) return;
+  try {
+    await addDoc(collection(lojaDb, PRODUCT_REPORT_COLLECTION), {
+      productId: product.id,
+      produtoId: product.id,
+      produtoTitulo: product.titulo || '',
+      produtoImagem: product.imagem || '',
+      sellerId: product.sellerId || '',
+      sellerName: product.sellerName || '',
+      categoriaId: product.categoriaId || '',
+      categoriaNome: product.categoriaNome || '',
+      preco: Number(product.preco || 0),
+      motivo: String(motivo || '').trim(),
+      status: 'aberta',
+      reporterId: ghubProfile.gameId,
+      reporterUid: currentUser.uid || '',
+      reporterName: ghubProfile.nick || '',
+      reporterEmail: normalizeEmail(currentUser.email || ghubProfile.email || ''),
+      createdAt: serverTimestamp(),
+      createdAtMs: Date.now(),
+      productSnapshot: product
+    });
+    localToast('success', 'Denúncia enviada para o suporte.');
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível enviar a denúncia.');
   }
 }
 
@@ -1444,15 +1564,25 @@ function getOrderStatusClass(status) {
 function renderSellerOrders() {
   if (els.sellerOrdersCounter) els.sellerOrdersCounter.textContent = sellerOrders.length === 1 ? '1 pedido recebido' : `${sellerOrders.length} pedidos recebidos`;
   if (!els.sellerOrdersList) return;
-  if (!sellerOrders.length) { els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhum pedido recebido ainda.</div>'; return; }
-  els.sellerOrdersList.innerHTML = sellerOrders.map((order) => {
+
+  const supportSellerChats = sellerChats.filter((chat) => String(chat.tipo || '') === CHAT_TYPE_SUPPORT && !isChatExpired(chat) && !isChatClosed(chat));
+  if (!sellerOrders.length && !supportSellerChats.length) {
+    els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhum pedido ou chat de suporte recebido ainda.</div>';
+    return;
+  }
+
+  const supportChatsHtml = supportSellerChats.map((chat) => `<div class="rounded-2xl border border-sky-100 bg-sky-50 p-3">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">Chat aberto pelo suporte</p><p class="mt-1 text-xs font-bold text-sky-700">${escapeHtml(chat.assunto || chat.produtoTitulo || 'Suporte GuildaHub')}</p><p class="mt-1 text-xs font-semibold text-gray-600">${escapeHtml(getChatRemainingLabel(chat))}</p></div>
+      <span class="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-sky-700 ring-1 ring-sky-200">SUPORTE</span>
+    </div>
+    <button type="button" data-open-seller-support-chat="${escapeHtml(chat.id)}" class="mt-3 rounded-xl bg-sky-600 px-3 py-2 text-xs font-black text-white hover:bg-sky-700">Abrir chat com suporte</button>
+  </div>`).join('');
+
+  const ordersHtml = sellerOrders.map((order) => {
     const status = String(order.status || 'pendente').toLowerCase();
     const locked = isFinalOrderStatus(status) || order.finalizado === true;
     const created = formatDateTimeBR(order.createdAtMs || order.createdAt);
-    const needsSellerInfo = categoryRequiresSellerDeliveryInfo(order.categoriaId);
-    const needsBuyerInfo = categoryRequiresBuyerInfo(order.categoriaId);
-    const currentDeliveryInfo = order.deliveryInfo || order.entrega?.informacoes || '';
-    const buyerInfo = order.buyerInfo || '';
     const sellerChat = getSellerChatForOrder(order.id);
     const chatExpired = sellerChat && isChatExpired(sellerChat);
     const canOpenChat = sellerChat && !chatExpired && !isChatClosed(sellerChat);
@@ -1461,8 +1591,11 @@ function renderSellerOrders() {
       : '';
     return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-3"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">ID comprador: ${escapeHtml(order.buyerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p></div><span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span></div>${chatHtml}<div class="mt-3 flex items-center justify-between gap-3"><p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p><div class="flex flex-wrap justify-end gap-2">${locked ? '<span class="rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-500">Finalizado</span>' : `<button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button><button type="button" data-order-action="reembolsado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Reembolso</button>`}</div></div></div>`;
   }).join('');
+
+  els.sellerOrdersList.innerHTML = supportChatsHtml + ordersHtml;
   els.sellerOrdersList.querySelectorAll('[data-order-action]').forEach((btn) => btn.addEventListener('click', () => updateOrderStatus(btn.getAttribute('data-order-id') || '', btn.getAttribute('data-order-action') || '')));
   els.sellerOrdersList.querySelectorAll('[data-open-seller-chat]').forEach((btn) => btn.addEventListener('click', () => openProblemModal(btn.getAttribute('data-open-seller-chat') || '', CHAT_TYPE_SELLER)));
+  els.sellerOrdersList.querySelectorAll('[data-open-seller-support-chat]').forEach((btn) => btn.addEventListener('click', () => openChatById(btn.getAttribute('data-open-seller-support-chat') || '')));
 }
 
 async function openSellerPanel() {
@@ -1498,6 +1631,11 @@ async function handleSellerProductSubmit(event) {
 
   if (!lojaStatus?.vendedor || !ghubProfile?.gameId) {
     localToast('error', 'Crie seu perfil de vendedor antes de cadastrar produtos.');
+    return;
+  }
+
+  if (lojaStatus.vendedor.ativo === false || String(lojaStatus.vendedor.status || '').toLowerCase() === 'inativo') {
+    localToast('error', 'Sua conta de vendedor está inativa e não pode criar novos anúncios.');
     return;
   }
 
@@ -1740,7 +1878,7 @@ async function loadSellerChats() {
   }
   try {
     const snap = await getDocs(query(collection(lojaDb, CHAT_COLLECTION), where('sellerId', '==', String(ghubProfile.gameId))));
-    sellerChats = snap.docs.map(normalizeChatDoc).filter((chat) => String(chat.tipo || '') === CHAT_TYPE_SELLER);
+    sellerChats = snap.docs.map(normalizeChatDoc);
     await markExpiredChatsIfNeeded(sellerChats);
   } catch (err) {
     console.warn('Não foi possível carregar chats do vendedor:', err);
@@ -1825,7 +1963,7 @@ async function createOrGetChatForOrder
       autorId: 'sistema',
       autorTipo: 'sistema',
       autorNome: 'GuildaHub',
-      texto: `Chat temporário com ${getChatTypeLabel(type)} aberto.`,
+      texto: type === CHAT_TYPE_SUPPORT ? 'Chat com o suporte aberto. Explique com o máximo de clareza possível qual é o problema, o que aconteceu, o ID do pedido e qualquer detalhe importante para análise.' : `Chat temporário com ${getChatTypeLabel(type)} aberto.`,
       createdAtMs: now
     }],
     createdAt: serverTimestamp(),
@@ -1879,7 +2017,8 @@ function openProblemModal(orderId, type = CHAT_TYPE_SELLER) {
 }
 
 function openChatModalWithChat(order, chat) {
-  activeProblemChatId = String(chat.id || getChatId(order.id, chat.tipo || CHAT_TYPE_SELLER));
+  activeProblemOrderId = String(order?.id || chat?.orderId || chat?.pedidoId || '');
+  activeProblemChatId = String(chat.id || getChatId(activeProblemOrderId || chat.id, chat.tipo || CHAT_TYPE_SELLER));
   activeProblemChatType = String(chat.tipo || CHAT_TYPE_SELLER);
 
   const typeLabel = getChatTypeLabel(activeProblemChatType);
@@ -1890,7 +2029,7 @@ function openChatModalWithChat(order, chat) {
   const currentIsSupport = isSupportAdmin && activeProblemChatType === CHAT_TYPE_SUPPORT;
 
   if (els.problemModalTitle) els.problemModalTitle.textContent = activeProblemChatType === CHAT_TYPE_SUPPORT ? 'Chat com suporte' : 'Chat com vendedor';
-  if (els.problemOrderSubtitle) els.problemOrderSubtitle.textContent = `Pedido ${order.id}`;
+  if (els.problemOrderSubtitle) els.problemOrderSubtitle.textContent = order.id && String(order.id) !== String(chat.id || '') ? `Pedido ${order.id}` : 'Atendimento sem pedido vinculado';
   if (els.problemOrderSummary) {
     els.problemOrderSummary.innerHTML = `<p class="font-black text-gray-900">${escapeHtml(order.produtoTitulo || chat.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs text-gray-500">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs text-gray-500">Comprador: ${escapeHtml(chat.buyerName || order.buyerName || order.buyerId || '-')}</p><p class="mt-1 text-xs text-gray-500">Vendedor: ${escapeHtml(chat.sellerName || order.sellerName || order.sellerId || '-')}</p><p class="mt-1 text-xs text-gray-500">Valor: ${moneyBRL(order.total || order.precoUnitario || chat.total || 0)}</p>`;
   }
@@ -2173,7 +2312,8 @@ async function loadSupportPanelData() {
   if (!isSupportAdmin) return;
   if (els.supportVerificationsList) els.supportVerificationsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando verificações...</div>';
   if (els.supportChatsList) els.supportChatsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando chats...</div>';
-  await Promise.all([loadSupportVerifications(), loadSupportChats()]);
+  if (els.supportReportsList) els.supportReportsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando denúncias...</div>';
+  await Promise.all([loadSupportVerifications(), loadSupportChats(), loadSupportReports()]);
 }
 
 async function loadSupportVerifications() {
@@ -2198,16 +2338,19 @@ function renderSupportVerifications() {
   els.supportVerificationsList.innerHTML = supportVerifications.map((item) => {
     const status = getVerificationStatusLabel(item.status) || 'pendente';
     const canAct = status === 'pendente';
+    const front = item.rgFrenteBase64 ? `<button type="button" data-view-image="${escapeHtml(item.rgFrenteBase64)}" class="overflow-hidden rounded-xl border border-gray-200 bg-white text-left"><img src="${escapeHtml(item.rgFrenteBase64)}" alt="RG frente" class="h-28 w-full object-cover"><p class="px-2 py-1 text-center text-[10px] font-black text-gray-600">RG frente</p></button>` : '<div class="rounded-xl border border-dashed border-gray-200 bg-white p-3 text-center text-xs font-bold text-gray-400">Sem RG frente</div>';
+    const back = item.rgVersoBase64 ? `<button type="button" data-view-image="${escapeHtml(item.rgVersoBase64)}" class="overflow-hidden rounded-xl border border-gray-200 bg-white text-left"><img src="${escapeHtml(item.rgVersoBase64)}" alt="RG verso" class="h-28 w-full object-cover"><p class="px-2 py-1 text-center text-[10px] font-black text-gray-600">RG verso</p></button>` : '<div class="rounded-xl border border-dashed border-gray-200 bg-white p-3 text-center text-xs font-bold text-gray-400">Sem RG verso</div>';
     return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-3">
       <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(item.nomeCompleto || item.nick || 'Solicitação')}</p><p class="mt-1 text-xs font-bold text-gray-400">ID: ${escapeHtml(item.id || item.gameId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500 truncate">${escapeHtml(item.email || '')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Nascimento: ${escapeHtml(item.dataNascimento || '-')}</p></div><span class="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-gray-600 ring-1 ring-gray-200">${escapeHtml(status.toUpperCase())}</span></div>
-      <div class="mt-3 grid grid-cols-2 gap-2">${item.rgFrenteBase64 ? `<a href="${escapeHtml(item.rgFrenteBase64)}" target="_blank" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-center text-xs font-black text-gray-600 hover:bg-gray-50">Ver RG frente</a>` : ''}${item.rgVersoBase64 ? `<a href="${escapeHtml(item.rgVersoBase64)}" target="_blank" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-center text-xs font-black text-gray-600 hover:bg-gray-50">Ver RG verso</a>` : ''}</div>
-      ${canAct ? `<div class="mt-3 grid grid-cols-2 gap-2"><button type="button" data-approve-verification="${escapeHtml(item.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Aprovar</button><button type="button" data-reject-verification="${escapeHtml(item.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Recusar</button></div>` : ''}
+      <div class="mt-3 grid grid-cols-2 gap-2">${front}${back}</div>
+      <div class="mt-3 grid grid-cols-2 gap-2">${canAct ? `<button type="button" data-approve-verification="${escapeHtml(item.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Aprovar</button><button type="button" data-reject-verification="${escapeHtml(item.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Recusar</button>` : ''}<button type="button" data-delete-verification="${escapeHtml(item.id)}" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50">Excluir solicitação</button><button type="button" data-support-chat-seller="${escapeHtml(item.gameId || item.id || '')}" data-support-chat-seller-name="${escapeHtml(item.nick || item.nomeCompleto || '')}" class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Chat com vendedor</button></div>
     </div>`;
   }).join('');
   els.supportVerificationsList.querySelectorAll('[data-approve-verification]').forEach((btn) => btn.addEventListener('click', () => updateVerificationStatus(btn.getAttribute('data-approve-verification') || '', 'aprovado')));
   els.supportVerificationsList.querySelectorAll('[data-reject-verification]').forEach((btn) => btn.addEventListener('click', () => updateVerificationStatus(btn.getAttribute('data-reject-verification') || '', 'recusado')));
   els.supportVerificationsList.querySelectorAll('[data-delete-verification]').forEach((btn) => btn.addEventListener('click', () => deleteSellerVerification(btn.getAttribute('data-delete-verification') || '')));
   els.supportVerificationsList.querySelectorAll('[data-view-image]').forEach((btn) => btn.addEventListener('click', () => openImageViewer(btn.getAttribute('data-view-image') || '')));
+  els.supportVerificationsList.querySelectorAll('[data-support-chat-seller]').forEach((btn) => btn.addEventListener('click', () => createSupportChatWithSeller(btn.getAttribute('data-support-chat-seller') || '', btn.getAttribute('data-support-chat-seller-name') || '', 'verificacao')));
   initIcons();
 }
 
@@ -2241,6 +2384,104 @@ async function updateVerificationStatus(id, status) {
   }
 }
 
+async function loadSupportReports() {
+  try {
+    const snap = await getDocs(collection(lojaDb, PRODUCT_REPORT_COLLECTION));
+    supportReports = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a,b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
+  } catch (err) {
+    console.warn('Não foi possível carregar denúncias:', err);
+    supportReports = [];
+  }
+  renderSupportReports();
+}
+
+function renderSupportReports() {
+  if (els.supportReportsCounter) els.supportReportsCounter.textContent = supportReports.length === 1 ? '1 denúncia' : `${supportReports.length} denúncias`;
+  if (!els.supportReportsList) return;
+  if (!supportReports.length) {
+    els.supportReportsList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhuma denúncia encontrada.</div>';
+    return;
+  }
+  els.supportReportsList.innerHTML = supportReports.map((report) => `<div class="rounded-2xl border border-amber-100 bg-amber-50 p-3">
+    <div class="flex items-start gap-3"><div class="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-amber-200 flex items-center justify-center">${report.produtoImagem ? `<img src="${escapeHtml(report.produtoImagem)}" class="h-full w-full object-cover" alt="">` : '<i data-lucide="package" class="w-5 h-5 text-amber-400"></i>'}</div><div class="min-w-0 flex-1"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(report.produtoTitulo || report.productId || 'Produto denunciado')}</p><p class="mt-1 text-xs font-bold text-amber-800">Motivo: ${escapeHtml(report.motivo || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-600">Vendedor: ${escapeHtml(report.sellerName || report.sellerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Denunciante: ${escapeHtml(report.reporterName || report.reporterId || '-')}</p></div></div>
+    <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2"><button type="button" data-delete-report="${escapeHtml(report.id)}" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50">Excluir denúncia</button><button type="button" data-delete-reported-product="${escapeHtml(report.productId || report.produtoId || '')}" data-report-id="${escapeHtml(report.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Excluir produto</button><button type="button" data-inactivate-seller="${escapeHtml(report.sellerId || '')}" class="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-black text-orange-700 hover:bg-orange-100">Inativar vendedor</button><button type="button" data-support-chat-seller="${escapeHtml(report.sellerId || '')}" data-support-chat-seller-name="${escapeHtml(report.sellerName || '')}" class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Chat com vendedor</button></div>
+  </div>`).join('');
+  els.supportReportsList.querySelectorAll('[data-delete-report]').forEach((btn) => btn.addEventListener('click', () => deleteProductReport(btn.getAttribute('data-delete-report') || '')));
+  els.supportReportsList.querySelectorAll('[data-delete-reported-product]').forEach((btn) => btn.addEventListener('click', () => deleteReportedProduct(btn.getAttribute('data-delete-reported-product') || '', btn.getAttribute('data-report-id') || '')));
+  els.supportReportsList.querySelectorAll('[data-inactivate-seller]').forEach((btn) => btn.addEventListener('click', () => inactivateSellerAndDeleteProducts(btn.getAttribute('data-inactivate-seller') || '')));
+  els.supportReportsList.querySelectorAll('[data-support-chat-seller]').forEach((btn) => btn.addEventListener('click', () => createSupportChatWithSeller(btn.getAttribute('data-support-chat-seller') || '', btn.getAttribute('data-support-chat-seller-name') || '', 'denuncia')));
+  initIcons();
+}
+
+async function deleteProductReport(reportId) {
+  if (!reportId || !isSupportAdmin) return;
+  if (!window.confirm('Excluir essa denúncia?')) return;
+  try {
+    await deleteDoc(doc(lojaDb, PRODUCT_REPORT_COLLECTION, reportId));
+    localToast('success', 'Denúncia excluída.');
+    await loadSupportReports();
+  } catch (err) { console.error(err); localToast('error', 'Não foi possível excluir a denúncia.'); }
+}
+
+async function deleteReportedProduct(productId, reportId = '') {
+  if (!productId || !isSupportAdmin) return;
+  if (!window.confirm('Excluir esse produto denunciado?')) return;
+  try {
+    await deleteDoc(doc(lojaDb, 'produtos', productId));
+    if (reportId) await deleteDoc(doc(lojaDb, PRODUCT_REPORT_COLLECTION, reportId));
+    localToast('success', 'Produto excluído.');
+    await Promise.all([loadProducts(), loadSupportReports()]);
+  } catch (err) { console.error(err); localToast('error', 'Não foi possível excluir o produto.'); }
+}
+
+async function inactivateSellerAndDeleteProducts(sellerId) {
+  const cleanSellerId = String(sellerId || '').trim();
+  if (!cleanSellerId || !isSupportAdmin) return;
+  if (!window.confirm('Inativar esse vendedor e excluir todos os anúncios dele?')) return;
+  try {
+    await setDoc(doc(lojaDb, 'vendedor', cleanSellerId), { ativo: false, status: 'inativo', inativadoEmMs: Date.now(), inativadoPor: ghubProfile?.gameId || currentUser?.uid || '', updatedAt: serverTimestamp() }, { merge: true });
+    const snap = await getDocs(query(collection(lojaDb, 'produtos'), where('sellerId', '==', cleanSellerId)));
+    await Promise.all(snap.docs.map((d) => deleteDoc(doc(lojaDb, 'produtos', d.id))));
+    localToast('success', 'Vendedor inativado e anúncios excluídos.');
+    await Promise.all([loadProducts(), loadSupportReports(), loadSupportPanelData()]);
+  } catch (err) { console.error(err); localToast('error', 'Não foi possível inativar o vendedor.'); }
+}
+
+async function createSupportChatWithSeller(sellerId, sellerName = '', source = 'suporte') {
+  const cleanSellerId = String(sellerId || '').trim();
+  if (!cleanSellerId || !isSupportAdmin) return;
+  try {
+    const id = `suporte_vendedor_${cleanSellerId}`;
+    const ref = doc(lojaDb, CHAT_COLLECTION, id);
+    const snap = await getDoc(ref);
+    const now = Date.now();
+    const expiresAtMs = now + (SUPPORT_CHAT_HOURS * 60 * 60 * 1000);
+    if (!snap.exists() || isChatExpired({ id: snap.id, ...snap.data() }) || isChatClosed({ id: snap.id, ...snap.data() })) {
+      await setDoc(ref, {
+        id,
+        tipo: CHAT_TYPE_SUPPORT,
+        status: 'ativo',
+        sellerId: cleanSellerId,
+        sellerName: sellerName || cleanSellerId,
+        buyerId: '',
+        buyerName: '',
+        assunto: source === 'denuncia' ? 'Contato sobre denúncia de produto' : 'Contato do suporte',
+        mensagens: [{ autorId: 'sistema', autorTipo: 'sistema', autorNome: 'GuildaHub', texto: 'O suporte abriu este chat. Responda com clareza e envie todas as informações solicitadas.', createdAtMs: now }],
+        createdAt: serverTimestamp(),
+        createdAtMs: now,
+        expiresAt: new Date(expiresAtMs),
+        expiresAtMs,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+    const latest = await getDoc(ref);
+    const chat = latest.exists() ? { id: latest.id, ...latest.data() } : { id, tipo: CHAT_TYPE_SUPPORT, sellerId: cleanSellerId, sellerName };
+    localToast('success', 'Chat com vendedor aberto.');
+    openChatById(chat.id, chat);
+    await loadSupportChats();
+  } catch (err) { console.error(err); localToast('error', 'Não foi possível abrir chat com vendedor.'); }
+}
+
 async function loadSupportChats() {
   try {
     const snap = await getDocs(query(collection(lojaDb, CHAT_COLLECTION), where('tipo', '==', CHAT_TYPE_SUPPORT)));
@@ -2267,24 +2508,37 @@ function renderSupportChats() {
   initIcons();
 }
 
+async function openChatById(chatId, cachedChat = null) {
+  if (!chatId) return;
+  try {
+    let chat = cachedChat;
+    if (!chat) {
+      const snap = await getDoc(doc(lojaDb, CHAT_COLLECTION, chatId));
+      if (!snap.exists()) { localToast('error', 'Chat não encontrado.'); return; }
+      chat = { id: snap.id, ...snap.data() };
+    }
+    const order = {
+      id: chat.orderId || chat.pedidoId || chat.id || '',
+      ...(chat.orderSnapshot || {}),
+      buyerId: chat.buyerId || '',
+      buyerName: chat.buyerName || '',
+      sellerId: chat.sellerId || '',
+      sellerName: chat.sellerName || '',
+      produtoId: chat.produtoId || '',
+      produtoTitulo: chat.produtoTitulo || chat.assunto || 'Chat com suporte',
+      categoriaId: chat.categoriaId || '',
+      categoriaNome: chat.categoriaNome || '',
+      total: Number(chat.total || 0),
+      suporteStatus: chat.status || 'ativo'
+    };
+    openChatModalWithChat(order, chat);
+  } catch (err) { console.error(err); localToast('error', 'Não foi possível abrir o chat.'); }
+}
+
 function openSupportChatFromPanel(chatId) {
   const chat = supportChats.find((item) => String(item.id) === String(chatId));
   if (!chat) return;
-  const order = {
-    id: chat.orderId || chat.pedidoId || '',
-    ...(chat.orderSnapshot || {}),
-    buyerId: chat.buyerId || '',
-    buyerName: chat.buyerName || '',
-    sellerId: chat.sellerId || '',
-    sellerName: chat.sellerName || '',
-    produtoId: chat.produtoId || '',
-    produtoTitulo: chat.produtoTitulo || '',
-    categoriaId: chat.categoriaId || '',
-    categoriaNome: chat.categoriaNome || '',
-    total: Number(chat.total || 0),
-    suporteStatus: chat.status || 'ativo'
-  };
-  openChatModalWithChat(order, chat);
+  openChatById(chatId, chat);
 }
 
 function openImageViewer(src) {
