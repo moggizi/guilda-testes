@@ -57,6 +57,8 @@ const SELLER_WITHDRAW_MIN = 20;
 const SELLER_RELEASE_DAYS = 3;
 const BUYER_INFO_CATEGORIES = new Set(['passe', 'diamante', 'likes', 'skin']);
 const SELLER_DELIVERY_INFO_CATEGORIES = new Set(['conta', 'codiguin']);
+const VERIFICATION_COLLECTION = 'verificacao';
+const PROBLEM_COLLECTION = 'problemas';
 
 const els = {
   topSellerBtn: qs('btn-top-seller'),
@@ -65,6 +67,9 @@ const els = {
   topSellerAvatarIcon: qs('seller-top-avatar-icon'),
   sellerProfileBtn: qs('btn-seller-profile'),
   buyerProfileBtn: qs('btn-buyer-profile'),
+  toggleSellerFormBtn: qs('btn-toggle-seller-form'),
+  toggleSellerProductsBtn: qs('btn-toggle-seller-products'),
+  sellerProductsCard: qs('seller-products-card'),
 
   search: qs('store-search'),
   category: qs('store-category'),
@@ -107,6 +112,26 @@ const els = {
   sellerOrdersCounter: qs('seller-orders-counter'),
   sellerOrdersList: qs('seller-orders-list'),
 
+  verificationModal: qs('seller-verification-modal'),
+  verificationForm: qs('seller-verification-form'),
+  verificationSubtitle: qs('seller-verification-subtitle'),
+  verificationStatus: qs('seller-verification-status'),
+  verificationPaperText: qs('verification-paper-text'),
+  verificationFullName: qs('verification-full-name'),
+  verificationBirthDate: qs('verification-birth-date'),
+  verificationRgFront: qs('verification-rg-front'),
+  verificationRgBack: qs('verification-rg-back'),
+  verificationFrontStatus: qs('verification-front-status'),
+  verificationBackStatus: qs('verification-back-status'),
+  submitVerificationBtn: qs('btn-submit-verification'),
+
+  problemModal: qs('problem-modal'),
+  problemForm: qs('problem-form'),
+  problemOrderSubtitle: qs('problem-order-subtitle'),
+  problemOrderSummary: qs('problem-order-summary'),
+  problemDescription: qs('problem-description'),
+  submitProblemBtn: qs('btn-submit-problem'),
+
   userRole: qs('user-role'),
   userEmail: qs('user-email'),
   sidebarAvatar: qs('sidebar-avatar'),
@@ -122,6 +147,11 @@ let filteredProducts = [];
 let sellerProducts = [];
 let sellerOrders = [];
 let buyerOrders = [];
+let buyerProblems = [];
+let sellerVerification = null;
+let activeProblemOrderId = '';
+let verificationRgFrontBase64 = '';
+let verificationRgBackBase64 = '';
 let loadingProducts = false;
 let loadingStatus = false;
 let loadingSellerPanel = false;
@@ -172,6 +202,33 @@ function setProductsLoading(visible) {
     els.empty?.classList.add('hidden');
     if (els.grid) els.grid.innerHTML = '';
   }
+}
+
+function getTodayBRDate() {
+  return new Date().toLocaleDateString('pt-BR');
+}
+
+function getVerificationPaperText() {
+  return `guildahub + ${getTodayBRDate()}`;
+}
+
+function getVerificationStatusLabel(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'aprovado' || s === 'approved') return 'aprovado';
+  if (s === 'recusado' || s === 'rejected') return 'recusado';
+  if (s === 'pendente' || s === 'pending') return 'pendente';
+  return '';
+}
+
+function setMobileCollapsibleState(target, btn, open, openLabel = 'Fechar', closedLabel = 'Abrir/editar') {
+  if (!target) return;
+  target.classList.toggle('hidden', !open);
+  if (btn) btn.textContent = open ? openLabel : closedLabel;
+}
+
+function setVerificationImageStatus(type, message) {
+  const el = type === 'front' ? els.verificationFrontStatus : els.verificationBackStatus;
+  if (el) el.textContent = message;
 }
 
 
@@ -839,6 +896,142 @@ async function ensureBuyerProfile({ silent = false } = {}) {
   return lojaStatus.comprador;
 }
 
+
+async function loadSellerVerification() {
+  if (!currentUser || !ghubProfile?.gameId) return null;
+  try {
+    const snap = await getDoc(doc(lojaDb, VERIFICATION_COLLECTION, String(ghubProfile.gameId)));
+    sellerVerification = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+    return sellerVerification;
+  } catch (err) {
+    console.warn('Não foi possível carregar verificação de vendedor:', err);
+    return null;
+  }
+}
+
+function openVerificationModal(data = null) {
+  if (!currentUser) {
+    localToast('error', 'Entre na GuildaHub para solicitar verificação.');
+    return;
+  }
+
+  const verification = data || sellerVerification || null;
+  const status = getVerificationStatusLabel(verification?.status);
+  const paper = getVerificationPaperText();
+
+  if (els.verificationPaperText) els.verificationPaperText.textContent = paper;
+  if (els.verificationFullName) els.verificationFullName.value = verification?.nomeCompleto || '';
+  if (els.verificationBirthDate) els.verificationBirthDate.value = verification?.dataNascimento || '';
+
+  const isLocked = status === 'pendente' || status === 'aprovado' || status === 'recusado';
+  [els.verificationFullName, els.verificationBirthDate, els.verificationRgFront, els.verificationRgBack, els.submitVerificationBtn].forEach((el) => {
+    if (!el) return;
+    el.disabled = isLocked;
+    el.classList.toggle('opacity-60', isLocked);
+  });
+
+  const statusClasses = {
+    aprovado: 'rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold leading-relaxed text-emerald-800',
+    recusado: 'rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-semibold leading-relaxed text-red-800',
+    pendente: 'rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-800',
+    default: 'rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-800'
+  };
+
+  if (els.verificationStatus) {
+    els.verificationStatus.className = statusClasses[status] || statusClasses.default;
+    if (status === 'aprovado') els.verificationStatus.textContent = 'Sua verificação foi aprovada. Toque em “Quero vender” novamente para criar o perfil de vendedor.';
+    else if (status === 'recusado') els.verificationStatus.textContent = verification?.motivoRecusa || 'Sua verificação foi recusada. Você ainda pode comprar normalmente.';
+    else if (status === 'pendente') els.verificationStatus.textContent = 'Sua verificação está em análise. Aguarde a aprovação para vender.';
+    else els.verificationStatus.textContent = 'Antes de vender, envie seus dados para análise. Se aprovado, você poderá criar o perfil de vendedor.';
+  }
+
+  setVerificationImageStatus('front', verification?.rgFrenteBase64 ? 'Imagem enviada.' : 'Imagem será comprimida para caber no Firestore.');
+  setVerificationImageStatus('back', verification?.rgVersoBase64 ? 'Imagem enviada.' : 'Imagem será comprimida para caber no Firestore.');
+
+  els.verificationModal?.classList.remove('hidden');
+  els.verificationModal?.classList.add('flex');
+  initIcons();
+}
+
+function closeVerificationModal() {
+  els.verificationModal?.classList.add('hidden');
+  els.verificationModal?.classList.remove('flex');
+}
+
+async function handleVerificationFileChange(type, file) {
+  if (!file) {
+    if (type === 'front') verificationRgFrontBase64 = '';
+    else verificationRgBackBase64 = '';
+    setVerificationImageStatus(type, 'Imagem será comprimida para caber no Firestore.');
+    return;
+  }
+
+  try {
+    setVerificationImageStatus(type, 'Comprimindo imagem...');
+    const base64 = await compressImageToBase64(file, 360 * 1024);
+    const kb = Math.max(1, Math.round(dataUrlSizeBytes(base64) / 1024));
+    if (type === 'front') verificationRgFrontBase64 = base64;
+    else verificationRgBackBase64 = base64;
+    setVerificationImageStatus(type, `Imagem pronta (${kb} KB).`);
+  } catch (err) {
+    console.error(err);
+    if (type === 'front') {
+      verificationRgFrontBase64 = '';
+      if (els.verificationRgFront) els.verificationRgFront.value = '';
+    } else {
+      verificationRgBackBase64 = '';
+      if (els.verificationRgBack) els.verificationRgBack.value = '';
+    }
+    setVerificationImageStatus(type, 'Falha ao processar imagem.');
+    localToast('error', err?.message || 'Não foi possível processar a imagem.');
+  }
+}
+
+async function submitSellerVerification(event) {
+  event.preventDefault();
+  if (!currentUser || !ghubProfile?.gameId) {
+    localToast('error', 'Conclua seu perfil da GuildaHub antes de solicitar verificação.');
+    return;
+  }
+
+  const nomeCompleto = String(els.verificationFullName?.value || '').trim();
+  const dataNascimento = String(els.verificationBirthDate?.value || '').trim();
+  if (!nomeCompleto) { localToast('error', 'Informe seu nome completo.'); els.verificationFullName?.focus(); return; }
+  if (!dataNascimento) { localToast('error', 'Informe sua data de nascimento.'); els.verificationBirthDate?.focus(); return; }
+  if (!verificationRgFrontBase64) { localToast('error', 'Envie a foto da frente do RG com o papel solicitado.'); return; }
+  if (!verificationRgBackBase64) { localToast('error', 'Envie a foto do verso do RG com o papel solicitado.'); return; }
+
+  setButtonLoading(els.submitVerificationBtn, true, 'Enviar verificação');
+  try {
+    const payload = {
+      id: ghubProfile.gameId,
+      gameId: ghubProfile.gameId,
+      uid: currentUser.uid || '',
+      email: normalizeEmail(currentUser.email || ghubProfile.email || ''),
+      nick: ghubProfile.nick || '',
+      foto: ghubProfile.foto || '',
+      nomeCompleto,
+      dataNascimento,
+      papelSolicitado: getVerificationPaperText(),
+      rgFrenteBase64: verificationRgFrontBase64,
+      rgVersoBase64: verificationRgBackBase64,
+      status: 'pendente',
+      createdAt: serverTimestamp(),
+      createdAtMs: Date.now(),
+      updatedAt: serverTimestamp()
+    };
+    await setDoc(doc(lojaDb, VERIFICATION_COLLECTION, String(ghubProfile.gameId)), payload, { merge: true });
+    sellerVerification = payload;
+    localToast('success', 'Verificação enviada. Aguarde aprovação para vender.');
+    closeVerificationModal();
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível enviar a verificação. Confira as regras do Firebase.');
+  } finally {
+    setButtonLoading(els.submitVerificationBtn, false, 'Enviar verificação');
+  }
+}
+
 async function createOrUpdateSellerProfile() {
   if (!currentUser) {
     localToast('error', 'Entre na GuildaHub para criar seu perfil de vendedor.');
@@ -900,8 +1093,38 @@ async function handleTopSellerClick() {
     return;
   }
 
-  const seller = await createOrUpdateSellerProfile();
-  if (seller) await openSellerPanel();
+  if (!currentUser) {
+    localToast('error', 'Entre na GuildaHub para criar seu perfil de vendedor.');
+    return;
+  }
+
+  if (!ghubProfile?.gameId) {
+    localToast('error', 'Conclua seu perfil da GuildaHub antes de criar vendedor.');
+    return;
+  }
+
+  const verification = await loadSellerVerification();
+  const status = getVerificationStatusLabel(verification?.status);
+
+  if (status === 'aprovado') {
+    const seller = await createOrUpdateSellerProfile();
+    if (seller) await openSellerPanel();
+    return;
+  }
+
+  if (status === 'recusado') {
+    localToast('error', 'Sua verificação de vendedor foi recusada. Você ainda pode comprar normalmente.');
+    openVerificationModal(verification);
+    return;
+  }
+
+  if (status === 'pendente') {
+    localToast('info', 'Sua verificação de vendedor ainda está em análise.');
+    openVerificationModal(verification);
+    return;
+  }
+
+  openVerificationModal(null);
 }
 
 async function createOrder(productId) {
@@ -1155,6 +1378,8 @@ function renderSellerOrders() {
 }
 
 async function openSellerPanel() {
+  setMobileCollapsibleState(els.sellerForm, els.toggleSellerFormBtn, false, 'Fechar cadastro de produto', 'Abrir/editar cadastro de produto');
+  setMobileCollapsibleState(els.sellerProductsCard, els.toggleSellerProductsBtn, false, 'Fechar meus produtos', 'Abrir/editar meus produtos');
   if (!lojaStatus?.vendedor) {
     const seller = await createOrUpdateSellerProfile();
     if (!seller) return;
@@ -1356,13 +1581,126 @@ function openBuyerModal() { if (!currentUser) { localToast('error', 'Entre na Gu
 
 function closeBuyerModal() { els.buyerModal?.classList.add('hidden'); els.buyerModal?.classList.remove('flex'); }
 
+
+async function loadBuyerProblems() {
+  if (!currentUser || !ghubProfile?.gameId) {
+    buyerProblems = [];
+    return;
+  }
+  try {
+    const snap = await getDocs(query(collection(lojaDb, PROBLEM_COLLECTION), where('buyerId', '==', String(ghubProfile.gameId))));
+    buyerProblems = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn('Não foi possível carregar problemas do comprador:', err);
+    buyerProblems = [];
+  }
+}
+
+function getProblemForOrder(orderId) {
+  return buyerProblems.find((problem) => String(problem.orderId || problem.pedidoId || '') === String(orderId));
+}
+
+function openProblemModal(orderId) {
+  const order = buyerOrders.find((item) => String(item.id) === String(orderId));
+  if (!order) return;
+  activeProblemOrderId = String(orderId);
+  if (els.problemOrderSubtitle) els.problemOrderSubtitle.textContent = `Pedido ${order.id}`;
+  if (els.problemOrderSummary) {
+    els.problemOrderSummary.innerHTML = `<p class="font-black text-gray-900">${escapeHtml(order.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs text-gray-500">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs text-gray-500">Vendedor: ${escapeHtml(order.sellerName || order.sellerId || '-')}</p><p class="mt-1 text-xs text-gray-500">Valor: ${moneyBRL(order.total || order.precoUnitario || 0)}</p>`;
+  }
+  if (els.problemDescription) els.problemDescription.value = '';
+  els.problemModal?.classList.remove('hidden');
+  els.problemModal?.classList.add('flex');
+  initIcons();
+}
+
+function closeProblemModal() {
+  activeProblemOrderId = '';
+  els.problemModal?.classList.add('hidden');
+  els.problemModal?.classList.remove('flex');
+}
+
+async function submitProblem(event) {
+  event.preventDefault();
+  const order = buyerOrders.find((item) => String(item.id) === String(activeProblemOrderId));
+  if (!order) return;
+  if (String(order.buyerId || '') !== String(ghubProfile?.gameId || '')) {
+    localToast('error', 'Esse pedido não pertence ao seu perfil.');
+    return;
+  }
+  const description = String(els.problemDescription?.value || '').trim();
+  if (!description) { localToast('error', 'Descreva o problema da compra.'); els.problemDescription?.focus(); return; }
+  const existing = getProblemForOrder(order.id);
+  if (existing) {
+    localToast('error', 'Já existe um problema aberto para esse pedido.');
+    closeProblemModal();
+    return;
+  }
+  setButtonLoading(els.submitProblemBtn, true, 'Enviar problema');
+  try {
+    const payload = {
+      orderId: order.id,
+      pedidoId: order.id,
+      buyerId: order.buyerId || ghubProfile.gameId,
+      buyerUid: currentUser?.uid || '',
+      buyerEmail: normalizeEmail(currentUser?.email || ghubProfile?.email || ''),
+      buyerName: order.buyerName || order.buyerNick || ghubProfile?.nick || '',
+      sellerId: order.sellerId || '',
+      sellerName: order.sellerName || '',
+      produtoId: order.produtoId || '',
+      produtoTitulo: order.produtoTitulo || '',
+      categoriaId: order.categoriaId || '',
+      categoriaNome: order.categoriaNome || '',
+      total: Number(order.total || order.precoUnitario || 0),
+      orderStatus: order.status || '',
+      descricao: description,
+      status: 'aberto',
+      orderSnapshot: {
+        id: order.id,
+        buyerId: order.buyerId || '',
+        sellerId: order.sellerId || '',
+        produtoId: order.produtoId || '',
+        produtoTitulo: order.produtoTitulo || '',
+        total: Number(order.total || order.precoUnitario || 0),
+        status: order.status || '',
+        buyerInfo: order.buyerInfo || '',
+        deliveryInfo: order.deliveryInfo || order.entrega?.informacoes || '',
+        createdAtMs: order.createdAtMs || null,
+        entregueEmMs: order.entregueEmMs || order.entrega?.entregueEmMs || null
+      },
+      createdAt: serverTimestamp(),
+      createdAtMs: Date.now(),
+      updatedAt: serverTimestamp()
+    };
+    const ref = await addDoc(collection(lojaDb, PROBLEM_COLLECTION), payload);
+    buyerProblems.push({ id: ref.id, ...payload });
+    await setDoc(doc(lojaDb, 'pedidos', String(order.id)), {
+      problemaAberto: true,
+      problemaId: ref.id,
+      problemaStatus: 'aberto',
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    localToast('success', 'Problema enviado. Você pode acompanhar o status em Minhas compras.');
+    closeProblemModal();
+    await loadBuyerOrders();
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível enviar o problema. Confira as regras do Firebase.');
+  } finally {
+    setButtonLoading(els.submitProblemBtn, false, 'Enviar problema');
+  }
+}
+
 async function loadBuyerOrders() {
   if (!currentUser || !ghubProfile?.gameId) { buyerOrders = []; renderBuyerOrders(); return; }
   if (els.buyerOrdersList) els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando compras...</div>';
   try {
-    const snap = await getDocs(query(collection(lojaDb, 'pedidos'), where('buyerId', '==', String(ghubProfile.gameId))));
-    buyerOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
-  } catch (err) { console.error('Erro ao carregar compras:', err?.code || err?.message || err, err); buyerOrders = []; localToast('error', `Não foi possível carregar suas compras. Erro: ${err?.code || err?.message || 'verifique as regras/índices'}`); }
+    const [ordersSnap] = await Promise.all([
+      getDocs(query(collection(lojaDb, 'pedidos'), where('buyerId', '==', String(ghubProfile.gameId)))),
+      loadBuyerProblems()
+    ]);
+    buyerOrders = ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
+  } catch (err) { console.error('Erro ao carregar compras:', err?.code || err?.message || err, err); buyerOrders = []; buyerProblems = []; localToast('error', `Não foi possível carregar suas compras. Erro: ${err?.code || err?.message || 'verifique as regras/índices'}`); }
   renderBuyerOrders();
 }
 
@@ -1371,6 +1709,7 @@ function renderBuyerOrders() {
   if (!els.buyerOrdersList) return;
   if (!currentUser) { els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-center text-sm font-semibold text-gray-500">Entre na GuildaHub para ver suas compras.</div>'; return; }
   if (!buyerOrders.length) { els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-center text-sm font-semibold text-gray-500">Nenhuma compra encontrada ainda.</div>'; return; }
+
   els.buyerOrdersList.innerHTML = buyerOrders.map((order) => {
     const status = String(order.status || 'pendente').toLowerCase();
     const locked = isFinalOrderStatus(status) || order.finalizado === true;
@@ -1379,9 +1718,33 @@ function renderBuyerOrders() {
     const needsSellerInfo = categoryRequiresSellerDeliveryInfo(order.categoriaId);
     const buyerInfo = order.buyerInfo || '';
     const deliveryInfo = order.deliveryInfo || order.entrega?.informacoes || '';
-    return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs font-semibold text-gray-500">Vendedor: ${escapeHtml(order.sellerName || order.sellerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p></div><span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span></div><div class="mt-3 flex items-center justify-between gap-3"><p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p><span class="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black text-gray-500">${escapeHtml(order.categoriaNome || order.categoriaId || 'Categoria')}</span></div>${needsBuyerInfo ? `<div class="mt-3"><label class="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Suas informações para entrega</label><textarea data-buyer-info-for="${escapeHtml(order.id)}" rows="3" maxlength="300" ${locked ? 'readonly' : ''} class="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" placeholder="${escapeHtml(getBuyerInfoLabel(order.categoriaId))}">${escapeHtml(buyerInfo)}</textarea>${locked ? '' : `<button type="button" data-save-buyer-info="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Salvar informações</button>`}</div>` : ''}${needsSellerInfo ? `<div class="mt-3 rounded-xl border ${deliveryInfo ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'} p-3"><p class="text-[10px] font-black uppercase tracking-wider ${deliveryInfo ? 'text-emerald-800' : 'text-amber-800'}">Informações recebidas do vendedor</p><p class="mt-1 whitespace-pre-wrap text-xs font-semibold ${deliveryInfo ? 'text-emerald-900' : 'text-amber-900'}">${escapeHtml(deliveryInfo || 'Aguardando o vendedor enviar as informações.')}</p></div>` : ''}</div>`;
+    const problem = getProblemForOrder(order.id);
+    const problemHtml = problem
+      ? `<div class="mt-3 rounded-xl border border-red-200 bg-red-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-red-800">Problema enviado</p><p class="mt-1 text-xs font-semibold text-red-900">Status: ${escapeHtml(problem.status || 'aberto')}</p>${problem.resposta ? `<p class="mt-1 whitespace-pre-wrap text-xs font-semibold text-red-900">Resposta: ${escapeHtml(problem.resposta)}</p>` : ''}</div>`
+      : (status === 'entregue' ? `<button type="button" data-open-problem="${escapeHtml(order.id)}" class="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Problemas com a compra</button>` : '');
+
+    return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p>
+          <p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p>
+          <p class="mt-1 text-xs font-semibold text-gray-500">Vendedor: ${escapeHtml(order.sellerName || order.sellerId || '-')}</p>
+          <p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p>
+        </div>
+        <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span>
+      </div>
+      <div class="mt-3 flex items-center justify-between gap-3">
+        <p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p>
+        <span class="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black text-gray-500">${escapeHtml(order.categoriaNome || order.categoriaId || 'Categoria')}</span>
+      </div>
+      ${needsBuyerInfo ? `<div class="mt-3"><label class="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Suas informações para entrega</label><textarea data-buyer-info-for="${escapeHtml(order.id)}" rows="3" maxlength="300" ${locked ? 'readonly' : ''} class="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" placeholder="${escapeHtml(getBuyerInfoLabel(order.categoriaId))}">${escapeHtml(buyerInfo)}</textarea>${locked ? '' : `<button type="button" data-save-buyer-info="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Salvar informações</button>`}</div>` : ''}
+      ${needsSellerInfo ? `<div class="mt-3 rounded-xl border ${deliveryInfo ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'} p-3"><p class="text-[10px] font-black uppercase tracking-wider ${deliveryInfo ? 'text-emerald-800' : 'text-amber-800'}">Informações recebidas do vendedor</p><p class="mt-1 whitespace-pre-wrap text-xs font-semibold ${deliveryInfo ? 'text-emerald-900' : 'text-amber-900'}">${escapeHtml(deliveryInfo || 'Aguardando o vendedor enviar as informações.')}</p></div>` : ''}
+      ${problemHtml}
+    </div>`;
   }).join('');
+
   els.buyerOrdersList.querySelectorAll('[data-save-buyer-info]').forEach((btn) => btn.addEventListener('click', () => updateBuyerOrderInfo(btn.getAttribute('data-save-buyer-info') || '')));
+  els.buyerOrdersList.querySelectorAll('[data-open-problem]').forEach((btn) => btn.addEventListener('click', () => openProblemModal(btn.getAttribute('data-open-problem') || '')));
 }
 
 async function updateBuyerOrderInfo(orderId) {
@@ -1409,6 +1772,14 @@ function bindEvents() {
   });
 
   els.buyerProfileBtn?.addEventListener('click', openBuyerModal);
+  els.toggleSellerFormBtn?.addEventListener('click', () => {
+    const willOpen = els.sellerForm?.classList.contains('hidden');
+    setMobileCollapsibleState(els.sellerForm, els.toggleSellerFormBtn, willOpen, 'Fechar cadastro de produto', 'Abrir/editar cadastro de produto');
+  });
+  els.toggleSellerProductsBtn?.addEventListener('click', () => {
+    const willOpen = els.sellerProductsCard?.classList.contains('hidden');
+    setMobileCollapsibleState(els.sellerProductsCard, els.toggleSellerProductsBtn, willOpen, 'Fechar meus produtos', 'Abrir/editar meus produtos');
+  });
   els.topSellerBtn?.addEventListener('click', handleTopSellerClick);
   els.sellerProfileBtn?.addEventListener('click', openSellerPanel);
   els.sellerForm?.addEventListener('submit', handleSellerProductSubmit);
@@ -1435,6 +1806,10 @@ function bindEvents() {
     }
   });
   els.reloadSellerDataBtn?.addEventListener('click', reloadSellerPanelData);
+  els.verificationForm?.addEventListener('submit', submitSellerVerification);
+  els.verificationRgFront?.addEventListener('change', (event) => handleVerificationFileChange('front', event.target.files?.[0] || null));
+  els.verificationRgBack?.addEventListener('change', (event) => handleVerificationFileChange('back', event.target.files?.[0] || null));
+  els.problemForm?.addEventListener('submit', submitProblem);
 
   document.querySelectorAll('[data-close-product-modal]').forEach((btn) => {
     btn.addEventListener('click', closeProductModal);
@@ -1448,11 +1823,21 @@ function bindEvents() {
     btn.addEventListener('click', closeBuyerModal);
   });
 
+  document.querySelectorAll('[data-close-verification-modal]').forEach((btn) => {
+    btn.addEventListener('click', closeVerificationModal);
+  });
+
+  document.querySelectorAll('[data-close-problem-modal]').forEach((btn) => {
+    btn.addEventListener('click', closeProblemModal);
+  });
+
   window.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     closeProductModal();
     closeSellerModal();
     closeBuyerModal();
+    closeVerificationModal();
+    closeProblemModal();
   });
 }
 
