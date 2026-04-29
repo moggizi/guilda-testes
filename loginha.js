@@ -14,6 +14,7 @@ import {
   addDoc,
   runTransaction,
   serverTimestamp,
+  deleteDoc,
   limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { setupSidebar, initIcons, logout, showToast, auth, db } from './logic.js';
@@ -63,6 +64,8 @@ const CHAT_TYPE_SELLER = 'vendedor';
 const CHAT_TYPE_SUPPORT = 'suporte';
 const SELLER_CHAT_HOURS = 24;
 const SUPPORT_CHAT_HOURS = 48;
+const ADMIN_COLLECTION = 'admin';
+const ADMIN_DOC_ID = 'security';
 
 const els = {
   topSellerBtn: qs('btn-top-seller'),
@@ -71,6 +74,7 @@ const els = {
   topSellerAvatarIcon: qs('seller-top-avatar-icon'),
   sellerProfileBtn: qs('btn-seller-profile'),
   buyerProfileBtn: qs('btn-buyer-profile'),
+  supportPanelBtn: qs('btn-support-panel'),
   toggleSellerFormBtn: qs('btn-toggle-seller-form'),
   toggleSellerProductsBtn: qs('btn-toggle-seller-products'),
   sellerProductsCard: qs('seller-products-card'),
@@ -141,6 +145,13 @@ const els = {
   resolveChatBtn: qs('btn-resolve-chat'),
   escalateChatBtn: qs('btn-escalate-chat'),
 
+  supportModal: qs('support-modal'),
+  supportVerificationsCounter: qs('support-verifications-counter'),
+  supportVerificationsList: qs('support-verifications-list'),
+  supportChatsCounter: qs('support-chats-counter'),
+  supportChatsList: qs('support-chats-list'),
+  reloadSupportPanelBtn: qs('btn-reload-support-panel'),
+
   userRole: qs('user-role'),
   userEmail: qs('user-email'),
   sidebarAvatar: qs('sidebar-avatar'),
@@ -158,6 +169,9 @@ let sellerOrders = [];
 let buyerOrders = [];
 let buyerProblems = [];
 let sellerChats = [];
+let supportChats = [];
+let supportVerifications = [];
+let isSupportAdmin = false;
 let sellerVerification = null;
 let activeProblemOrderId = '';
 let activeProblemChatId = '';
