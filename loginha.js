@@ -14,6 +14,7 @@ import {
   addDoc,
   runTransaction,
   serverTimestamp,
+  deleteDoc,
   limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { setupSidebar, initIcons, logout, showToast, auth, db } from './logic.js';
@@ -63,6 +64,8 @@ const CHAT_TYPE_SELLER = 'vendedor';
 const CHAT_TYPE_SUPPORT = 'suporte';
 const SELLER_CHAT_HOURS = 24;
 const SUPPORT_CHAT_HOURS = 48;
+const ADMIN_COLLECTION = 'admin';
+const ADMIN_DOC_ID = 'security';
 
 const els = {
   topSellerBtn: qs('btn-top-seller'),
@@ -71,6 +74,7 @@ const els = {
   topSellerAvatarIcon: qs('seller-top-avatar-icon'),
   sellerProfileBtn: qs('btn-seller-profile'),
   buyerProfileBtn: qs('btn-buyer-profile'),
+  supportPanelBtn: qs('btn-support-panel'),
   toggleSellerFormBtn: qs('btn-toggle-seller-form'),
   toggleSellerProductsBtn: qs('btn-toggle-seller-products'),
   sellerProductsCard: qs('seller-products-card'),
@@ -141,6 +145,13 @@ const els = {
   resolveChatBtn: qs('btn-resolve-chat'),
   escalateChatBtn: qs('btn-escalate-chat'),
 
+  supportModal: qs('support-modal'),
+  supportVerificationsCounter: qs('support-verifications-counter'),
+  supportVerificationsList: qs('support-verifications-list'),
+  supportChatsCounter: qs('support-chats-counter'),
+  supportChatsList: qs('support-chats-list'),
+  reloadSupportPanelBtn: qs('btn-reload-support-panel'),
+
   userRole: qs('user-role'),
   userEmail: qs('user-email'),
   sidebarAvatar: qs('sidebar-avatar'),
@@ -158,6 +169,9 @@ let sellerOrders = [];
 let buyerOrders = [];
 let buyerProblems = [];
 let sellerChats = [];
+let supportChats = [];
+let supportVerifications = [];
+let isSupportAdmin = false;
 let sellerVerification = null;
 let activeProblemOrderId = '';
 let activeProblemChatId = '';
@@ -638,6 +652,7 @@ async function loadStoreStatus() {
   if (!currentUser || !ghubProfile?.gameId) {
     lojaStatus = { comprador: null, vendedor: null };
     renderSellerTop();
+    renderSupportTop();
     return;
   }
 
@@ -830,12 +845,7 @@ async function openProductModal(productId) {
   const statusHtml = product.disponivel
     ? '<span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-200">DISPONÍVEL</span>'
     : '<span class="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-black text-red-700 ring-1 ring-red-200">ESGOTADO</span>';
-  const buyerInfoHtml = categoryRequiresBuyerInfo(product.categoriaId) ? `
-    <div class="rounded-2xl border border-amber-200 bg-amber-50 p-3">
-      <label for="buyer-order-info" class="block text-xs font-black uppercase tracking-wider text-amber-800 mb-1.5">Informações para o pedido</label>
-      <textarea id="buyer-order-info" rows="3" maxlength="300" class="w-full resize-none rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-amber-200" placeholder="${escapeHtml(getBuyerInfoLabel(product.categoriaId))}"></textarea>
-      <p class="mt-1 text-xs font-semibold text-amber-800">Obrigatório para essa categoria.</p>
-    </div>` : '';
+  const buyerInfoHtml = '';
   els.productModalBody.innerHTML = `
     ${image}
     <div>
@@ -1145,19 +1155,21 @@ async function createOrder(productId) {
   if (!currentUser) { localToast('error', 'Entre na GuildaHub para comprar.'); return; }
   if (!ghubProfile?.gameId) { localToast('error', 'Conclua seu perfil da GuildaHub antes de comprar.'); return; }
   if (!product.disponivel) { localToast('error', 'Esse produto está esgotado.'); return; }
-  const buyerInfoText = String(qs('buyer-order-info')?.value || '').trim();
-  if (categoryRequiresBuyerInfo(product.categoriaId) && !buyerInfoText) {
-    localToast('error', 'Envie as informações necessárias para esse pedido.');
-    qs('buyer-order-info')?.focus();
-    return;
-  }
+
   const btn = els.productModalBody?.querySelector('[data-buy-product]');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i> Criando pedido...'; initIcons(); }
+
   try {
     const buyer = lojaStatus?.comprador || await ensureBuyerProfile({ silent: true });
     if (!buyer) throw new Error('buyer-required');
+
     const productRef = doc(lojaDb, 'produtos', product.id);
     const orderRef = doc(collection(lojaDb, 'pedidos'));
+    const sellerChatId = getChatId(orderRef.id, CHAT_TYPE_SELLER);
+    const sellerChatRef = doc(lojaDb, CHAT_COLLECTION, sellerChatId);
+    const nowMs = Date.now();
+    const expiresAtMs = nowMs + (SELLER_CHAT_HOURS * 60 * 60 * 1000);
+
     await runTransaction(lojaDb, async (transaction) => {
       const productSnap = await transaction.get(productRef);
       if (!productSnap.exists()) throw new Error('product-not-found');
@@ -1165,43 +1177,95 @@ async function createOrder(productId) {
       if (currentProduct.ativo === false) throw new Error('product-inactive');
       const estoqueAtual = Number(currentProduct.estoqueQuantidade ?? 0);
       if (currentProduct.estoqueAtivo !== false && estoqueAtual <= 0) throw new Error('out-of-stock');
-      transaction.set(orderRef, {
+
+      const orderPayload = {
         buyerId: ghubProfile.gameId,
         buyerUid: currentUser.uid || '',
         buyerEmail: normalizeEmail(currentUser.email || ghubProfile.email || ''),
         buyerName: ghubProfile.nick || '',
         buyerNick: ghubProfile.nick || '',
         buyerPhoto: ghubProfile.foto || '',
+
         sellerId: currentProduct.sellerId || 'ghub',
         sellerName: currentProduct.sellerName || 'GuildaHub',
         sellerPhoto: currentProduct.sellerPhoto || '',
+
         produtoId: currentProduct.id,
         produtoTitulo: currentProduct.titulo,
         produtoImagem: currentProduct.imagem || '',
         categoriaId: currentProduct.categoriaId || '',
         categoriaNome: currentProduct.categoriaNome || '',
+
         quantidade: 1,
         precoUnitario: Number(currentProduct.preco || 0),
         total: Number(currentProduct.preco || 0),
         moeda: currentProduct.moeda || 'BRL',
-        buyerInfoRequired: categoryRequiresBuyerInfo(currentProduct.categoriaId),
-        buyerInfo: buyerInfoText,
-        buyerInfoUpdatedAtMs: buyerInfoText ? Date.now() : null,
-        deliveryInfoRequired: categoryRequiresSellerDeliveryInfo(currentProduct.categoriaId),
+
+        buyerInfoRequired: false,
+        buyerInfo: '',
+        deliveryInfoRequired: false,
         deliveryInfo: '',
-        deliveryInfoUpdatedAtMs: null,
+
         status: 'pendente',
         finalizado: false,
+        chatVendedorAberto: true,
+        chatVendedorId: sellerChatId,
+        chatVendedorStatus: 'ativo',
         pagamento: { metodo: 'pix', provider: '', status: 'pendente', paymentId: '', qrCode: '', copiaCola: '', aprovadoEm: null, reembolsadoEm: null },
         entrega: { tipo: currentProduct.entregaTipo || 'manual', status: 'aguardando_pagamento', observacao: '', informacoes: '', entregueEm: null, entregueEmMs: null, canceladoEm: null },
         createdAt: serverTimestamp(),
-        createdAtMs: Date.now(),
+        createdAtMs: nowMs,
         updatedAt: serverTimestamp()
-      });
+      };
+
+      const chatPayload = {
+        id: sellerChatId,
+        tipo: CHAT_TYPE_SELLER,
+        status: 'ativo',
+        orderId: orderRef.id,
+        pedidoId: orderRef.id,
+        buyerId: ghubProfile.gameId,
+        buyerUid: currentUser.uid || '',
+        buyerEmail: normalizeEmail(currentUser.email || ghubProfile.email || ''),
+        buyerName: ghubProfile.nick || '',
+        sellerId: currentProduct.sellerId || 'ghub',
+        sellerName: currentProduct.sellerName || 'GuildaHub',
+        produtoId: currentProduct.id,
+        produtoTitulo: currentProduct.titulo,
+        categoriaId: currentProduct.categoriaId || '',
+        categoriaNome: currentProduct.categoriaNome || '',
+        total: Number(currentProduct.preco || 0),
+        mensagens: [{
+          autorId: 'sistema',
+          autorTipo: 'sistema',
+          autorNome: 'GuildaHub',
+          texto: 'Chat temporário aberto automaticamente após a compra. Envie aqui as informações necessárias para combinar a entrega.',
+          createdAtMs: nowMs
+        }],
+        createdAt: serverTimestamp(),
+        createdAtMs: nowMs,
+        expiresAt: new Date(expiresAtMs),
+        expiresAtMs,
+        updatedAt: serverTimestamp(),
+        orderSnapshot: {
+          id: orderRef.id,
+          buyerId: ghubProfile.gameId,
+          sellerId: currentProduct.sellerId || 'ghub',
+          produtoId: currentProduct.id,
+          produtoTitulo: currentProduct.titulo,
+          total: Number(currentProduct.preco || 0),
+          status: 'pendente',
+          createdAtMs: nowMs
+        }
+      };
+
+      transaction.set(orderRef, orderPayload);
+      transaction.set(sellerChatRef, chatPayload);
       if (currentProduct.estoqueAtivo !== false) transaction.set(productRef, { estoqueQuantidade: Math.max(0, estoqueAtual - 1), updatedAt: serverTimestamp() }, { merge: true });
     });
+
     closeProductModal();
-    localToast('success', 'Pedido criado: ' + orderRef.id);
+    localToast('success', 'Pedido criado. Chat com o vendedor aberto por 24h.');
     await Promise.all([loadProducts(), loadBuyerOrders()]);
   } catch (err) {
     console.error(err);
@@ -1211,7 +1275,8 @@ async function createOrder(productId) {
   }
 }
 
-function openSellerModal() {
+function openSellerModal()
+ {
   els.sellerModal?.classList.remove('hidden');
   els.sellerModal?.classList.add('flex');
   initIcons();
@@ -1390,7 +1455,7 @@ function renderSellerOrders() {
     const chatHtml = sellerChat
       ? `<div class="mt-3 rounded-xl border ${canOpenChat ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'} p-3"><p class="text-[10px] font-black uppercase tracking-wider ${canOpenChat ? 'text-emerald-800' : 'text-gray-600'}">Chat temporário do pedido</p><p class="mt-1 text-xs font-semibold ${canOpenChat ? 'text-emerald-900' : 'text-gray-700'}">Status: ${escapeHtml(chatExpired ? 'expirado' : (sellerChat.status || 'ativo'))} • ${escapeHtml(getChatRemainingLabel(sellerChat))}</p>${canOpenChat ? `<button type="button" data-open-seller-chat="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Abrir chat com comprador</button>` : ''}</div>`
       : '';
-    return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-3"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">ID comprador: ${escapeHtml(order.buyerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p></div><span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span></div>${needsBuyerInfo ? `<div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-amber-800">Informações do comprador</p><p class="mt-1 whitespace-pre-wrap text-xs font-semibold text-amber-900">${escapeHtml(buyerInfo || 'Ainda não informado.')}</p></div>` : ''}${needsSellerInfo ? `<div class="mt-3"><label class="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Informações para entregar ao comprador</label><textarea data-delivery-info-for="${escapeHtml(order.id)}" rows="3" maxlength="500" ${locked ? 'readonly' : ''} class="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" placeholder="${escapeHtml(getSellerDeliveryInfoLabel(order.categoriaId))}">${escapeHtml(currentDeliveryInfo)}</textarea></div>` : ''}${chatHtml}<div class="mt-3 flex items-center justify-between gap-3"><p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p><div class="flex flex-wrap justify-end gap-2">${locked ? '<span class="rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-500">Finalizado</span>' : `<button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button><button type="button" data-order-action="reembolsado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Reembolso</button>`}</div></div></div>`;
+    return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-3"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">ID comprador: ${escapeHtml(order.buyerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p></div><span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span></div>${chatHtml}<div class="mt-3 flex items-center justify-between gap-3"><p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p><div class="flex flex-wrap justify-end gap-2">${locked ? '<span class="rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-500">Finalizado</span>' : `<button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button><button type="button" data-order-action="reembolsado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Reembolso</button>`}</div></div></div>`;
   }).join('');
   els.sellerOrdersList.querySelectorAll('[data-order-action]').forEach((btn) => btn.addEventListener('click', () => updateOrderStatus(btn.getAttribute('data-order-id') || '', btn.getAttribute('data-order-action') || '')));
   els.sellerOrdersList.querySelectorAll('[data-open-seller-chat]').forEach((btn) => btn.addEventListener('click', () => openProblemModal(btn.getAttribute('data-open-seller-chat') || '', CHAT_TYPE_SELLER)));
@@ -1631,7 +1696,7 @@ function isChatExpired(chat) {
 
 function isChatClosed(chat) {
   const status = String(chat?.status || '').toLowerCase();
-  return status === 'resolvido' || status === 'expirado' || status === 'escalado' || status === 'fechado';
+  return status === 'encerrado' || status === 'expirado' || status === 'escalado' || status === 'fechado';
 }
 
 function getChatRemainingLabel(chat) {
@@ -1679,6 +1744,27 @@ async function loadSellerChats() {
   }
 }
 
+async function closeAndDeleteChat(chat, reason = 'encerrado') {
+  if (!chat?.id) return;
+  const now = Date.now();
+  const type = String(chat.tipo || CHAT_TYPE_SELLER);
+  const orderId = String(chat.orderId || chat.pedidoId || '');
+  const orderPatch = { updatedAt: serverTimestamp() };
+
+  if (type === CHAT_TYPE_SUPPORT) {
+    orderPatch.suporteAberto = false;
+    orderPatch.suporteStatus = reason;
+    orderPatch.suporteEncerradoEmMs = now;
+  } else {
+    orderPatch.chatVendedorAberto = false;
+    orderPatch.chatVendedorStatus = reason;
+    orderPatch.chatVendedorEncerradoEmMs = now;
+  }
+
+  if (orderId) await setDoc(doc(lojaDb, 'pedidos', orderId), orderPatch, { merge: true });
+  await deleteDoc(doc(lojaDb, CHAT_COLLECTION, String(chat.id)));
+}
+
 async function markExpiredChatsIfNeeded(chats = []) {
   const now = Date.now();
   const updates = [];
@@ -1687,19 +1773,16 @@ async function markExpiredChatsIfNeeded(chats = []) {
     const expires = Number(chat.expiresAtMs || 0) || timestampToMs(chat.expiresAt);
     if (expires && now > expires && status === 'ativo') {
       chat.status = 'expirado';
-      updates.push(setDoc(doc(lojaDb, CHAT_COLLECTION, String(chat.id)), {
-        status: 'expirado',
-        expiradoEmMs: now,
-        updatedAt: serverTimestamp()
-      }, { merge: true }));
+      updates.push(closeAndDeleteChat(chat, 'expirado'));
     }
   }
   if (updates.length) {
-    try { await Promise.all(updates); } catch (err) { console.warn('Não foi possível expirar chats:', err); }
+    try { await Promise.all(updates); } catch (err) { console.warn('Não foi possível encerrar chats expirados:', err); }
   }
 }
 
-async function createOrGetChatForOrder(order, type = CHAT_TYPE_SELLER) {
+async function createOrGetChatForOrder
+(order, type = CHAT_TYPE_SELLER) {
   if (!order?.id) throw new Error('order-not-found');
   const id = getChatId(order.id, type);
   const ref = doc(lojaDb, CHAT_COLLECTION, id);
@@ -1711,7 +1794,7 @@ async function createOrGetChatForOrder(order, type = CHAT_TYPE_SELLER) {
   if (snap.exists()) {
     const existing = { id: snap.id, ...snap.data() };
     if (isChatExpired(existing) && String(existing.status || '') === 'ativo') {
-      await setDoc(ref, { status: 'expirado', expiradoEmMs: now, updatedAt: serverTimestamp() }, { merge: true });
+      await closeAndDeleteChat(existing, 'expirado');
       existing.status = 'expirado';
     }
     return existing;
@@ -1734,7 +1817,13 @@ async function createOrGetChatForOrder(order, type = CHAT_TYPE_SELLER) {
     categoriaId: order.categoriaId || '',
     categoriaNome: order.categoriaNome || '',
     total: Number(order.total || order.precoUnitario || 0),
-    mensagens: [],
+    mensagens: [{
+      autorId: 'sistema',
+      autorTipo: 'sistema',
+      autorNome: 'GuildaHub',
+      texto: `Chat temporário com ${getChatTypeLabel(type)} aberto.`,
+      createdAtMs: now
+    }],
     createdAt: serverTimestamp(),
     createdAtMs: now,
     expiresAt: new Date(expiresAtMs),
@@ -1794,6 +1883,7 @@ function openChatModalWithChat(order, chat) {
   const closed = isChatClosed(chat) || expired;
   const currentIsSeller = String(ghubProfile?.gameId || '') === String(chat.sellerId || '');
   const currentIsBuyer = String(ghubProfile?.gameId || '') === String(chat.buyerId || '');
+  const currentIsSupport = isSupportAdmin && activeProblemChatType === CHAT_TYPE_SUPPORT;
 
   if (els.problemModalTitle) els.problemModalTitle.textContent = activeProblemChatType === CHAT_TYPE_SUPPORT ? 'Chat com suporte' : 'Chat com vendedor';
   if (els.problemOrderSubtitle) els.problemOrderSubtitle.textContent = `Pedido ${order.id}`;
@@ -1825,12 +1915,14 @@ function openChatModalWithChat(order, chat) {
   }
 
   if (els.resolveChatBtn) {
-    const canResolve = !closed && (currentIsBuyer || currentIsSeller);
-    els.resolveChatBtn.classList.toggle('hidden', !canResolve);
+    const canEnd = !closed && (currentIsBuyer || currentIsSeller || currentIsSupport);
+    els.resolveChatBtn.classList.toggle('hidden', !canEnd);
+    els.resolveChatBtn.textContent = 'Terminar chat';
   }
 
   if (els.escalateChatBtn) {
-    const canEscalate = activeProblemChatType === CHAT_TYPE_SELLER && currentIsBuyer && (expired || String(chat.status || '') === 'expirado' || String(chat.status || '') === 'escalado');
+    const sellerChatEndedOnOrder = String(order.chatVendedorStatus || '').toLowerCase() === 'encerrado' || String(order.chatVendedorStatus || '').toLowerCase() === 'expirado';
+    const canEscalate = activeProblemChatType === CHAT_TYPE_SELLER && currentIsBuyer && (expired || sellerChatEndedOnOrder || String(chat.status || '') === 'expirado' || String(chat.status || '') === 'escalado');
     els.escalateChatBtn.classList.toggle('hidden', !canEscalate);
     els.escalateChatBtn.textContent = expired ? 'Chamar suporte' : 'Chamar suporte';
     els.escalateChatBtn.disabled = !currentIsBuyer;
@@ -1850,7 +1942,7 @@ function renderChatMessages(chat) {
   }
   els.problemChatMessages.innerHTML = messages.map((msg) => {
     const mine = String(msg.autorId || '') === String(ghubProfile?.gameId || '');
-    const role = msg.autorTipo === 'suporte' ? 'Suporte' : msg.autorTipo === 'vendedor' ? 'Vendedor' : 'Comprador';
+    const role = msg.autorTipo === 'sistema' ? 'Sistema' : msg.autorTipo === 'suporte' ? 'Suporte' : msg.autorTipo === 'vendedor' ? 'Vendedor' : 'Comprador';
     return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[85%] rounded-2xl ${mine ? 'bg-emerald-600 text-white' : 'bg-white text-gray-800 border border-gray-100'} px-3 py-2 shadow-sm"><div class="flex items-center justify-between gap-3"><p class="text-[10px] font-black uppercase tracking-wider ${mine ? 'text-emerald-50' : 'text-gray-400'}">${escapeHtml(role)} • ${escapeHtml(msg.autorNome || '')}</p><p class="text-[10px] ${mine ? 'text-emerald-50' : 'text-gray-400'}">${escapeHtml(formatDateTimeBR(msg.createdAtMs))}</p></div><p class="mt-1 whitespace-pre-wrap text-sm font-semibold leading-relaxed">${escapeHtml(msg.texto || '')}</p></div></div>`;
   }).join('');
   els.problemChatMessages.scrollTop = els.problemChatMessages.scrollHeight;
@@ -1866,6 +1958,7 @@ function closeProblemModal() {
 
 function getCurrentChatSenderRole(chat) {
   const gid = String(ghubProfile?.gameId || '');
+  if (isSupportAdmin && String(chat?.tipo || '') === CHAT_TYPE_SUPPORT) return 'suporte';
   if (gid && gid === String(chat?.sellerId || '')) return 'vendedor';
   if (gid && gid === String(chat?.buyerId || '')) return 'comprador';
   return 'comprador';
@@ -1916,31 +2009,27 @@ async function submitProblem(event) {
 async function resolveActiveChat() {
   if (!activeProblemChatId) return;
   try {
-    await setDoc(doc(lojaDb, CHAT_COLLECTION, activeProblemChatId), {
-      status: 'resolvido',
-      resolvidoEmMs: Date.now(),
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-    localToast('success', 'Chat marcado como resolvido.');
+    const snap = await getDoc(doc(lojaDb, CHAT_COLLECTION, activeProblemChatId));
+    const chat = snap.exists() ? { id: snap.id, ...snap.data() } : { id: activeProblemChatId, tipo: activeProblemChatType, orderId: activeProblemOrderId };
+    await closeAndDeleteChat(chat, 'encerrado');
+    localToast('success', 'Chat encerrado.');
     closeProblemModal();
-    await Promise.all([loadBuyerOrders(), loadSellerChats().then(renderSellerOrders)]);
+    await Promise.all([loadBuyerOrders(), loadSellerChats().then(renderSellerOrders), isSupportAdmin ? loadSupportPanelData() : Promise.resolve()]);
   } catch (err) {
     console.error(err);
-    localToast('error', 'Não foi possível resolver o chat.');
+    localToast('error', 'Não foi possível terminar o chat.');
   }
 }
 
-async function escalateActiveChatToSupport() {
+async function escalateActiveChatToSupport
+() {
   if (!activeProblemOrderId) return;
   const order = buyerOrders.find((item) => String(item.id) === String(activeProblemOrderId));
   if (!order) return;
   try {
     if (activeProblemChatId) {
-      await setDoc(doc(lojaDb, CHAT_COLLECTION, activeProblemChatId), {
-        status: 'escalado',
-        escaladoEmMs: Date.now(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      const snap = await getDoc(doc(lojaDb, CHAT_COLLECTION, activeProblemChatId));
+      if (snap.exists()) await closeAndDeleteChat({ id: snap.id, ...snap.data() }, 'escalado');
     }
     const supportChat = await createOrGetChatForOrder(order, CHAT_TYPE_SUPPORT);
     localToast('success', 'Chat com suporte aberto por 48 horas.');
@@ -1990,10 +2079,12 @@ function renderBuyerOrders() {
     } else if (sellerChat) {
       const statusChat = sellerExpired ? 'expirado' : (sellerChat.status || 'ativo');
       const canOpenSeller = !sellerExpired && !isChatClosed(sellerChat);
-      const canSupport = sellerExpired || String(sellerChat.status || '') === 'expirado' || String(sellerChat.status || '') === 'escalado';
+      const canSupport = sellerExpired || String(sellerChat.status || '') === 'expirado' || String(order.chatVendedorStatus || '') === 'encerrado' || String(order.chatVendedorStatus || '') === 'expirado' || String(order.chatVendedorStatus || '') === 'escalado';
       chatHtml = `<div class="mt-3 rounded-xl border ${canOpenSeller ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'} p-3"><p class="text-[10px] font-black uppercase tracking-wider ${canOpenSeller ? 'text-emerald-800' : 'text-amber-800'}">Chat com vendedor</p><p class="mt-1 text-xs font-semibold ${canOpenSeller ? 'text-emerald-900' : 'text-amber-900'}">Status: ${escapeHtml(statusChat)} • ${escapeHtml(getChatRemainingLabel(sellerChat))}</p><div class="mt-2 flex flex-wrap gap-2">${canOpenSeller ? `<button type="button" data-open-problem="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Abrir chat</button>` : ''}${canSupport ? `<button type="button" data-open-support-chat="${escapeHtml(order.id)}" class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Chamar suporte</button>` : ''}</div></div>`;
-    } else if (status === 'entregue') {
-      chatHtml = `<button type="button" data-open-problem="${escapeHtml(order.id)}" class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">Abrir chat temporário com vendedor</button>`;
+    } else if (String(order.chatVendedorStatus || '') === 'encerrado' || String(order.chatVendedorStatus || '') === 'expirado' || String(order.chatVendedorStatus || '') === 'escalado') {
+      chatHtml = `<div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-amber-800">Chat com vendedor encerrado</p><p class="mt-1 text-xs font-semibold text-amber-900">Você pode abrir um chat com o suporte.</p><button type="button" data-open-support-chat="${escapeHtml(order.id)}" class="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Chamar suporte</button></div>`;
+    } else if (order.chatVendedorId) {
+      chatHtml = `<div class="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-gray-600">Chat com vendedor</p><p class="mt-1 text-xs font-semibold text-gray-700">Chat encerrado ou indisponível.</p></div>`;
     }
 
     return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4">
@@ -2010,8 +2101,6 @@ function renderBuyerOrders() {
         <p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p>
         <span class="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black text-gray-500">${escapeHtml(order.categoriaNome || order.categoriaId || 'Categoria')}</span>
       </div>
-      ${needsBuyerInfo ? `<div class="mt-3"><label class="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Suas informações para entrega</label><textarea data-buyer-info-for="${escapeHtml(order.id)}" rows="3" maxlength="300" ${locked ? 'readonly' : ''} class="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100" placeholder="${escapeHtml(getBuyerInfoLabel(order.categoriaId))}">${escapeHtml(buyerInfo)}</textarea>${locked ? '' : `<button type="button" data-save-buyer-info="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Salvar informações</button>`}</div>` : ''}
-      ${needsSellerInfo ? `<div class="mt-3 rounded-xl border ${deliveryInfo ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'} p-3"><p class="text-[10px] font-black uppercase tracking-wider ${deliveryInfo ? 'text-emerald-800' : 'text-amber-800'}">Informações recebidas do vendedor</p><p class="mt-1 whitespace-pre-wrap text-xs font-semibold ${deliveryInfo ? 'text-emerald-900' : 'text-amber-900'}">${escapeHtml(deliveryInfo || 'Aguardando o vendedor enviar as informações.')}</p></div>` : ''}
       ${chatHtml}
     </div>`;
   }).join('');
@@ -2032,6 +2121,153 @@ async function updateBuyerOrderInfo(orderId) {
   catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar as informações do pedido.'); }
 }
 
+async function loadSupportAdminStatus() {
+  isSupportAdmin = false;
+  if (!currentUser || !ghubProfile?.gameId) {
+    renderSupportTop();
+    return false;
+  }
+  try {
+    const snap = await getDoc(doc(lojaDb, ADMIN_COLLECTION, ADMIN_DOC_ID));
+    const data = snap.exists() ? snap.data() : {};
+    const allowed = Array.isArray(data.id) ? data.id : (Array.isArray(data.ids) ? data.ids : []);
+    const allowedEmails = Array.isArray(data.email) ? data.email : (Array.isArray(data.emails) ? data.emails : []);
+    const gameId = String(ghubProfile.gameId || '');
+    const uid = String(currentUser.uid || '');
+    const email = normalizeEmail(currentUser.email || ghubProfile.email || '');
+    isSupportAdmin = allowed.map(String).includes(gameId) || allowed.map(String).includes(uid) || allowedEmails.map(normalizeEmail).includes(email);
+  } catch (err) {
+    console.warn('Não foi possível verificar suporte/admin:', err);
+    isSupportAdmin = false;
+  }
+  renderSupportTop();
+  return isSupportAdmin;
+}
+
+function renderSupportTop() {
+  els.supportPanelBtn?.classList.toggle('hidden', !isSupportAdmin);
+  initIcons();
+}
+
+function openSupportModal() {
+  if (!isSupportAdmin) {
+    localToast('error', 'Acesso restrito ao suporte.');
+    return;
+  }
+  els.supportModal?.classList.remove('hidden');
+  els.supportModal?.classList.add('flex');
+  initIcons();
+  loadSupportPanelData();
+}
+
+function closeSupportModal() {
+  els.supportModal?.classList.add('hidden');
+  els.supportModal?.classList.remove('flex');
+}
+
+async function loadSupportPanelData() {
+  if (!isSupportAdmin) return;
+  if (els.supportVerificationsList) els.supportVerificationsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando verificações...</div>';
+  if (els.supportChatsList) els.supportChatsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando chats...</div>';
+  await Promise.all([loadSupportVerifications(), loadSupportChats()]);
+}
+
+async function loadSupportVerifications() {
+  try {
+    const snap = await getDocs(collection(lojaDb, VERIFICATION_COLLECTION));
+    supportVerifications = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a,b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
+  } catch (err) {
+    console.error(err);
+    supportVerifications = [];
+    localToast('error', 'Não foi possível carregar verificações.');
+  }
+  renderSupportVerifications();
+}
+
+function renderSupportVerifications() {
+  if (els.supportVerificationsCounter) els.supportVerificationsCounter.textContent = supportVerifications.length === 1 ? '1 solicitação' : `${supportVerifications.length} solicitações`;
+  if (!els.supportVerificationsList) return;
+  if (!supportVerifications.length) {
+    els.supportVerificationsList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhuma solicitação encontrada.</div>';
+    return;
+  }
+  els.supportVerificationsList.innerHTML = supportVerifications.map((item) => {
+    const status = getVerificationStatusLabel(item.status) || 'pendente';
+    const canAct = status === 'pendente';
+    return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+      <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(item.nomeCompleto || item.nick || 'Solicitação')}</p><p class="mt-1 text-xs font-bold text-gray-400">ID: ${escapeHtml(item.id || item.gameId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500 truncate">${escapeHtml(item.email || '')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Nascimento: ${escapeHtml(item.dataNascimento || '-')}</p></div><span class="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-gray-600 ring-1 ring-gray-200">${escapeHtml(status.toUpperCase())}</span></div>
+      <div class="mt-3 grid grid-cols-2 gap-2">${item.rgFrenteBase64 ? `<a href="${escapeHtml(item.rgFrenteBase64)}" target="_blank" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-center text-xs font-black text-gray-600 hover:bg-gray-50">Ver RG frente</a>` : ''}${item.rgVersoBase64 ? `<a href="${escapeHtml(item.rgVersoBase64)}" target="_blank" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-center text-xs font-black text-gray-600 hover:bg-gray-50">Ver RG verso</a>` : ''}</div>
+      ${canAct ? `<div class="mt-3 grid grid-cols-2 gap-2"><button type="button" data-approve-verification="${escapeHtml(item.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Aprovar</button><button type="button" data-reject-verification="${escapeHtml(item.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Recusar</button></div>` : ''}
+    </div>`;
+  }).join('');
+  els.supportVerificationsList.querySelectorAll('[data-approve-verification]').forEach((btn) => btn.addEventListener('click', () => updateVerificationStatus(btn.getAttribute('data-approve-verification') || '', 'aprovado')));
+  els.supportVerificationsList.querySelectorAll('[data-reject-verification]').forEach((btn) => btn.addEventListener('click', () => updateVerificationStatus(btn.getAttribute('data-reject-verification') || '', 'recusado')));
+  initIcons();
+}
+
+async function updateVerificationStatus(id, status) {
+  if (!id || !isSupportAdmin) return;
+  const patch = { status, updatedAt: serverTimestamp(), analisadoEmMs: Date.now(), analisadoPor: ghubProfile?.gameId || currentUser?.uid || '' };
+  if (status === 'recusado') {
+    const reason = window.prompt('Motivo da recusa:', 'Dados insuficientes ou imagem inválida.');
+    patch.motivoRecusa = reason || 'Verificação recusada.';
+  }
+  try {
+    await setDoc(doc(lojaDb, VERIFICATION_COLLECTION, id), patch, { merge: true });
+    localToast('success', status === 'aprovado' ? 'Verificação aprovada.' : 'Verificação recusada.');
+    await loadSupportVerifications();
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível atualizar a verificação.');
+  }
+}
+
+async function loadSupportChats() {
+  try {
+    const snap = await getDocs(query(collection(lojaDb, CHAT_COLLECTION), where('tipo', '==', CHAT_TYPE_SUPPORT)));
+    supportChats = snap.docs.map(normalizeChatDoc).sort((a,b) => Number(b.lastMessageAtMs || b.createdAtMs || 0) - Number(a.lastMessageAtMs || a.createdAtMs || 0));
+    await markExpiredChatsIfNeeded(supportChats);
+  } catch (err) {
+    console.error(err);
+    supportChats = [];
+    localToast('error', 'Não foi possível carregar chats de suporte.');
+  }
+  renderSupportChats();
+}
+
+function renderSupportChats() {
+  if (els.supportChatsCounter) els.supportChatsCounter.textContent = supportChats.length === 1 ? '1 chat' : `${supportChats.length} chats`;
+  if (!els.supportChatsList) return;
+  const activeChats = supportChats.filter((chat) => !isChatExpired(chat) && !isChatClosed(chat));
+  if (!activeChats.length) {
+    els.supportChatsList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhum chat de suporte ativo.</div>';
+    return;
+  }
+  els.supportChatsList.innerHTML = activeChats.map((chat) => `<div class="rounded-2xl border border-sky-100 bg-sky-50 p-3"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(chat.produtoTitulo || 'Pedido')}</p><p class="mt-1 text-xs font-bold text-sky-700">Pedido: ${escapeHtml(chat.orderId || chat.pedidoId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-600">Comprador: ${escapeHtml(chat.buyerName || chat.buyerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-600">Vendedor: ${escapeHtml(chat.sellerName || chat.sellerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-600">${escapeHtml(getChatRemainingLabel(chat))}</p></div><span class="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-sky-700 ring-1 ring-sky-200">SUPORTE</span></div><button type="button" data-open-support-panel-chat="${escapeHtml(chat.id)}" class="mt-3 w-full rounded-xl bg-sky-600 px-3 py-2 text-xs font-black text-white hover:bg-sky-700">Abrir chat</button></div>`).join('');
+  els.supportChatsList.querySelectorAll('[data-open-support-panel-chat]').forEach((btn) => btn.addEventListener('click', () => openSupportChatFromPanel(btn.getAttribute('data-open-support-panel-chat') || '')));
+  initIcons();
+}
+
+function openSupportChatFromPanel(chatId) {
+  const chat = supportChats.find((item) => String(item.id) === String(chatId));
+  if (!chat) return;
+  const order = {
+    id: chat.orderId || chat.pedidoId || '',
+    ...(chat.orderSnapshot || {}),
+    buyerId: chat.buyerId || '',
+    buyerName: chat.buyerName || '',
+    sellerId: chat.sellerId || '',
+    sellerName: chat.sellerName || '',
+    produtoId: chat.produtoId || '',
+    produtoTitulo: chat.produtoTitulo || '',
+    categoriaId: chat.categoriaId || '',
+    categoriaNome: chat.categoriaNome || '',
+    total: Number(chat.total || 0),
+    suporteStatus: chat.status || 'ativo'
+  };
+  openChatModalWithChat(order, chat);
+}
+
 function bindEvents() {
   qs('btn-logout')?.addEventListener('click', logout);
   setupSidebar();
@@ -2046,6 +2282,8 @@ function bindEvents() {
   });
 
   els.buyerProfileBtn?.addEventListener('click', openBuyerModal);
+  els.supportPanelBtn?.addEventListener('click', openSupportModal);
+  els.reloadSupportPanelBtn?.addEventListener('click', loadSupportPanelData);
   els.toggleSellerFormBtn?.addEventListener('click', () => {
     const willOpen = els.sellerForm?.classList.contains('hidden');
     setMobileCollapsibleState(els.sellerForm, els.toggleSellerFormBtn, willOpen, 'Fechar cadastro de produto', 'Abrir/editar cadastro de produto');
@@ -2107,6 +2345,10 @@ function bindEvents() {
     btn.addEventListener('click', closeProblemModal);
   });
 
+  document.querySelectorAll('[data-close-support-modal]').forEach((btn) => {
+    btn.addEventListener('click', closeSupportModal);
+  });
+
   window.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     closeProductModal();
@@ -2114,6 +2356,7 @@ function bindEvents() {
     closeBuyerModal();
     closeVerificationModal();
     closeProblemModal();
+    closeSupportModal();
   });
 }
 
@@ -2124,10 +2367,14 @@ async function handleAuthState(user) {
   sellerProducts = [];
   sellerOrders = [];
   buyerOrders = [];
+  supportChats = [];
+  supportVerifications = [];
+  isSupportAdmin = false;
 
   if (!currentUser) {
     applySidebarUser(null);
     renderSellerTop();
+    renderSupportTop();
     return;
   }
 
@@ -2136,11 +2383,13 @@ async function handleAuthState(user) {
     applySidebarUser(ghubProfile);
     renderSellerTop();
     await loadStoreStatus();
+    await loadSupportAdminStatus();
     await loadBuyerOrders();
   } catch (err) {
     console.error(err);
     applySidebarUser(null);
     renderSellerTop();
+    renderSupportTop();
     localToast('error', 'Não foi possível carregar seu perfil da GuildaHub.');
   }
 }
@@ -2149,6 +2398,7 @@ async function handleAuthState(user) {
   bindEvents();
   initIcons();
   renderSellerTop();
+  renderSupportTop();
 
   await loadCategories();
   await loadProducts();
