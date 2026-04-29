@@ -214,7 +214,7 @@
 
   <div id="seller-modal" class="fixed inset-0 z-[75] hidden items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-close-seller-modal></div>
-    <div class="relative z-10 w-full sm:max-w-5xl max-h-[94vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
+    <div class="relative z-10 w-full sm:max-w-5xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[94vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
       <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 rounded-t-3xl">
         <div>
           <h3 class="text-lg font-black text-gray-900">Perfil do vendedor</h3>
@@ -317,6 +317,14 @@
             <div id="seller-products-list" class="mt-4 space-y-3"></div>
           </div>
 
+          <div class="rounded-3xl border border-sky-100 bg-sky-50/60 p-4 shadow-sm">
+            <div>
+              <p class="text-sm font-black text-gray-900">Chats com suporte</p>
+              <p id="seller-support-chats-counter" class="text-xs font-semibold text-sky-700 mt-0.5">Carregando...</p>
+            </div>
+            <div id="seller-support-chats-list" class="mt-4 space-y-3"></div>
+          </div>
+
           <div class="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
             <div>
               <p class="text-sm font-black text-gray-900">Pedidos recebidos</p>
@@ -325,6 +333,9 @@
             <div id="seller-orders-list" class="mt-4 space-y-3"></div>
           </div>
         </section>
+      </div>
+      <div class="sticky bottom-0 z-10 border-t border-gray-100 bg-white p-4 sm:hidden">
+        <button type="button" data-close-seller-modal class="w-full rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-black text-white shadow-sm">Fechar painel</button>
       </div>
     </div>
   </div>
@@ -402,7 +413,7 @@
 
   <div id="problem-modal" class="fixed inset-0 z-[100] hidden items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-close-problem-modal></div>
-    <div class="relative z-10 w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
+    <div class="relative z-10 w-full sm:max-w-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
       <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 rounded-t-3xl">
         <div>
           <h3 id="problem-modal-title" class="text-lg font-black text-gray-900">Chat temporário</h3>
@@ -440,13 +451,14 @@
             </button>
           </div>
         </form>
+        <button type="button" data-close-problem-modal class="sm:hidden w-full rounded-2xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-black text-gray-700">Fechar chat</button>
       </div>
     </div>
   </div>
 
   <div id="support-modal" class="fixed inset-0 z-[82] hidden items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-close-support-modal></div>
-    <div class="relative z-10 w-full sm:max-w-6xl max-h-[94vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
+    <div class="relative z-10 w-full sm:max-w-6xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[94vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
       <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 rounded-t-3xl">
         <div>
           <h3 class="text-lg font-black text-gray-900">Painel de suporte</h3>
@@ -502,6 +514,14 @@
 
         <section class="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
           <div>
+            <p class="text-sm font-black text-gray-900">Solicitações de saque</p>
+            <p id="support-withdrawals-counter" class="text-xs font-semibold text-gray-400 mt-0.5">Carregando...</p>
+          </div>
+          <div id="support-withdrawals-list" class="mt-4 space-y-3"></div>
+        </section>
+
+        <section class="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
+          <div>
             <p class="text-sm font-black text-gray-900">Chats com suporte</p>
             <p id="support-chats-counter" class="text-xs font-semibold text-gray-400 mt-0.5">Carregando...</p>
           </div>
@@ -515,6 +535,9 @@
           </div>
           <div id="support-reports-list" class="mt-4 space-y-3"></div>
         </section>
+      </div>
+      <div class="sticky bottom-0 z-10 border-t border-gray-100 bg-white p-4 sm:hidden">
+        <button type="button" data-close-support-modal class="w-full rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-black text-white shadow-sm">Fechar painel de suporte</button>
       </div>
     </div>
   </div>
