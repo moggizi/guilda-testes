@@ -213,6 +213,7 @@ let loadingSellerPanel = false;
 let editingProductId = '';
 let selectedProductImageBase64 = '';
 let activeDraftChat = null;
+let activePaymentPoll = null;
 
 function localToast(type, message) {
   if (typeof showToast === 'function') {
@@ -1432,79 +1433,175 @@ async function createOrder(productId) {
   if (String(product.sellerId || '') && String(product.sellerId) === String(ghubProfile.gameId)) { localToast('error', 'Você não pode comprar seu próprio produto.'); return; }
 
   const btn = els.productModalBody?.querySelector('[data-buy-product]');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i> Criando pedido...'; initIcons(); }
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i> Gerando Pix...';
+    initIcons();
+  }
 
   try {
-    const buyer = lojaStatus?.comprador || await ensureBuyerProfile({ silent: true });
-    if (!buyer) throw new Error('buyer-required');
+    const token = await currentUser.getIdToken(true);
 
-    const productRef = doc(lojaDb, 'produtos', product.id);
-    const orderRef = doc(collection(lojaDb, 'pedidos'));
-    const sellerChatId = getChatId(orderRef.id, CHAT_TYPE_SELLER);
-    const nowMs = Date.now();
-
-    await runTransaction(lojaDb, async (transaction) => {
-      const productSnap = await transaction.get(productRef);
-      if (!productSnap.exists()) throw new Error('product-not-found');
-      const currentProduct = normalizeProduct(productSnap);
-      if (currentProduct.ativo === false) throw new Error('product-inactive');
-      if (String(currentProduct.sellerId || '') && String(currentProduct.sellerId) === String(ghubProfile.gameId)) throw new Error('self-purchase');
-      const estoqueAtual = Number(currentProduct.estoqueQuantidade ?? 0);
-      if (currentProduct.estoqueAtivo !== false && estoqueAtual <= 0) throw new Error('out-of-stock');
-
-      const orderPayload = {
-        buyerId: ghubProfile.gameId,
-        buyerUid: currentUser.uid || '',
-        buyerEmail: normalizeEmail(currentUser.email || ghubProfile.email || ''),
-        buyerName: ghubProfile.nick || '',
-        buyerNick: ghubProfile.nick || '',
-        buyerPhoto: ghubProfile.foto || '',
-
-        sellerId: currentProduct.sellerId || 'ghub',
-        sellerName: currentProduct.sellerName || 'GuildaHub',
-        sellerPhoto: currentProduct.sellerPhoto || '',
-
-        produtoId: currentProduct.id,
-        produtoTitulo: currentProduct.titulo,
-        produtoImagem: currentProduct.imagem || '',
-        categoriaId: currentProduct.categoriaId || '',
-        categoriaNome: currentProduct.categoriaNome || '',
-
-        quantidade: 1,
-        precoUnitario: Number(currentProduct.preco || 0),
-        total: Number(currentProduct.preco || 0),
-        moeda: currentProduct.moeda || 'BRL',
-
-        buyerInfoRequired: false,
-        buyerInfo: '',
-        deliveryInfoRequired: false,
-        deliveryInfo: '',
-
-        status: 'pendente',
-        finalizado: false,
-        chatVendedorAberto: false,
-        chatVendedorId: sellerChatId,
-        chatVendedorStatus: 'aguardando_primeira_mensagem',
-        pagamento: { metodo: 'pix', provider: '', status: 'pendente', paymentId: '', qrCode: '', copiaCola: '', aprovadoEm: null, reembolsadoEm: null },
-        entrega: { tipo: currentProduct.entregaTipo || 'manual', status: 'aguardando_pagamento', observacao: '', informacoes: '', entregueEm: null, entregueEmMs: null, canceladoEm: null },
-        createdAt: serverTimestamp(),
-        createdAtMs: nowMs,
-        updatedAt: serverTimestamp()
-      };
-
-
-      transaction.set(orderRef, orderPayload);
-      if (currentProduct.estoqueAtivo !== false) transaction.set(productRef, { estoqueQuantidade: Math.max(0, estoqueAtual - 1), updatedAt: serverTimestamp() }, { merge: true });
+    const response = await fetch('/api/loja_mp_create_pix', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ productId: product.id })
     });
 
-    closeProductModal();
-    localToast('success', 'Pedido criado. O chat com o vendedor será aberto ao enviar a primeira mensagem.');
-    await Promise.all([loadProducts(), loadBuyerOrders()]);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok === false) {
+      throw new Error(data.error || 'payment-create-failed');
+    }
+
+    renderPixPaymentInfo(product, data);
+    startPaymentPolling(data.checkoutId);
   } catch (err) {
     console.error(err);
-    localToast('error', err?.message === 'out-of-stock' ? 'Esse produto ficou sem estoque.' : err?.message === 'self-purchase' ? 'Você não pode comprar seu próprio produto.' : 'Não foi possível criar o pedido. Confira se as regras do Firebase da loja permitem escrita.');
+    const messageMap = {
+      'buyer-auth-required': 'Entre novamente na GuildaHub para comprar.',
+      'buyer-profile-not-found': 'Não foi possível localizar seu perfil da GuildaHub.',
+      'product-not-found': 'Produto não encontrado.',
+      'product-inactive': 'Esse produto está indisponível.',
+      'out-of-stock': 'Esse produto ficou sem estoque.',
+      'self-purchase': 'Você não pode comprar seu próprio produto.',
+      'invalid-amount': 'Valor do produto inválido.',
+      'mercado-pago-error': 'Não foi possível gerar o Pix no Mercado Pago.'
+    };
+    localToast('error', messageMap[err.message] || 'Não foi possível gerar o pagamento Pix.');
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = 'Comprar agora'; }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = 'Comprar agora';
+    }
+  }
+}
+
+function renderPixPaymentInfo(product, payment) {
+  if (!els.productModal || !els.productModalBody || !els.productModalTitle) return;
+
+  const qrBase64 = payment.qrCodeBase64 || payment.qr_code_base64 || '';
+  const qrCode = payment.qrCode || payment.copiaCola || payment.qr_code || '';
+  const checkoutId = payment.checkoutId || '';
+
+  els.productModalTitle.textContent = 'Pagamento Pix';
+
+  els.productModalBody.innerHTML = `
+    <div class="rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
+      <p class="text-xs font-black uppercase tracking-wider text-emerald-700">Pedido aguardando pagamento</p>
+      <h4 class="mt-1 text-lg font-black text-gray-900">${escapeHtml(product.titulo || 'Produto')}</h4>
+      <p class="mt-1 text-sm font-bold text-gray-600">Valor: ${moneyBRL(product.preco || 0)}</p>
+      <p class="mt-1 text-xs font-semibold text-emerald-800">O pedido só será criado/liberado após o Mercado Pago confirmar pagamento aprovado.</p>
+    </div>
+
+    ${qrBase64 ? `<div class="flex justify-center rounded-3xl border border-gray-100 bg-white p-4"><img src="data:image/png;base64,${escapeHtml(qrBase64)}" alt="QR Code Pix" class="h-56 w-56 rounded-2xl object-contain"></div>` : ''}
+
+    <div>
+      <label class="block text-xs font-black uppercase tracking-wider text-gray-400 mb-1.5">Pix copia e cola</label>
+      <textarea id="pix-copy-code" rows="5" readonly class="w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs font-semibold text-gray-700 outline-none">${escapeHtml(qrCode)}</textarea>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <button type="button" id="btn-copy-pix-code" class="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800">Copiar código Pix</button>
+      <button type="button" id="btn-check-pix-payment" data-checkout-id="${escapeHtml(checkoutId)}" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700 hover:bg-emerald-100">Já paguei / verificar</button>
+    </div>
+
+    <p id="pix-payment-status" class="rounded-2xl border border-gray-100 bg-gray-50 p-3 text-xs font-bold text-gray-500">Aguardando confirmação automática do Mercado Pago...</p>
+  `;
+
+  qs('btn-copy-pix-code')?.addEventListener('click', copyPixCode);
+  qs('btn-check-pix-payment')?.addEventListener('click', () => checkPixPaymentStatus(checkoutId, true));
+  initIcons();
+}
+
+async function copyPixCode() {
+  const code = String(qs('pix-copy-code')?.value || '').trim();
+  if (!code) {
+    localToast('error', 'Código Pix indisponível.');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(code);
+    localToast('success', 'Código Pix copiado.');
+  } catch (_) {
+    qs('pix-copy-code')?.select();
+    localToast('info', 'Copie o código manualmente.');
+  }
+}
+
+function startPaymentPolling(checkoutId) {
+  if (activePaymentPoll) {
+    clearInterval(activePaymentPoll);
+    activePaymentPoll = null;
+  }
+
+  if (!checkoutId) return;
+
+  let attempts = 0;
+  activePaymentPoll = setInterval(() => {
+    attempts += 1;
+    checkPixPaymentStatus(checkoutId, false);
+    if (attempts >= 45) {
+      clearInterval(activePaymentPoll);
+      activePaymentPoll = null;
+    }
+  }, 4000);
+}
+
+async function checkPixPaymentStatus(checkoutId, manual = false) {
+  const cleanCheckoutId = String(checkoutId || '').trim();
+  if (!cleanCheckoutId || !currentUser) return;
+
+  const statusEl = qs('pix-payment-status');
+  if (manual && statusEl) statusEl.textContent = 'Verificando pagamento...';
+
+  try {
+    const token = await currentUser.getIdToken();
+    const response = await fetch(`/api/loja_mp_status?checkoutId=${encodeURIComponent(cleanCheckoutId)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data.ok === false) {
+      throw new Error(data.error || 'payment-status-failed');
+    }
+
+    const status = String(data.status || data.paymentStatus || '').toLowerCase();
+
+    if (status === 'approved' || status === 'aprovado') {
+      if (activePaymentPoll) {
+        clearInterval(activePaymentPoll);
+        activePaymentPoll = null;
+      }
+      if (statusEl) statusEl.textContent = `Pagamento aprovado. Pedido criado: ${data.orderId || '-'}`;
+      localToast('success', 'Pagamento aprovado. Pedido criado.');
+      await Promise.all([loadProducts(), loadBuyerOrders()]);
+      setTimeout(() => closeProductModal(), 1000);
+      return;
+    }
+
+    if (status === 'approved_without_stock') {
+      if (activePaymentPoll) {
+        clearInterval(activePaymentPoll);
+        activePaymentPoll = null;
+      }
+      if (statusEl) statusEl.textContent = 'Pagamento aprovado, mas o produto ficou sem estoque. Acione o suporte para resolver/reembolsar.';
+      localToast('error', 'Pagamento aprovado, mas sem estoque. Acione o suporte.');
+      return;
+    }
+
+    if (statusEl) {
+      statusEl.textContent = manual
+        ? `Pagamento ainda não aprovado. Status: ${status || 'pendente'}`
+        : `Aguardando confirmação automática. Status: ${status || 'pendente'}`;
+    }
+  } catch (err) {
+    console.error(err);
+    if (manual) localToast('error', 'Não foi possível verificar o pagamento agora.');
+    if (statusEl && manual) statusEl.textContent = 'Não foi possível verificar agora. Tente novamente em alguns segundos.';
   }
 }
 
