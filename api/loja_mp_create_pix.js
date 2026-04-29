@@ -113,10 +113,13 @@ module.exports = async (req, res) => {
     const checkoutId = checkoutRef.id;
     const orderId = lojaDb.collection('pedidos').doc().id;
     const baseUrl = getBaseUrl(req);
-    const notification_url = `${baseUrl}/api/loja_mp_webhook?checkoutId=${encodeURIComponent(checkoutId)}`;
-    const payerEmail = buyer.email && buyer.email.includes('@')
-      ? buyer.email
-      : `comprador-${buyer.gameId}@guildahub.local`;
+    const notification_url = `${baseUrl}/api/loja_mp_webhook`;
+
+    // O Mercado Pago pode recusar o pagamento quando o e-mail do pagador é
+    // inválido ou quando é o mesmo e-mail da conta dona do Access Token.
+    // Como o e-mail real do comprador já fica salvo no Firestore, usamos um
+    // e-mail técnico válido e estável só para criar o Pix.
+    const payerEmail = `comprador-${String(buyer.gameId || buyer.uid || 'anon').replace(/[^a-zA-Z0-9._-]/g, '')}@guildahub.online`;
 
     await checkoutRef.set({
       id: checkoutId,
@@ -143,25 +146,47 @@ module.exports = async (req, res) => {
     }, { merge: false });
 
     const idempotencyKey = makeIdempotencyKey();
-    const mpPayment = await mercadoPagoFetch('/v1/payments', {
-      method: 'POST',
-      headers: { 'X-Idempotency-Key': idempotencyKey },
-      body: JSON.stringify({
-        transaction_amount: Number(amount.toFixed(2)),
-        description: `Guilda HUB - ${product.titulo}`.slice(0, 255),
-        payment_method_id: 'pix',
-        payer: { email: payerEmail },
-        notification_url,
-        external_reference: `loja:${checkoutId}|pedido:${orderId}|produto:${product.id}|buyer:${buyer.gameId}|seller:${product.sellerId || 'ghub'}`,
-        metadata: {
-          checkout_id: checkoutId,
-          order_id: orderId,
-          product_id: product.id,
-          buyer_id: buyer.gameId,
-          seller_id: product.sellerId || 'ghub',
-        },
-      }),
-    });
+    let mpPayment;
+    try {
+      mpPayment = await mercadoPagoFetch('/v1/payments', {
+        method: 'POST',
+        headers: { 'X-Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({
+          transaction_amount: Number(amount.toFixed(2)),
+          description: `Guilda HUB - ${product.titulo}`.slice(0, 255),
+          payment_method_id: 'pix',
+          payer: { email: payerEmail },
+          notification_url,
+          external_reference: `loja:${checkoutId}|pedido:${orderId}|produto:${product.id}|buyer:${buyer.gameId}|seller:${product.sellerId || 'ghub'}`,
+          metadata: {
+            checkout_id: checkoutId,
+            order_id: orderId,
+            product_id: product.id,
+            buyer_id: buyer.gameId,
+            seller_id: product.sellerId || 'ghub',
+          },
+        }),
+      });
+    } catch (mpErr) {
+      const details = mpErr?.details || {};
+      const causeMessage = Array.isArray(details?.cause)
+        ? details.cause.map((item) => item?.description || item?.message || item?.code || '').filter(Boolean).join(' | ')
+        : '';
+      const mpMessage = String(details?.message || causeMessage || details?.error || mpErr?.message || 'Erro ao criar Pix no Mercado Pago');
+      await checkoutRef.set({
+        status: 'failed',
+        paymentStatus: 'failed',
+        mpErrorMessage: mpMessage,
+        mpErrorDetails: details,
+        failedAtMs: Date.now(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      const err = new Error('mercado-pago-error');
+      err.status = mpErr?.status || 502;
+      err.publicMessage = mpMessage;
+      err.details = details;
+      throw err;
+    }
 
     const tx = mpPayment.point_of_interaction?.transaction_data || {};
     const qrCode = tx.qr_code || '';
@@ -198,7 +223,11 @@ module.exports = async (req, res) => {
     });
   } catch (err) {
     console.error('[LOJA_MP_CREATE_PIX]', err?.message || err, err?.details || '');
-    const status = err.message === 'buyer-auth-required' ? 401 : 500;
-    return json(res, status, { ok: false, error: err.message || 'internal-error' });
+    const status = err.message === 'buyer-auth-required' ? 401 : (err.status || 500);
+    return json(res, status, {
+      ok: false,
+      error: err.message || 'internal-error',
+      message: err.publicMessage || '',
+    });
   }
 };
