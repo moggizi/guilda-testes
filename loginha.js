@@ -238,6 +238,77 @@ function localToast(type, message) {
   }, 3800);
 }
 
+
+
+function openCustomTextModal({ title = 'Confirmar ação', message = '', placeholder = '', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', requiredText = '', textarea = false, danger = false, initialValue = '' } = {}) {
+  return new Promise((resolve) => {
+    const existing = document.getElementById('custom-action-modal');
+    if (existing) existing.remove();
+
+    const wrap = document.createElement('div');
+    wrap.id = 'custom-action-modal';
+    wrap.className = 'fixed inset-0 z-[140] flex items-end sm:items-center justify-center p-0 sm:p-4';
+    const inputHtml = textarea
+      ? `<textarea id="custom-action-input" rows="5" maxlength="700" placeholder="${escapeHtml(placeholder)}" class="mt-4 w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold outline-none focus:border-${danger ? 'red' : 'emerald'}-400 focus:bg-white focus:ring-4 focus:ring-${danger ? 'red' : 'emerald'}-50">${escapeHtml(initialValue)}</textarea>`
+      : `<input id="custom-action-input" type="text" value="${escapeHtml(initialValue)}" placeholder="${escapeHtml(placeholder)}" class="mt-4 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold outline-none focus:border-${danger ? 'red' : 'emerald'}-400 focus:bg-white focus:ring-4 focus:ring-${danger ? 'red' : 'emerald'}-50">`;
+
+    wrap.innerHTML = `
+      <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-custom-cancel></div>
+      <div class="relative z-10 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-white p-5 shadow-2xl">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h3 class="text-lg font-black text-gray-900">${escapeHtml(title)}</h3>
+            ${message ? `<p class="mt-2 text-sm font-semibold leading-relaxed text-gray-600">${escapeHtml(message)}</p>` : ''}
+          </div>
+          <button type="button" data-custom-cancel class="shrink-0 rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+        ${requiredText ? `<div class="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-800">Digite exatamente <b>${escapeHtml(requiredText)}</b> para confirmar.</div>` : ''}
+        ${inputHtml}
+        <p id="custom-action-error" class="mt-2 hidden text-xs font-bold text-red-600"></p>
+        <div class="mt-5 grid grid-cols-2 gap-2">
+          <button type="button" data-custom-cancel class="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-700 hover:bg-gray-50">${escapeHtml(cancelLabel)}</button>
+          <button type="button" data-custom-confirm class="rounded-2xl px-4 py-3 text-sm font-black text-white ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}">${escapeHtml(confirmLabel)}</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(wrap);
+    initIcons();
+
+    const input = wrap.querySelector('#custom-action-input');
+    const error = wrap.querySelector('#custom-action-error');
+    const cleanup = (value) => { wrap.remove(); resolve(value); };
+
+    wrap.querySelectorAll('[data-custom-cancel]').forEach((el) => el.addEventListener('click', () => cleanup(null)));
+    wrap.querySelector('[data-custom-confirm]')?.addEventListener('click', () => {
+      const value = String(input?.value || '').trim();
+      if (requiredText && value.toUpperCase() !== String(requiredText).toUpperCase()) {
+        if (error) { error.textContent = `Digite ${requiredText} para confirmar.`; error.classList.remove('hidden'); }
+        input?.focus();
+        return;
+      }
+      if (!requiredText && textarea && !value) {
+        if (error) { error.textContent = 'Escreva uma descrição antes de enviar.'; error.classList.remove('hidden'); }
+        input?.focus();
+        return;
+      }
+      cleanup(value);
+    });
+
+    setTimeout(() => input?.focus(), 50);
+  });
+}
+
+function confirmTypedDelete({ title = 'Excluir definitivamente', message = '' } = {}) {
+  return openCustomTextModal({
+    title,
+    message,
+    requiredText: 'EXCLUIR',
+    placeholder: 'Digite EXCLUIR',
+    confirmLabel: 'Excluir definitivamente',
+    danger: true
+  }).then((value) => String(value || '').toUpperCase() === 'EXCLUIR');
+}
+
 function setButtonLoading(btn, loading, htmlWhenReady) {
   if (!btn) return;
   btn.disabled = !!loading;
@@ -1036,7 +1107,14 @@ async function reportProduct(productId) {
   if (!currentUser || !ghubProfile?.gameId) { localToast('error', 'Entre na GuildaHub para denunciar um produto.'); return; }
   const product = products.find((item) => String(item.id) === String(productId));
   if (!product) return;
-  const motivo = window.prompt('Descreva o motivo da denúncia:', '');
+  const motivo = await openCustomTextModal({
+    title: 'Denunciar produto',
+    message: `Explique o problema com o produto "${product.titulo || 'produto'}". A denúncia será enviada ao suporte da plataforma.`,
+    placeholder: 'Descreva o motivo da denúncia...',
+    confirmLabel: 'Enviar denúncia',
+    textarea: true,
+    danger: false
+  });
   if (!String(motivo || '').trim()) return;
   try {
     await addDoc(collection(lojaDb, PRODUCT_REPORT_COLLECTION), {
@@ -1686,7 +1764,9 @@ async function handleSellerProductSubmit(event) {
   const categoryName = getCategoryName(categoryId);
   const imageFromUrl = String(els.sellerImage?.value || '').trim();
   const image = selectedProductImageBase64 || imageFromUrl;
-  const description = String(els.sellerDescription?.value || '').trim().slice(0, 300);
+  const rawDescription = String(els.sellerDescription?.value || '').trim();
+  if (rawDescription.length > 150) { localToast('error', 'A descrição do produto pode ter no máximo 150 caracteres.'); els.sellerDescription?.focus(); return; }
+  const description = rawDescription;
   const ativo = !!els.sellerActive?.checked;
   const destaque = !!els.sellerFeatured?.checked;
 
@@ -1911,9 +1991,11 @@ async function deleteSellerAccountAndProducts(sellerId, { bySupport = false } = 
 async function deleteOwnSellerAccount() {
   if (!lojaStatus?.vendedor || !ghubProfile?.gameId) return;
   const finances = calculateSellerFinancials(sellerOrders, lojaStatus.vendedor);
-  const warning = `Excluir sua conta de vendedor é irreversível. Todos os seus produtos, pedidos vinculados, chats abertos e qualquer saldo atual, pendente ou em saque serão perdidos.\n\nSaldo atual: ${moneyBRL(finances.saldoAtual)}\nSaldo pendente: ${moneyBRL(finances.saldoPendente)}\nEm saque: ${moneyBRL(finances.saldoEmSaque)}\n\nDigite EXCLUIR para confirmar.`;
-  const confirmText = window.prompt(warning, '');
-  if (String(confirmText || '').trim().toUpperCase() !== 'EXCLUIR') return;
+  const confirmed = await confirmTypedDelete({
+    title: 'Excluir conta de vendedor',
+    message: `Essa ação é irreversível. Todos os produtos, pedidos vinculados, chats abertos e qualquer saldo atual, pendente ou em saque serão perdidos. Saldo atual: ${moneyBRL(finances.saldoAtual)}. Saldo pendente: ${moneyBRL(finances.saldoPendente)}. Em saque: ${moneyBRL(finances.saldoEmSaque)}.`
+  });
+  if (!confirmed) return;
   try {
     await deleteSellerAccountAndProducts(ghubProfile.gameId);
     lojaStatus.vendedor = null;
@@ -2346,8 +2428,11 @@ function renderBuyerOrders() {
       chatHtml = `<div class="mt-3 rounded-xl border ${canOpenSeller ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'} p-3"><p class="text-[10px] font-black uppercase tracking-wider ${canOpenSeller ? 'text-emerald-800' : 'text-amber-800'}">Chat com vendedor</p><p class="mt-1 text-xs font-semibold ${canOpenSeller ? 'text-emerald-900' : 'text-amber-900'}">Status: ${escapeHtml(statusChat)} • ${escapeHtml(getChatRemainingLabel(sellerChat))}</p><div class="mt-2 flex flex-wrap gap-2">${canOpenSeller ? `<button type="button" data-open-problem="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Abrir chat</button>` : ''}${canSupport ? `<button type="button" data-open-support-chat="${escapeHtml(order.id)}" class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Chamar suporte</button>` : ''}</div></div>`;
     } else if (String(order.chatVendedorStatus || '') === 'encerrado' || String(order.chatVendedorStatus || '') === 'expirado' || String(order.chatVendedorStatus || '') === 'escalado') {
       chatHtml = `<div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-amber-800">Chat com vendedor encerrado</p><p class="mt-1 text-xs font-semibold text-amber-900">Você pode abrir um chat com o suporte.</p><button type="button" data-open-support-chat="${escapeHtml(order.id)}" class="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Chamar suporte</button></div>`;
-    } else if (order.chatVendedorId) {
-      chatHtml = `<div class="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-gray-600">Chat com vendedor</p><p class="mt-1 text-xs font-semibold text-gray-700">Chat encerrado ou indisponível.</p></div>`;
+    } else if (order.chatVendedorId || String(order.sellerId || '')) {
+      const canPrepareSellerChat = String(order.sellerId || '') && String(order.sellerId || '') !== String(ghubProfile?.gameId || '') && !String(order.chatVendedorStatus || '').match(/encerrado|expirado|escalado/i);
+      chatHtml = canPrepareSellerChat
+        ? `<div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-emerald-800">Chat com vendedor</p><p class="mt-1 text-xs font-semibold text-emerald-900">Envie a primeira mensagem para abrir o chat temporário com o vendedor.</p><button type="button" data-open-problem="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Abrir chat com vendedor</button></div>`
+        : `<div class="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-gray-600">Chat com vendedor</p><p class="mt-1 text-xs font-semibold text-gray-700">Chat encerrado ou indisponível.</p></div>`;
     }
 
     const existingRating = buyerRatings.find((rating) => String(rating.orderId || rating.pedidoId || '') === String(order.id));
@@ -2546,9 +2631,114 @@ function renderSupportWithdrawals() {
 }
 
 async function markWithdrawalPaid(withdrawId) {
-  if (!withdrawId || !isSupportAdmin) return; const withdraw = supportWithdrawals.find((item) => String(item.id) === String(withdrawId)); if (!withdraw) return; if (!window.confirm('Marcar esse saque como pago?')) return;
-  try { const sellerId = String(withdraw.sellerId || '').trim(); const amount = Number(withdraw.valor || withdraw.amount || 0); await setDoc(doc(lojaDb, WITHDRAW_COLLECTION, withdrawId), { status: 'pago', pagoEmMs: Date.now(), pagoPor: ghubProfile?.gameId || currentUser?.uid || '', updatedAt: serverTimestamp() }, { merge: true }); if (sellerId) { const sellerRef = doc(lojaDb, 'vendedor', sellerId); const sellerSnap = await getDoc(sellerRef); const seller = sellerSnap.exists() ? sellerSnap.data() : {}; const previousPending = Number(seller.saquePendente ?? seller.saldoEmSaque ?? seller.financeiro?.saldoEmSaque ?? 0); const previousSacado = Number(seller.totalSacado ?? seller.financeiro?.totalSacado ?? 0); const nextPending = Math.max(0, previousPending - amount); await setDoc(sellerRef, { saquePendente: nextPending, saldoEmSaque: nextPending, totalSacado: previousSacado + amount, financeiro: { ...(seller.financeiro || {}), saldoEmSaque: nextPending, totalSacado: previousSacado + amount }, updatedAt: serverTimestamp() }, { merge: true }); } localToast('success', 'Saque marcado como pago.'); await loadSupportWithdrawals(); }
-  catch (err) { console.error(err); localToast('error', 'Não foi possível marcar o saque como pago.'); }
+  if (!withdrawId || !isSupportAdmin) return;
+  const withdraw = supportWithdrawals.find((item) => String(item.id) === String(withdrawId));
+  if (!withdraw) return;
+  const confirmed = await openCustomTextModal({
+    title: 'Marcar saque como pago',
+    message: `Confirme que o saque de ${moneyBRL(withdraw.valor || withdraw.amount || 0)} para ${withdraw.sellerName || withdraw.sellerId || 'vendedor'} já foi pago.`,
+    placeholder: 'Digite PAGO',
+    requiredText: 'PAGO',
+    confirmLabel: 'Marcar como pago'
+  });
+  if (String(confirmed || '').toUpperCase() !== 'PAGO') return;
+
+  try {
+    const sellerId = String(withdraw.sellerId || '').trim();
+    const amount = Number(withdraw.valor || withdraw.amount || 0);
+    if (!sellerId || !Number.isFinite(amount) || amount <= 0) {
+      localToast('error', 'Solicitação de saque inválida.');
+      return;
+    }
+
+    const sellerRef = doc(lojaDb, 'vendedor', sellerId);
+    const withdrawRef = doc(lojaDb, WITHDRAW_COLLECTION, withdrawId);
+    let sellerAfterPayment = null;
+
+    await runTransaction(lojaDb, async (transaction) => {
+      const sellerSnap = await transaction.get(sellerRef);
+      const withdrawSnap = await transaction.get(withdrawRef);
+      if (!withdrawSnap.exists()) throw new Error('withdraw-not-found');
+      const currentWithdraw = withdrawSnap.data() || {};
+      if (String(currentWithdraw.status || 'pendente').toLowerCase() === 'pago') throw new Error('withdraw-already-paid');
+
+      const seller = sellerSnap.exists() ? sellerSnap.data() : {};
+      const previousPending = Number(seller.saquePendente ?? seller.saldoEmSaque ?? seller.financeiro?.saldoEmSaque ?? 0);
+      const previousSacado = Number(seller.totalSacado ?? seller.financeiro?.totalSacado ?? 0);
+      const nextPending = Math.max(0, previousPending - amount);
+      const nextSacado = previousSacado + amount;
+      sellerAfterPayment = {
+        ...seller,
+        saquePendente: nextPending,
+        saldoEmSaque: nextPending,
+        totalSacado: nextSacado,
+        financeiro: { ...(seller.financeiro || {}), saldoEmSaque: nextPending, totalSacado: nextSacado }
+      };
+
+      transaction.set(withdrawRef, {
+        status: 'pago',
+        valorPago: amount,
+        pagoEmMs: Date.now(),
+        pagoPor: ghubProfile?.gameId || currentUser?.uid || '',
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      transaction.set(sellerRef, {
+        saquePendente: nextPending,
+        saldoEmSaque: nextPending,
+        totalSacado: nextSacado,
+        financeiro: { ...(seller.financeiro || {}), saldoEmSaque: nextPending, totalSacado: nextSacado },
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    });
+
+    try {
+      const ordersSnap = await getDocs(query(collection(lojaDb, 'pedidos'), where('sellerId', '==', sellerId)));
+      const sellerOrderList = ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const exact = calculateSellerFinancials(sellerOrderList, sellerAfterPayment || {});
+      const exactPayload = {
+        saldoAtual: exact.saldoAtual,
+        saldoPendente: exact.saldoPendente,
+        saquePendente: exact.saldoEmSaque,
+        saldoEmSaque: exact.saldoEmSaque,
+        totalSacado: exact.totalSacado,
+        financeiro: {
+          ...((sellerAfterPayment && sellerAfterPayment.financeiro) || {}),
+          saldoAtual: exact.saldoAtual,
+          saldoPendente: exact.saldoPendente,
+          saldoEmSaque: exact.saldoEmSaque,
+          totalSacado: exact.totalSacado,
+          totalBrutoEntregue: exact.totalBrutoEntregue,
+          totalLiquidoEntregue: exact.totalLiquidoEntregue,
+          totalVendasEntregues: exact.totalVendasEntregues,
+          taxaPercentual: SELLER_FEE_PERCENT,
+          saqueMinimo: SELLER_WITHDRAW_MIN,
+          liberacaoDias: SELLER_RELEASE_DAYS,
+          atualizadoEmMs: Date.now()
+        },
+        updatedAt: serverTimestamp()
+      };
+      await setDoc(sellerRef, exactPayload, { merge: true });
+      if (String(ghubProfile?.gameId || '') === sellerId && lojaStatus?.vendedor) {
+        lojaStatus.vendedor = { ...lojaStatus.vendedor, ...exactPayload };
+      }
+    } catch (calcErr) {
+      console.warn('Saque pago, mas não foi possível recalcular saldo exato agora:', calcErr);
+      if (String(ghubProfile?.gameId || '') === sellerId && lojaStatus?.vendedor && sellerAfterPayment) {
+        lojaStatus.vendedor = { ...lojaStatus.vendedor, ...sellerAfterPayment };
+      }
+    }
+
+    localToast('success', 'Saque marcado como pago e saldo recalculado.');
+    await loadSupportWithdrawals();
+    if (lojaStatus?.vendedor && String(ghubProfile?.gameId || '') === sellerId) {
+      await loadStoreStatus();
+      renderSellerProfileCard();
+    }
+  } catch (err) {
+    console.error(err);
+    localToast('error', err?.message === 'withdraw-already-paid' ? 'Esse saque já estava marcado como pago.' : 'Não foi possível marcar o saque como pago.');
+  }
 }
 
 async function deleteWithdrawalRequest(withdrawId) {
@@ -2647,8 +2837,11 @@ async function setSellerActiveFromSupport(sellerId, active) {
 async function deleteSellerFromSupport(sellerId) {
   const cleanSellerId = String(sellerId || '').trim();
   if (!cleanSellerId || !isSupportAdmin) return;
-  const confirmText = window.prompt('Excluir a conta de vendedor, todos os produtos, pedidos, chats e saques vinculados? Digite EXCLUIR para confirmar.', '');
-  if (String(confirmText || '').trim().toUpperCase() !== 'EXCLUIR') return;
+  const confirmed = await confirmTypedDelete({
+    title: 'Excluir vendedor',
+    message: 'Isso excluirá a conta de vendedor, todos os produtos, pedidos, chats e solicitações de saque vinculadas. Essa ação é irreversível.'
+  });
+  if (!confirmed) return;
   try {
     await deleteSellerAccountAndProducts(cleanSellerId, { bySupport: true });
     localToast('success', 'Conta de vendedor, produtos, pedidos, chats e saques excluídos.');
