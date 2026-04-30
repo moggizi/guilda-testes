@@ -119,11 +119,10 @@ module.exports = async (req, res) => {
 
     // Mercado Pago pode recusar e-mail inválido, domínio .local ou e-mail igual ao dono da conta.
     // O e-mail real do comprador continua salvo no Firestore; aqui usamos um pagador técnico válido.
-    const safeBuyerId = String(buyer.email || 'anon')
-      .replace(/[^a-zA-Z0-9_.-]/g, '')
-      .slice(0, 48) || 'anon';
-    const payerEmail = `comprador-${safeBuyerId}@guildahub.online`;
-
+   // Tenta usar o e-mail real. Se o cara não tiver e-mail, gera um com o ID dele para a API não quebrar.
+    const emailOriginal = String(buyer.email || '').trim();
+    const emailValido = emailOriginal.includes('@') && emailOriginal.includes('.');
+    const payerEmail = emailValido ? emailOriginal : `id-${buyer.gameId || 'anon'}@guildahub.online`;
     await checkoutRef.set({
       id: checkoutId,
       orderId,
@@ -151,11 +150,15 @@ module.exports = async (req, res) => {
     const idempotencyKey = makeIdempotencyKey();
     let mpPayment;
     try {
-      const paymentPayload = {
+     const paymentPayload = {
         transaction_amount: Number(amount.toFixed(2)),
         description: `Loginha - HUB - ${product.titulo}`.slice(0, 255),
         payment_method_id: 'pix',
-        payer: { email: payerEmail },
+        payer: { 
+          email: payerEmail,
+          first_name: `ID GuildaHUB: ${buyer.gameId}`,
+          last_name: `(${buyer.nick || 'Comprador'})`
+        },
         external_reference: `loja:${checkoutId}|pedido:${orderId}|produto:${product.id}|buyer:${buyer.gameId}|seller:${product.sellerId || 'ghub'}`,
         metadata: {
           checkout_id: checkoutId,
