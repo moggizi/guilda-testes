@@ -21,7 +21,58 @@ import {
   startAfter
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { setupSidebar, initIcons, logout, showToast, auth, db } from './logic.js';
-import { lojaCacheGet, lojaCacheSet, lojaCacheRemove, LOJA_CACHE_TTL } from './caches_loja.js';
+
+
+const LOJA_CACHE_TTL = Object.freeze({
+  PROFILE: 24 * 60 * 60 * 1000,
+  CATEGORIES: 24 * 60 * 60 * 1000,
+  PRODUCTS: 30 * 60 * 1000,
+  STORE_STATUS: 10 * 60 * 1000,
+  SELLER_PRODUCTS: 15 * 60 * 1000,
+  SELLER_ORDERS: 10 * 60 * 1000,
+  BUYER_ORDERS: 10 * 60 * 1000,
+});
+
+const LOJA_CACHE_PREFIX = 'ghub_loja_cache_v1';
+
+function lojaSafeCacheUserKey(userKey = '') {
+  return String(userKey || 'global').trim().replace(/[^a-zA-Z0-9_.:@-]+/g, '_') || 'global';
+}
+
+function lojaCacheKey(scope, userKey = '') {
+  return `${LOJA_CACHE_PREFIX}:${lojaSafeCacheUserKey(userKey)}:${String(scope || 'default')}`;
+}
+
+function lojaCacheGet(scope, ttlMs, userKey = '') {
+  try {
+    const key = lojaCacheKey(scope, userKey);
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const savedAt = Number(parsed.savedAt || 0);
+    const ttl = Number(ttlMs || 0);
+    if (!savedAt || !ttl || Date.now() - savedAt > ttl) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return parsed.value ?? null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function lojaCacheSet(scope, value, userKey = '') {
+  try {
+    localStorage.setItem(lojaCacheKey(scope, userKey), JSON.stringify({ savedAt: Date.now(), value }));
+  } catch (_) {}
+}
+
+function lojaCacheRemove(scope, userKey = '') {
+  try {
+    localStorage.removeItem(lojaCacheKey(scope, userKey));
+  } catch (_) {}
+}
 
 const lojaFirebaseConfig = {
   apiKey: "AIzaSyBhh2XfGhXVWUb4CLqFFoPlsm5HoPWRmfI",
@@ -226,7 +277,7 @@ let activePaymentPoll = null;
 const PRODUCTS_PAGE_SIZE = 20;
 let productsPage = 1;
 
-const ORDERS_PAGE_SIZE = 20;
+const ORDERS_PAGE_SIZE = 10;
 let buyerOrdersPage = 1;
 let buyerOrdersHasNextPage = false;
 let buyerOrderPageCursors = [null];
@@ -4255,13 +4306,26 @@ async function handleAuthState(user) {
 }
 
 (async function boot() {
-  bindEvents();
-  initIcons();
-  renderSellerTop();
-  renderSupportTop();
+  try {
+    bindEvents();
+    initIcons();
+    renderSellerTop();
+    renderSupportTop();
 
-  await loadCategories();
-  await loadProducts();
+    await loadCategories();
+    await loadProducts();
 
-  onAuthStateChanged(auth, handleAuthState);
+    onAuthStateChanged(auth, handleAuthState);
+  } catch (err) {
+    console.error('Erro ao iniciar loginha:', err);
+    setProductsLoading(false);
+    if (els.counter) els.counter.textContent = 'Não foi possível carregar a loginha.';
+    els.empty?.classList.remove('hidden');
+    if (els.empty) {
+      els.empty.querySelector('p.font-bold')?.replaceChildren(document.createTextNode('Erro ao carregar a loginha'));
+      const txt = els.empty.querySelector('p.mt-1');
+      if (txt) txt.textContent = 'Confira se loginha.js, logic.js e os arquivos auxiliares foram enviados corretamente.';
+    }
+    localToast('error', 'Não foi possível iniciar a loginha. Confira o console do navegador.');
+  }
 })();
