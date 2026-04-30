@@ -512,7 +512,29 @@ async function approveCheckoutPayment(checkoutId, mercadoPagoPayment = null) {
     const orderRef = lojaDb.collection('pedidos').doc(orderId);
     const sellerChatId = chatIdForOrder(orderId, 'vendedor');
     const nowMs = Date.now();
-    const total = roundMoney(product.preco || checkout.amount || 0);
+    const checkoutAmount = roundMoney(checkout.amount || 0);
+    const currentProductAmount = roundMoney(product.preco || 0);
+    const paidAmount = roundMoney(mercadoPagoPayment?.transaction_amount || checkoutAmount);
+
+    if (!checkoutAmount || checkoutAmount !== currentProductAmount || paidAmount !== checkoutAmount) {
+      tx.set(checkoutRef, {
+        status: 'approved_price_changed',
+        paymentStatus: 'approved_price_changed',
+        paymentId: String(mercadoPagoPayment?.id || checkout.paymentId || ''),
+        orderCreated: false,
+        approvedAtMs: nowMs,
+        blockedAtMs: nowMs,
+        blockedReason: 'product-price-changed-after-pix-created',
+        checkoutAmount,
+        currentProductAmount,
+        paidAmount,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      result = { status: 'approved_price_changed', orderId: checkout.orderId || '', checkoutAmount, currentProductAmount, paidAmount };
+      return;
+    }
+
+    const total = checkoutAmount;
     const sellerNet = roundMoney(total * (1 - SELLER_FEE_RATE));
 
     const orderPayload = {

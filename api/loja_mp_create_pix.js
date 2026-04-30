@@ -19,6 +19,24 @@ const {
   mapPaymentStatus,
 } = require('./_loja_mp_shared');
 
+const PIX_EXPIRATION_MINUTES = 30;
+const PIX_EXPIRATION_MS = PIX_EXPIRATION_MINUTES * 60 * 1000;
+
+function roundMoney(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function isReusablePix(payment, currentAmount, nowMs) {
+  const status = String(payment.paymentStatus || payment.status || '').toLowerCase();
+  const expiresAtMs = Number(payment.expiresAtMs || 0);
+  const sameAmount = roundMoney(payment.amount) === roundMoney(currentAmount);
+  return ['pending', 'in_process', 'creating'].includes(status)
+    && !!payment.paymentId
+    && !!payment.qrCode
+    && sameAmount
+    && expiresAtMs > nowMs + 5000;
+}
+
 module.exports = async (req, res) => {
   cors(res);
 
@@ -70,22 +88,47 @@ module.exports = async (req, res) => {
       return json(res, 409, { ok: false, error: 'out-of-stock' });
     }
 
-    const amount = Number(product.preco || 0);
+    const amount = roundMoney(product.preco || 0);
     if (!Number.isFinite(amount) || amount <= 0) return json(res, 400, { ok: false, error: 'invalid-amount' });
+
+    const nowMs = Date.now();
+    const expiresAtMs = nowMs + PIX_EXPIRATION_MS;
 
     await ensureBuyerProfile(lojaDb, buyer);
 
-    // Reutiliza Pix pendente do mesmo comprador/produto se ainda existir.
+    // Reutiliza Pix pendente somente se o valor atual for igual e o Pix ainda estiver dentro da validade.
     const pendingSnap = await lojaDb.collection('pagamentosLoja')
       .where('buyerId', '==', String(buyer.gameId))
       .where('productId', '==', String(product.id))
       .where('orderCreated', '==', false)
-      .limit(5)
+      .limit(10)
       .get();
 
-    const reusable = pendingSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .find((p) => ['pending', 'in_process', 'creating'].includes(String(p.paymentStatus || p.status || '').toLowerCase()) && p.paymentId && p.qrCode);
+    const pendingPayments = pendingSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const reusable = pendingPayments.find((p) => isReusablePix(p, amount, nowMs));
+
+    const stalePayments = pendingPayments.filter((p) => {
+      const status = String(p.paymentStatus || p.status || '').toLowerCase();
+      if (!['pending', 'in_process', 'creating'].includes(status)) return false;
+      if (p.orderCreated === true) return false;
+      const sameAmount = roundMoney(p.amount) === amount;
+      const notExpired = Number(p.expiresAtMs || 0) > nowMs + 5000;
+      return !sameAmount || !notExpired;
+    });
+
+    if (stalePayments.length) {
+      await Promise.all(stalePayments.map((p) => lojaDb.collection('pagamentosLoja').doc(String(p.id)).set({
+        status: roundMoney(p.amount) !== amount ? 'discarded_price_changed' : 'expired_local',
+        paymentStatus: roundMoney(p.amount) !== amount ? 'discarded_price_changed' : 'expired_local',
+        stale: true,
+        staleReason: roundMoney(p.amount) !== amount ? 'product-price-changed' : 'pix-expired-local',
+        currentAmountAtDiscard: amount,
+        previousAmountAtDiscard: roundMoney(p.amount),
+        discardedAtMs: nowMs,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAtMs: nowMs,
+      }, { merge: true })));
+    }
 
     if (reusable) {
       return json(res, 200, {
@@ -98,15 +141,21 @@ module.exports = async (req, res) => {
         copiaCola: reusable.qrCode || '',
         qrCodeBase64: reusable.qrBase64 || reusable.qrCodeBase64 || '',
         qrBase64: reusable.qrBase64 || reusable.qrCodeBase64 || '',
-        amount: Number(reusable.amount || amount),
+        amount: roundMoney(reusable.amount || amount),
         productId: product.id,
+        productTitle: product.titulo || '',
+        expiresAtMs: Number(reusable.expiresAtMs || 0),
+        expiresInMinutes: PIX_EXPIRATION_MINUTES,
       });
     }
 
-    const cd = await creationCooldown(lojaDb, buyer.uid || buyer.gameId, 2 * 60 * 1000);
-    if (!cd.ok) {
-      const waitSec = Math.max(1, Math.ceil((cd.retryAfterMs || 0) / 1000));
-      return json(res, 429, { ok: false, error: `Aguarde ${waitSec}s para gerar outro Pix.` });
+    const hadPriceChangedPix = stalePayments.some((p) => roundMoney(p.amount) !== amount);
+    if (!hadPriceChangedPix) {
+      const cd = await creationCooldown(lojaDb, buyer.uid || buyer.gameId, 2 * 60 * 1000);
+      if (!cd.ok) {
+        const waitSec = Math.max(1, Math.ceil((cd.retryAfterMs || 0) / 1000));
+        return json(res, 429, { ok: false, error: `Aguarde ${waitSec}s para gerar outro Pix.` });
+      }
     }
 
     const checkoutRef = lojaDb.collection('pagamentosLoja').doc();
@@ -136,14 +185,16 @@ module.exports = async (req, res) => {
       sellerId: product.sellerId || 'ghub',
       sellerName: product.sellerName || 'GuildaHub',
       sellerPhoto: product.sellerPhoto || '',
-      amount: Number(amount.toFixed(2)),
+      amount,
       moeda: product.moeda || 'BRL',
       status: 'creating',
       paymentStatus: 'creating',
       orderCreated: false,
       notification_url,
+      expiresAtMs,
+      expiresInMinutes: PIX_EXPIRATION_MINUTES,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdAtMs: Date.now(),
+      createdAtMs: nowMs,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: false });
 
@@ -151,8 +202,9 @@ module.exports = async (req, res) => {
     let mpPayment;
     try {
      const paymentPayload = {
-        transaction_amount: Number(amount.toFixed(2)),
+        transaction_amount: amount,
         description: `Loginha - HUB - ${product.titulo}`.slice(0, 255),
+        date_of_expiration: new Date(expiresAtMs).toISOString(),
         payment_method_id: 'pix',
         payer: { 
           email: payerEmail,
@@ -241,8 +293,11 @@ module.exports = async (req, res) => {
       copiaCola: qrCode,
       qrCodeBase64: qrBase64,
       qrBase64,
-      amount: Number(amount.toFixed(2)),
+      amount,
       productId: product.id,
+      productTitle: product.titulo || '',
+      expiresAtMs,
+      expiresInMinutes: PIX_EXPIRATION_MINUTES,
     });
   } catch (err) {
     console.error('[LOJA_MP_CREATE_PIX]', err?.message || err, err?.details || '');
