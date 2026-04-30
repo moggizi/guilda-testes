@@ -15,6 +15,7 @@ import {
   runTransaction,
   serverTimestamp,
   deleteDoc,
+  deleteField,
   limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { setupSidebar, initIcons, logout, showToast, auth, db } from './logic.js';
@@ -160,6 +161,8 @@ const els = {
   supportReportsList: qs('support-reports-list'),
   supportWithdrawalsCounter: qs('support-withdrawals-counter'),
   supportWithdrawalsList: qs('support-withdrawals-list'),
+  supportRefundsCounter: qs('support-refunds-counter'),
+  supportRefundsList: qs('support-refunds-list'),
   supportSellersTotal: qs('support-sellers-total'),
   supportSellerSearch: qs('support-seller-search'),
   supportSellerSearchBtn: qs('btn-support-search-seller'),
@@ -195,6 +198,7 @@ let supportChats = [];
 let supportVerifications = [];
 let supportReports = [];
 let supportWithdrawals = [];
+let supportRefundRequests = [];
 let supportSellerTotal = 0;
 let supportSellerResults = [];
 let supportProductResults = [];
@@ -1825,6 +1829,7 @@ function getOrderStatusClass(status) {
   const s = String(status || '').toLowerCase();
   if (s === 'entregue') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
   if (s === 'reembolsado') return 'bg-red-50 text-red-700 ring-red-200';
+  if (s === 'reembolso_solicitado') return 'bg-amber-50 text-amber-800 ring-amber-200';
   if (s === 'pago' || s === 'em_entrega') return 'bg-sky-50 text-sky-700 ring-sky-200';
   return 'bg-amber-50 text-amber-700 ring-amber-200';
 }
@@ -1845,13 +1850,14 @@ function renderSellerOrders() {
   if (!sellerOrders.length) { els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhum pedido recebido ainda.</div>'; return; }
   els.sellerOrdersList.innerHTML = sellerOrders.map((order) => {
     const status = String(order.status || 'pendente').toLowerCase();
-    const locked = isFinalOrderStatus(status) || order.finalizado === true;
+    const refundRequested = status === 'reembolso_solicitado' || order.reembolsoSolicitado === true;
+    const locked = isFinalOrderStatus(status) || order.finalizado === true || refundRequested;
     const created = formatDateTimeBR(order.createdAtMs || order.createdAt);
     const sellerChat = getSellerChatForOrder(order.id);
     const chatExpired = sellerChat && isChatExpired(sellerChat);
     const canOpenChat = sellerChat && !chatExpired && !isChatClosed(sellerChat);
     const chatHtml = sellerChat ? `<div class="mt-3 rounded-xl border ${canOpenChat ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'} p-3"><p class="text-[10px] font-black uppercase tracking-wider ${canOpenChat ? 'text-emerald-800' : 'text-gray-600'}">Chat temporário do pedido</p><p class="mt-1 text-xs font-semibold ${canOpenChat ? 'text-emerald-900' : 'text-gray-700'}">Status: ${escapeHtml(chatExpired ? 'expirado' : (sellerChat.status || 'ativo'))} • ${escapeHtml(getChatRemainingLabel(sellerChat))}</p>${canOpenChat ? `<button type="button" data-open-seller-chat="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Abrir chat com comprador</button>` : ''}</div>` : `<div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-amber-800">Chat ainda não iniciado</p><p class="mt-1 text-xs font-semibold text-amber-900">O chat será criado quando comprador ou vendedor enviar a primeira mensagem.</p><button type="button" data-open-seller-chat="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Enviar mensagem</button></div>`;
-    return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-3"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">ID comprador: ${escapeHtml(order.buyerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p></div><span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span></div>${chatHtml}<div class="mt-3 flex items-center justify-between gap-3"><p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p><div class="flex flex-wrap justify-end gap-2">${locked ? '<span class="rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-500">Finalizado</span>' : `<button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button><button type="button" data-order-action="reembolsado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Reembolso</button>`}</div></div></div>`;
+    return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-3"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">ID comprador: ${escapeHtml(order.buyerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p></div><span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span></div>${chatHtml}<div class="mt-3 flex items-center justify-between gap-3"><p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p><div class="flex flex-wrap justify-end gap-2">${locked ? `<span class="rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-500">${refundRequested ? 'Reembolso solicitado' : 'Finalizado'}</span>` : `<button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button><button type="button" data-order-action="reembolso_solicitado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Solicitar reembolso</button>`}</div></div></div>`;
   }).join('');
   els.sellerOrdersList.querySelectorAll('[data-order-action]').forEach((btn) => btn.addEventListener('click', () => updateOrderStatus(btn.getAttribute('data-order-id') || '', btn.getAttribute('data-order-action') || '')));
   els.sellerOrdersList.querySelectorAll('[data-open-seller-chat]').forEach((btn) => btn.addEventListener('click', () => openProblemModal(btn.getAttribute('data-open-seller-chat') || '', CHAT_TYPE_SELLER)));
@@ -2062,7 +2068,52 @@ async function updateOrderStatus(orderId, action) {
   const order = sellerOrders.find((item) => String(item.id) === String(orderId));
   if (!order) return;
   if (String(order.sellerId) !== String(ghubProfile?.gameId || '')) { localToast('error', 'Esse pedido não pertence ao seu vendedor.'); return; }
+  const currentStatus = String(order.status || '').toLowerCase();
+  if (currentStatus === 'reembolso_solicitado' || order.reembolsoSolicitado === true) { localToast('error', 'Esse pedido já tem reembolso solicitado e aguarda o suporte.'); return; }
   if (isFinalOrderStatus(order.status) || order.finalizado === true) { localToast('error', 'Esse pedido já foi finalizado e não pode ser alterado.'); return; }
+
+  if (action === 'reembolso_solicitado') {
+    const motivo = await openCustomTextModal({
+      title: 'Solicitar reembolso',
+      message: `Essa ação não finaliza o pedido. Ela envia uma solicitação para o painel do suporte analisar e marcar como reembolsado. Pedido: ${orderId}`,
+      placeholder: 'Explique o motivo do reembolso para o suporte.',
+      confirmLabel: 'Solicitar reembolso',
+      cancelLabel: 'Cancelar',
+      textarea: true,
+      danger: true
+    });
+    if (motivo === null) return;
+
+    const nowMs = Date.now();
+    try {
+      await setDoc(doc(lojaDb, 'pedidos', orderId), {
+        status: 'reembolso_solicitado',
+        finalizado: false,
+        reembolsoSolicitado: true,
+        reembolsoStatus: 'pendente',
+        statusAntesReembolso: currentStatus || 'pago',
+        finalizadoAntesReembolso: order.finalizado === true,
+        pagamentoStatusAntesReembolso: String(order?.pagamento?.status || '').trim(),
+        entregaStatusAntesReembolso: String(order?.entrega?.status || '').trim(),
+        reembolsoMotivo: String(motivo || '').trim() || 'Solicitado pelo vendedor.',
+        reembolsoSolicitadoPor: ghubProfile?.gameId || currentUser?.uid || '',
+        reembolsoSolicitadoPorNome: lojaStatus?.vendedor?.nome || lojaStatus?.vendedor?.nick || ghubProfile?.nick || '',
+        reembolsoSolicitadoEm: serverTimestamp(),
+        reembolsoSolicitadoEmMs: nowMs,
+        pagamento: { ...(order?.pagamento || {}), status: 'reembolso_solicitado' },
+        entrega: { ...(order?.entrega || {}), status: 'reembolso_solicitado' },
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      localToast('success', 'Solicitação de reembolso enviada para o suporte.');
+      await Promise.all([loadSellerOrders(), loadBuyerOrders(), isSupportAdmin ? loadSupportRefundRequests() : Promise.resolve()]);
+    } catch (err) {
+      console.error(err);
+      localToast('error', 'Não foi possível solicitar o reembolso.');
+    }
+    return;
+  }
+
   const nowMs = Date.now();
   const deliveryInfoText = String(document.querySelector(`[data-delivery-info-for="${CSS.escape(String(orderId))}"]`)?.value || '').trim();
   if (action === 'entregue' && categoryRequiresSellerDeliveryInfo(order.categoriaId) && !deliveryInfoText) { localToast('error', 'Preencha as informações de entrega antes de marcar como entregue.'); document.querySelector(`[data-delivery-info-for="${CSS.escape(String(orderId))}"]`)?.focus(); return; }
@@ -2074,10 +2125,11 @@ async function updateOrderStatus(orderId, action) {
     updates.entrega = { ...(order?.entrega || {}), status: 'entregue', informacoes: deliveryInfoText || order.entrega?.informacoes || '', entregueEm: serverTimestamp(), entregueEmMs: nowMs };
   }
   if (action === 'reembolsado') {
-    updates.status = 'reembolso_solicitado';
-    updates.finalizado = false;
-    updates.reembolsoSolicitadoEmMs = nowMs;
-    updates.entrega = { ...(order?.entrega || {}), status: 'reembolso_pendente' };
+    updates.reembolsadoEmMs = nowMs;
+    updates.reembolsoSolicitado = false;
+    updates.reembolsoStatus = 'reembolsado';
+    updates.pagamento = { ...(order?.pagamento || {}), status: 'reembolsado', reembolsadoEm: serverTimestamp(), reembolsadoEmMs: nowMs };
+    updates.entrega = { ...(order?.entrega || {}), status: 'reembolso_emitido' };
   }
   try {
     await setDoc(doc(lojaDb, 'pedidos', orderId), updates, { merge: true });
@@ -2086,7 +2138,7 @@ async function updateOrderStatus(orderId, action) {
       const currentProduct = sellerProducts.find((p) => String(p.id) === String(order.produtoId)) || products.find((p) => String(p.id) === String(order.produtoId));
       await setDoc(productRef, { totalVendas: Number(currentProduct?.totalVendas || 0) + 1, updatedAt: serverTimestamp() }, { merge: true });
     }
-    localToast('success', action === 'reembolsado' ? 'Solicitação de reembolso enviada ao suporte.' : 'Pedido marcado como entregue.');
+    localToast('success', action === 'reembolsado' ? 'Pedido marcado como reembolsado.' : 'Pedido marcado como entregue.');
     await Promise.all([loadSellerOrders(), loadProducts(), loadSellerProducts(), loadBuyerOrders()]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar o pedido.'); }
 }
@@ -2635,6 +2687,7 @@ function renderBuyerOrders() {
           <p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p>
           <p class="mt-1 text-xs font-semibold text-gray-500">Vendedor: ${escapeHtml(order.sellerName || order.sellerId || '-')}</p>
           <p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p>
+          ${isRefundRequested && order.reembolsoMotivo ? `<p class="mt-2 rounded-xl bg-amber-50 p-2 text-xs font-semibold leading-relaxed text-amber-800 ring-1 ring-amber-200">Motivo do reembolso: ${escapeHtml(order.reembolsoMotivo)}</p>` : ''}
         </div>
         <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span>
       </div>
@@ -2727,7 +2780,8 @@ async function loadSupportPanelData() {
   if (els.supportChatsList) els.supportChatsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando chats...</div>';
   if (els.supportReportsList) els.supportReportsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando denúncias...</div>';
   if (els.supportWithdrawalsList) els.supportWithdrawalsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando saques...</div>';
-  await Promise.all([loadSupportSellerCount(), loadSupportVerifications(), loadSupportChats(), loadSupportReports(), loadSupportWithdrawals()]);
+  if (els.supportRefundsList) els.supportRefundsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando reembolsos...</div>';
+  await Promise.all([loadSupportSellerCount(), loadSupportVerifications(), loadSupportChats(), loadSupportReports(), loadSupportWithdrawals(), loadSupportRefundRequests()]);
 }
 
 async function loadSupportVerifications() {
@@ -2932,6 +2986,62 @@ async function deleteWithdrawalRequest(withdrawId) {
   catch (err) { console.error(err); localToast('error', 'Não foi possível excluir a solicitação de saque.'); }
 }
 
+async function loadSupportRefundRequests() {
+  if (!isSupportAdmin) return;
+  try {
+    const snap = await getDocs(collection(lojaDb, 'pedidos'));
+    supportRefundRequests = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((order) => {
+        const status = String(order.status || '').toLowerCase();
+        const refundStatus = String(order.reembolsoStatus || '').toLowerCase();
+        return (status === 'reembolso_solicitado' || order.reembolsoSolicitado === true) && refundStatus !== 'reembolsado';
+      })
+      .sort((a, b) => Number(b.reembolsoSolicitadoEmMs || b.createdAtMs || b.createdAt?.seconds || 0) - Number(a.reembolsoSolicitadoEmMs || a.createdAtMs || a.createdAt?.seconds || 0));
+  } catch (err) {
+    console.warn('Não foi possível carregar solicitações de reembolso:', err);
+    supportRefundRequests = [];
+  }
+  renderSupportRefundRequests();
+}
+
+function renderSupportRefundRequests() {
+  if (els.supportRefundsCounter) els.supportRefundsCounter.textContent = supportRefundRequests.length === 1 ? '1 solicitação' : `${supportRefundRequests.length} solicitações`;
+  if (!els.supportRefundsList) return;
+  if (!supportRefundRequests.length) {
+    els.supportRefundsList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhuma solicitação de reembolso.</div>';
+    return;
+  }
+
+  els.supportRefundsList.innerHTML = supportRefundRequests.map((order) => {
+    const created = formatDateTimeBR(order.reembolsoSolicitadoEmMs || order.reembolsoSolicitadoEm || order.createdAtMs || order.createdAt);
+    const reason = String(order.reembolsoMotivo || '').trim();
+    return `<div class="rounded-2xl border border-amber-100 bg-amber-50 p-3">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || order.produtoNome || 'Pedido')}</p>
+          <p class="mt-1 text-xs font-bold text-amber-800">Pedido: ${escapeHtml(order.id)} • ${moneyBRL(order.total || order.precoUnitario || 0)}</p>
+          <p class="mt-1 text-xs font-semibold text-gray-600">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || order.buyerId || '-')}</p>
+          <p class="mt-1 text-xs font-semibold text-gray-600">Vendedor: ${escapeHtml(order.sellerName || order.sellerId || '-')}</p>
+          <p class="mt-1 text-xs font-semibold text-gray-500">Solicitado em: ${escapeHtml(created)}</p>
+          ${reason ? `<p class="mt-2 rounded-xl bg-white/80 p-2 text-xs font-semibold leading-relaxed text-gray-700 ring-1 ring-amber-100">Motivo: ${escapeHtml(reason)}</p>` : ''}
+        </div>
+        <span class="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-amber-800 ring-1 ring-amber-200">PENDENTE</span>
+      </div>
+      <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <button type="button" data-support-refund-order="${escapeHtml(order.id)}" class="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700">Aprovar reembolso</button>
+        <button type="button" data-support-delete-refund-request="${escapeHtml(order.id)}" class="rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-black text-amber-800 hover:bg-amber-50">Apagar solicitação</button>
+        <button type="button" data-support-refund-chat="${escapeHtml(order.id)}" class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Abrir chat</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  els.supportRefundsList.querySelectorAll('[data-support-refund-order]').forEach((btn) => btn.addEventListener('click', () => refundOrderFromSupport(btn.getAttribute('data-support-refund-order') || '')));
+  els.supportRefundsList.querySelectorAll('[data-support-delete-refund-request]').forEach((btn) => btn.addEventListener('click', () => deleteRefundRequestFromSupport(btn.getAttribute('data-support-delete-refund-request') || '')));
+  els.supportRefundsList.querySelectorAll('[data-support-refund-chat]').forEach((btn) => btn.addEventListener('click', () => openOrderChatFromSupport(btn.getAttribute('data-support-refund-chat') || '')));
+  initIcons();
+}
+
 async function loadSupportReports() {
   try {
     const snap = await getDocs(collection(lojaDb, PRODUCT_REPORT_COLLECTION));
@@ -3082,7 +3192,7 @@ async function searchSupportOrders() {
     supportOrderResults = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
       .filter((order) => {
-        const blob = normalizeSearchText(`${order.id || ''} ${order.produtoId || ''} ${order.produtoTitulo || ''} ${order.buyerId || ''} ${order.buyerName || order.buyerNick || ''} ${order.sellerId || ''} ${order.sellerName || ''} ${order.status || ''}`);
+        const blob = normalizeSearchText(`${order.id || ''} ${order.produtoId || ''} ${order.produtoTitulo || ''} ${order.buyerId || ''} ${order.buyerName || order.buyerNick || ''} ${order.sellerId || ''} ${order.sellerName || ''} ${order.status || ''} ${order.reembolsoMotivo || ''}`);
         return blob.includes(term);
       })
       .sort((a, b) => Number(b.createdAtMs || b.createdAt?.seconds || 0) - Number(a.createdAtMs || a.createdAt?.seconds || 0))
@@ -3100,6 +3210,7 @@ function renderSupportOrderResults() {
   els.supportOrderResults.innerHTML = supportOrderResults.map((order) => {
     const status = String(order.status || 'pendente').toLowerCase();
     const isRefunded = status === 'reembolsado';
+    const isRefundRequested = status === 'reembolso_solicitado' || order.reembolsoSolicitado === true;
     const created = formatDateTimeBR(order.createdAtMs || order.createdAt);
     return `<div class="rounded-2xl border border-gray-100 bg-white p-3">
       <div class="flex items-start justify-between gap-3">
@@ -3109,17 +3220,19 @@ function renderSupportOrderResults() {
           <p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || order.buyerId || '-')}</p>
           <p class="mt-1 text-xs font-semibold text-gray-500">Vendedor: ${escapeHtml(order.sellerName || order.sellerId || '-')}</p>
           <p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p>
+          ${isRefundRequested && order.reembolsoMotivo ? `<p class="mt-2 rounded-xl bg-amber-50 p-2 text-xs font-semibold leading-relaxed text-amber-800 ring-1 ring-amber-200">Motivo do reembolso: ${escapeHtml(order.reembolsoMotivo)}</p>` : ''}
         </div>
         <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span>
       </div>
-      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-        ${isRefunded ? '<span class="rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-black text-red-700 ring-1 ring-red-200">Já reembolsado</span>' : 
-         (status === 'reembolso_solicitado' ? `<button type="button" data-admin-refund-order="${escapeHtml(order.id)}" class="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700 shadow-md animate-pulse">Aprovar Reembolso!</button>` : `<button type="button" data-admin-refund-order="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Forçar Reembolso</button>`)}
-        <button type="button" data-admin-open-order-chat="${escapeHtml(order.id)}" class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Abrir chat do pedido</button>
+      <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        ${isRefunded ? '<span class="rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-black text-red-700 ring-1 ring-red-200">Já reembolsado</span>' : `<button type="button" data-admin-refund-order="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">${isRefundRequested ? 'Aprovar reembolso' : 'Marcar reembolso'}</button>`}
+        ${isRefundRequested && !isRefunded ? `<button type="button" data-admin-delete-refund-request="${escapeHtml(order.id)}" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-800 hover:bg-amber-100">Apagar solicitação</button>` : ''}
+        <button type="button" data-admin-open-order-chat="${escapeHtml(order.id)}" class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Abrir chat</button>
       </div>
     </div>`;
   }).join('');
   els.supportOrderResults.querySelectorAll('[data-admin-refund-order]').forEach((btn) => btn.addEventListener('click', () => refundOrderFromSupport(btn.getAttribute('data-admin-refund-order') || '')));
+  els.supportOrderResults.querySelectorAll('[data-admin-delete-refund-request]').forEach((btn) => btn.addEventListener('click', () => deleteRefundRequestFromSupport(btn.getAttribute('data-admin-delete-refund-request') || '')));
   els.supportOrderResults.querySelectorAll('[data-admin-open-order-chat]').forEach((btn) => btn.addEventListener('click', () => openOrderChatFromSupport(btn.getAttribute('data-admin-open-order-chat') || '')));
   initIcons();
 }
@@ -3179,11 +3292,11 @@ async function refundOrderFromSupport(orderId) {
   if (!cleanOrderId || !isSupportAdmin) return;
   const order = supportOrderResults.find((item) => String(item.id) === cleanOrderId) || null;
   const confirmed = await openCustomTextModal({
-    title: 'Marcar pedido como reembolso',
+    title: 'Aprovar solicitação de reembolso',
     message: `Essa ação altera o pedido para REEMBOLSADO e remove a venda dos cálculos de saldo do vendedor. Pedido: ${cleanOrderId}`,
     requiredText: 'REEMBOLSO',
     placeholder: 'Digite REEMBOLSO',
-    confirmLabel: 'Marcar reembolso',
+    confirmLabel: 'Aprovar e marcar reembolsado',
     danger: true
   }).then((value) => String(value || '').toUpperCase() === 'REEMBOLSO');
   if (!confirmed) return;
@@ -3199,17 +3312,85 @@ async function refundOrderFromSupport(orderId) {
       finalizado: true,
       reembolsadoEmMs: nowMs,
       reembolsadoPor: ghubProfile?.gameId || currentUser?.uid || '',
+      reembolsoSolicitado: false,
+      reembolsoStatus: 'reembolsado',
+      reembolsoFinalizadoEmMs: nowMs,
+      reembolsoFinalizadoPor: ghubProfile?.gameId || currentUser?.uid || '',
       pagamento: { ...(data.pagamento || {}), status: 'reembolsado', reembolsadoEm: serverTimestamp(), reembolsadoEmMs: nowMs },
       entrega: { ...(data.entrega || {}), status: 'reembolso_emitido' },
       updatedAt: serverTimestamp()
     }, { merge: true });
     if (data.produtoId) await recalcProductDeliveredSales(data.produtoId);
     if (data.sellerId) await recalcSellerFinancialsById(data.sellerId);
-    localToast('success', 'Pedido marcado como reembolsado e saldo recalculado.');
-    await Promise.all([searchSupportOrders(), loadProducts(), loadSupportWithdrawals(), loadSupportSellerCount()]);
+    localToast('success', 'Solicitação aprovada. Pedido marcado como reembolsado e saldo recalculado.');
+    if (normalizeSearchText(els.supportOrderSearch?.value || '')) await searchSupportOrders();
+    else {
+      supportOrderResults = supportOrderResults.map((item) => String(item.id) === cleanOrderId ? { ...item, status: 'reembolsado', finalizado: true, reembolsoSolicitado: false, reembolsoStatus: 'reembolsado', reembolsadoEmMs: nowMs } : item);
+      renderSupportOrderResults();
+    }
+    await Promise.all([loadSupportRefundRequests(), loadProducts(), loadSupportWithdrawals(), loadSupportSellerCount()]);
     if (ghubProfile?.gameId && String(data.sellerId || '') === String(ghubProfile.gameId)) await loadSellerOrders();
     await loadBuyerOrders();
   } catch (err) { console.error(err); localToast('error', 'Não foi possível marcar o pedido como reembolso.'); }
+}
+
+async function deleteRefundRequestFromSupport(orderId) {
+  const cleanOrderId = String(orderId || '').trim();
+  if (!cleanOrderId || !isSupportAdmin) return;
+
+  const confirmed = await openCustomTextModal({
+    title: 'Apagar solicitação de reembolso',
+    message: `Isso remove apenas a solicitação de reembolso do painel do suporte. O pedido não será marcado como reembolsado. Pedido: ${cleanOrderId}`,
+    requiredText: 'APAGAR',
+    placeholder: 'Digite APAGAR',
+    confirmLabel: 'Apagar solicitação',
+    danger: true
+  }).then((value) => String(value || '').toUpperCase() === 'APAGAR');
+  if (!confirmed) return;
+
+  try {
+    const ref = doc(lojaDb, 'pedidos', cleanOrderId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) { localToast('error', 'Pedido não encontrado.'); return; }
+    const data = { id: snap.id, ...snap.data() };
+    const currentStatus = String(data.status || '').toLowerCase();
+    if (currentStatus === 'reembolsado') { localToast('error', 'Esse pedido já foi reembolsado.'); return; }
+
+    const previousStatus = String(data.statusAntesReembolso || '').trim().toLowerCase();
+    const restoredStatus = previousStatus && previousStatus !== 'reembolso_solicitado' && previousStatus !== 'reembolsado'
+      ? previousStatus
+      : 'pago';
+    const previousPaymentStatus = String(data.pagamentoStatusAntesReembolso || '').trim();
+    const previousDeliveryStatus = String(data.entregaStatusAntesReembolso || '').trim();
+
+    await setDoc(ref, {
+      status: restoredStatus,
+      finalizado: data.finalizadoAntesReembolso === true,
+      reembolsoSolicitado: deleteField(),
+      reembolsoStatus: deleteField(),
+      reembolsoMotivo: deleteField(),
+      reembolsoSolicitadoPor: deleteField(),
+      reembolsoSolicitadoPorNome: deleteField(),
+      reembolsoSolicitadoEm: deleteField(),
+      reembolsoSolicitadoEmMs: deleteField(),
+      statusAntesReembolso: deleteField(),
+      finalizadoAntesReembolso: deleteField(),
+      pagamentoStatusAntesReembolso: deleteField(),
+      entregaStatusAntesReembolso: deleteField(),
+      pagamento: { ...(data.pagamento || {}), status: previousPaymentStatus || restoredStatus },
+      entrega: { ...(data.entrega || {}), status: previousDeliveryStatus || restoredStatus },
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    localToast('success', 'Solicitação de reembolso apagada. O pedido voltou para análise normal.');
+    await loadSupportRefundRequests();
+    if (normalizeSearchText(els.supportOrderSearch?.value || '')) await searchSupportOrders();
+    if (ghubProfile?.gameId && String(data.sellerId || '') === String(ghubProfile.gameId)) await loadSellerOrders();
+    await loadBuyerOrders();
+  } catch (err) {
+    console.error(err);
+    localToast('error', 'Não foi possível apagar a solicitação de reembolso.');
+  }
 }
 
 async function openOrderChatFromSupport(orderId) {
@@ -3499,6 +3680,7 @@ async function handleAuthState(user) {
   supportVerifications = [];
   supportReports = [];
   supportWithdrawals = [];
+  supportRefundRequests = [];
   supportSellerResults = [];
   supportProductResults = [];
   supportOrderResults = [];
