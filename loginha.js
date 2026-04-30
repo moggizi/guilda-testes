@@ -16,9 +16,12 @@ import {
   serverTimestamp,
   deleteDoc,
   deleteField,
-  limit
+  limit,
+  orderBy,
+  startAfter
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { setupSidebar, initIcons, logout, showToast, auth, db } from './logic.js';
+import { lojaCacheGet, lojaCacheSet, lojaCacheRemove, LOJA_CACHE_TTL } from './caches_loja.js';
 
 const lojaFirebaseConfig = {
   apiKey: "AIzaSyBhh2XfGhXVWUb4CLqFFoPlsm5HoPWRmfI",
@@ -219,6 +222,12 @@ let selectedProductImageBase64 = '';
 let activeDraftChat = null;
 let activePaymentPoll = null;
 
+const ORDERS_PAGE_SIZE = 20;
+let buyerOrdersPage = 1;
+let buyerOrdersHasNextPage = false;
+let buyerOrderPageCursors = [null];
+let buyerOrdersLoading = false;
+
 const NOTIFICATION_BADGE_CLASS = 'ghub-notification-badge';
 
 function getSeenStorageKey() {
@@ -240,6 +249,16 @@ function saveSeenState(state) {
   try {
     localStorage.setItem(getSeenStorageKey(), JSON.stringify(state || {}));
   } catch (_) {}
+}
+
+function getCurrentUserCacheKey() {
+  return String(currentUser?.uid || currentUser?.email || ghubProfile?.gameId || 'global').trim() || 'global';
+}
+
+function resetBuyerOrdersPagination() {
+  buyerOrdersPage = 1;
+  buyerOrdersHasNextPage = false;
+  buyerOrderPageCursors = [null];
 }
 
 function getItemActivityMs(item = {}) {
@@ -964,9 +983,18 @@ function renderSellerTop() {
   updateNotificationBadges();
 }
 
-async function loadStoreStatus() {
+async function loadStoreStatus(force = false) {
   if (!currentUser || !ghubProfile?.gameId) {
     lojaStatus = { comprador: null, vendedor: null };
+    renderSellerTop();
+    renderSupportTop();
+    return;
+  }
+
+  const cacheKey = getCurrentUserCacheKey();
+  const cached = !force ? lojaCacheGet('storeStatus', LOJA_CACHE_TTL.STORE_STATUS, cacheKey) : null;
+  if (cached) {
+    lojaStatus = cached;
     renderSellerTop();
     renderSupportTop();
     return;
@@ -985,6 +1013,7 @@ async function loadStoreStatus() {
       comprador: buyerSnap.exists() ? { id: buyerSnap.id, ...buyerSnap.data() } : null,
       vendedor: sellerSnap.exists() ? { id: sellerSnap.id, ...sellerSnap.data() } : null
     };
+    lojaCacheSet('storeStatus', lojaStatus, cacheKey);
   } catch (err) {
     console.warn('Status da loja indisponível:', err);
     lojaStatus = { comprador: null, vendedor: null };
@@ -995,7 +1024,14 @@ async function loadStoreStatus() {
   }
 }
 
-async function loadCategories() {
+async function loadCategories(force = false) {
+  const cached = !force ? lojaCacheGet('categories', LOJA_CACHE_TTL.CATEGORIES, 'global') : null;
+  if (Array.isArray(cached) && cached.length) {
+    categories = cached;
+    renderCategories();
+    return;
+  }
+
   const map = new Map(DEFAULT_CATEGORIES.map((cat) => [cat.id, cat]));
 
   try {
@@ -1023,6 +1059,7 @@ async function loadCategories() {
   }
 
   categories = Array.from(map.values()).sort((a, b) => (a.ordem || 999) - (b.ordem || 999) || a.nome.localeCompare(b.nome));
+  lojaCacheSet('categories', categories, 'global');
   renderCategories();
 }
 
@@ -1057,7 +1094,15 @@ function renderCategories() {
   }
 }
 
-async function loadProducts() {
+async function loadProducts(force = false) {
+  const cached = !force ? lojaCacheGet('products', LOJA_CACHE_TTL.PRODUCTS, 'global') : null;
+  if (Array.isArray(cached)) {
+    products = cached;
+    setProductsLoading(false);
+    applyFilters();
+    return;
+  }
+
   setProductsLoading(true);
 
   try {
@@ -1069,6 +1114,7 @@ async function loadProducts() {
       .map(normalizeProduct)
       .filter((product) => product.ativo !== false)
       .sort((a, b) => Number(b.destaque) - Number(a.destaque) || (a.ordem || 999) - (b.ordem || 999) || a.titulo.localeCompare(b.titulo));
+    lojaCacheSet('products', products, 'global');
   } catch (err) {
     console.error('Erro ao carregar produtos da loja:', err?.code || err?.message || err, err);
     products = [];
@@ -1580,6 +1626,7 @@ async function createOrUpdateSellerProfile() {
 
     await setDoc(sellerRef, sellerPayload, { merge: true });
     lojaStatus.vendedor = { id: payload.gameId, ...sellerPayload };
+    lojaCacheRemove('storeStatus', getCurrentUserCacheKey());
     renderSellerTop();
     localToast('success', sellerSnap.exists() ? 'Perfil de vendedor atualizado.' : 'Perfil de vendedor criado.');
     return lojaStatus.vendedor;
@@ -1722,15 +1769,23 @@ function renderPixPaymentInfo(product, payment) {
   const qrBase64 = payment.qrCodeBase64 || payment.qr_code_base64 || '';
   const qrCode = payment.qrCode || payment.copiaCola || payment.qr_code || '';
   const checkoutId = payment.checkoutId || '';
+  const paymentAmount = Number(payment.amount ?? product.preco ?? 0);
+  const productTitle = payment.productTitle || product.titulo || 'Produto';
+  const expiresAtMs = Number(payment.expiresAtMs || 0);
+  const expirationText = expiresAtMs ? `Válido até ${formatDateTimeBR(expiresAtMs)}.` : 'Válido por 30 minutos após gerar.';
+  const cachedPrice = Number(product.preco || 0);
+  const priceChanged = Number.isFinite(paymentAmount) && Number.isFinite(cachedPrice) && Math.abs(paymentAmount - cachedPrice) >= 0.01;
 
   els.productModalTitle.textContent = 'Pagamento Pix';
 
   els.productModalBody.innerHTML = `
     <div class="rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
       <p class="text-xs font-black uppercase tracking-wider text-emerald-700">Pedido aguardando pagamento</p>
-      <h4 class="mt-1 text-lg font-black text-gray-900">${escapeHtml(product.titulo || 'Produto')}</h4>
-      <p class="mt-1 text-sm font-bold text-gray-600">Valor: ${moneyBRL(product.preco || 0)}</p>
+      <h4 class="mt-1 text-lg font-black text-gray-900">${escapeHtml(productTitle)}</h4>
+      <p class="mt-1 text-sm font-bold text-gray-600">Valor: ${moneyBRL(paymentAmount || 0)}</p>
+      ${priceChanged ? '<p class="mt-1 rounded-xl bg-amber-100 px-3 py-2 text-xs font-black text-amber-800">O valor foi atualizado pelo vendedor. Gere/pague somente este Pix novo.</p>' : ''}
       <p class="mt-1 text-xs font-semibold text-emerald-800">O pedido só será criado/liberado após o Mercado Pago confirmar pagamento aprovado.</p>
+      <p class="mt-2 rounded-xl bg-white/80 px-3 py-2 text-xs font-black text-emerald-900 ring-1 ring-emerald-200">Esse Pix é válido por 30 minutos. ${escapeHtml(expirationText)}</p>
     </div>
 
     ${qrBase64 ? `<div class="flex justify-center rounded-3xl border border-gray-100 bg-white p-4"><img src="data:image/png;base64,${escapeHtml(qrBase64)}" alt="QR Code Pix" class="h-56 w-56 rounded-2xl object-contain"></div>` : ''}
@@ -1822,7 +1877,7 @@ async function checkPixPaymentStatus(checkoutId, manual = false) {
       }
       if (statusEl) statusEl.textContent = `Pagamento aprovado. Pedido criado: ${data.orderId || '-'}`;
       localToast('success', 'Pagamento aprovado. Pedido criado.');
-      await Promise.all([loadProducts(), loadBuyerOrders()]);
+      await Promise.all([loadProducts(true), loadBuyerOrders({ reset: true, force: true })]);
       setTimeout(() => closeProductModal(), 1000);
       return;
     }
@@ -1834,6 +1889,17 @@ async function checkPixPaymentStatus(checkoutId, manual = false) {
       }
       if (statusEl) statusEl.textContent = 'Pagamento aprovado, mas o produto ficou sem estoque. Acione o suporte para resolver/reembolsar.';
       localToast('error', 'Pagamento aprovado, mas sem estoque. Acione o suporte.');
+      return;
+    }
+
+    if (status === 'approved_price_changed') {
+      if (activePaymentPoll) {
+        clearInterval(activePaymentPoll);
+        activePaymentPoll = null;
+      }
+      if (statusEl) statusEl.textContent = 'Pagamento aprovado, mas o valor do produto mudou antes da criação do pedido. Acione o suporte para analisar/reembolsar.';
+      localToast('error', 'Pagamento aprovado com valor antigo. Acione o suporte.');
+      await loadProducts(true);
       return;
     }
 
@@ -1895,12 +1961,20 @@ function renderSellerProfileCard() {
   initIcons();
 }
 
-async function loadSellerProducts() {
+async function loadSellerProducts(force = false) {
   const sellerId = ghubProfile?.gameId;
   if (!sellerId) return;
+  const cacheKey = String(sellerId);
+  const cached = !force ? lojaCacheGet('sellerProducts', LOJA_CACHE_TTL.SELLER_PRODUCTS, cacheKey) : null;
+  if (Array.isArray(cached)) {
+    sellerProducts = cached;
+    renderSellerProducts();
+    return;
+  }
   try {
     const snap = await getDocs(query(collection(lojaDb, 'produtos'), where('sellerId', '==', String(sellerId))));
     sellerProducts = snap.docs.map(normalizeProduct).sort((a, b) => a.titulo.localeCompare(b.titulo));
+    lojaCacheSet('sellerProducts', sellerProducts, cacheKey);
   } catch (err) {
     console.error('Erro ao carregar produtos do vendedor:', err?.code || err?.message || err, err);
     sellerProducts = [];
@@ -2203,7 +2277,7 @@ async function handleSellerProductSubmit(event) {
     }
 
     resetSellerProductForm();
-    await Promise.all([loadProducts(), loadSellerProducts()]);
+    await Promise.all([loadProducts(true), loadSellerProducts(true)]);
   } catch (err) {
     console.error(err);
     localToast('error', editingProductId ? 'Não foi possível atualizar o produto.' : 'Não foi possível cadastrar o produto. Confira se as regras do Firebase permitem escrita.');
@@ -2228,7 +2302,7 @@ async function toggleSellerProduct(productId, nextActive) {
     }, { merge: true });
 
     localToast('success', nextActive ? 'Produto ativado.' : 'Produto pausado.');
-    await Promise.all([loadProducts(), loadSellerProducts()]);
+    await Promise.all([loadProducts(true), loadSellerProducts(true)]);
   } catch (err) {
     console.error(err);
     localToast('error', 'Não foi possível atualizar o produto.');
@@ -2268,7 +2342,7 @@ async function deleteSellerProduct(productId) {
     }, { merge: true });
 
     localToast('success', 'Produto excluído.');
-    await Promise.all([loadProducts(), loadSellerProducts()]);
+    await Promise.all([loadProducts(true), loadSellerProducts(true)]);
   } catch (err) {
     console.error(err);
     localToast('error', 'Não foi possível excluir o produto.');
@@ -2351,7 +2425,7 @@ async function updateOrderStatus(orderId, action) {
       await setDoc(productRef, { totalVendas: Number(currentProduct?.totalVendas || 0) + 1, updatedAt: serverTimestamp() }, { merge: true });
     }
     localToast('success', action === 'reembolsado' ? 'Pedido marcado como reembolsado.' : 'Pedido marcado como entregue.');
-    await Promise.all([loadSellerOrders(), loadProducts(), loadSellerProducts(), loadBuyerOrders()]);
+    await Promise.all([loadSellerOrders(), loadProducts(true), loadSellerProducts(true), loadBuyerOrders()]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar o pedido.'); }
 }
 
@@ -2467,7 +2541,7 @@ function openBuyerModal() {
   els.buyerModal?.classList.remove('hidden');
   els.buyerModal?.classList.add('flex');
   initIcons();
-  loadBuyerOrders().then(() => {
+  loadBuyerOrders({ reset: true, force: true }).then(() => {
     markBuyerOrdersSeenIfOpen();
     updateNotificationBadges();
   });
@@ -2847,29 +2921,51 @@ async function escalateActiveChatToSupport
   }
 }
 
-async function loadBuyerOrders() {
-  if (!currentUser || !ghubProfile?.gameId) { buyerOrders = []; renderBuyerOrders(); return; }
+async function loadBuyerOrders(options = {}) {
+  const { reset = false, page = null, force = false } = options || {};
+  if (!currentUser || !ghubProfile?.gameId) { buyerOrders = []; resetBuyerOrdersPagination(); renderBuyerOrders(); return; }
+  if (buyerOrdersLoading) return;
+  buyerOrdersLoading = true;
+  if (reset) resetBuyerOrdersPagination();
+  const targetPage = Math.max(1, Number(page || buyerOrdersPage || 1));
   if (els.buyerOrdersList) els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando compras...</div>';
   try {
+    const cursor = buyerOrderPageCursors[targetPage - 1] || null;
+    const base = [where('buyerId', '==', String(ghubProfile.gameId)), orderBy('createdAtMs', 'desc')];
+    const orderQuery = cursor
+      ? query(collection(lojaDb, 'pedidos'), ...base, startAfter(cursor), limit(ORDERS_PAGE_SIZE + 1))
+      : query(collection(lojaDb, 'pedidos'), ...base, limit(ORDERS_PAGE_SIZE + 1));
     const [ordersSnap] = await Promise.all([
-      getDocs(query(collection(lojaDb, 'pedidos'), where('buyerId', '==', String(ghubProfile.gameId)))),
+      getDocs(orderQuery),
       loadBuyerProblems(),
       loadBuyerRatings()
     ]);
-    buyerOrders = ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
-  } catch (err) { console.error('Erro ao carregar compras:', err?.code || err?.message || err, err); buyerOrders = []; buyerProblems = []; localToast('error', `Não foi possível carregar suas compras. Erro: ${err?.code || err?.message || 'verifique as regras/índices'}`); }
+    const docs = ordersSnap.docs;
+    const pageDocs = docs.slice(0, ORDERS_PAGE_SIZE);
+    buyerOrdersHasNextPage = docs.length > ORDERS_PAGE_SIZE;
+    buyerOrdersPage = targetPage;
+    if (pageDocs.length) buyerOrderPageCursors[targetPage] = pageDocs[pageDocs.length - 1];
+    buyerOrders = pageDocs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
+  } catch (err) {
+    console.error('Erro ao carregar compras:', err?.code || err?.message || err, err);
+    buyerOrders = [];
+    buyerProblems = [];
+    localToast('error', `Não foi possível carregar suas compras. Erro: ${err?.code || err?.message || 'verifique as regras/índices'}`);
+  } finally {
+    buyerOrdersLoading = false;
+  }
   renderBuyerOrders();
   markBuyerOrdersSeenIfOpen();
   updateNotificationBadges();
 }
 
 function renderBuyerOrders() {
-  if (els.buyerOrdersCounter) els.buyerOrdersCounter.textContent = buyerOrders.length === 1 ? '1 compra encontrada' : `${buyerOrders.length} compras encontradas`;
+  if (els.buyerOrdersCounter) els.buyerOrdersCounter.textContent = `${buyerOrders.length} compra${buyerOrders.length === 1 ? '' : 's'} nesta página • Página ${buyerOrdersPage}`;
   if (!els.buyerOrdersList) return;
   if (!currentUser) { els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-center text-sm font-semibold text-gray-500">Entre na GuildaHub para ver suas compras.</div>'; return; }
   if (!buyerOrders.length) { els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-center text-sm font-semibold text-gray-500">Nenhuma compra encontrada ainda.</div>'; return; }
 
-  els.buyerOrdersList.innerHTML = buyerOrders.map((order) => {
+  const ordersHtml = buyerOrders.map((order) => {
     const status = String(order.status || 'pendente').toLowerCase();
     const isRefundRequested = status === 'reembolso_solicitado' || order.reembolsoSolicitado === true;
     const locked = isFinalOrderStatus(status) || order.finalizado === true || isRefundRequested;
@@ -2928,6 +3024,23 @@ function renderBuyerOrders() {
     </div>`;
   }).join('');
 
+  const paginationHtml = `
+    <div class="mt-3 rounded-2xl border border-gray-100 bg-white p-3">
+      <div class="flex items-center justify-between gap-3">
+        <button type="button" data-buyer-orders-page="prev" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40" ${buyerOrdersPage <= 1 ? 'disabled' : ''}>Voltar</button>
+        <span class="text-xs font-black text-gray-500">Página atual: ${buyerOrdersPage}</span>
+        <button type="button" data-buyer-orders-page="next" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40" ${buyerOrdersHasNextPage ? '' : 'disabled'}>Próxima</button>
+      </div>
+    </div>`;
+
+  els.buyerOrdersList.innerHTML = ordersHtml + paginationHtml;
+
+  els.buyerOrdersList.querySelectorAll('[data-buyer-orders-page]').forEach((btn) => btn.addEventListener('click', () => {
+    const dir = btn.getAttribute('data-buyer-orders-page') || '';
+    if (dir === 'prev' && buyerOrdersPage > 1) loadBuyerOrders({ page: buyerOrdersPage - 1, force: true });
+    if (dir === 'next' && buyerOrdersHasNextPage) loadBuyerOrders({ page: buyerOrdersPage + 1, force: true });
+  }));
+
   els.buyerOrdersList.querySelectorAll('[data-save-buyer-info]').forEach((btn) => btn.addEventListener('click', () => updateBuyerOrderInfo(btn.getAttribute('data-save-buyer-info') || '')));
   els.buyerOrdersList.querySelectorAll('[data-open-problem]').forEach((btn) => btn.addEventListener('click', () => openProblemModal(btn.getAttribute('data-open-problem') || '', CHAT_TYPE_SELLER)));
   els.buyerOrdersList.querySelectorAll('[data-open-support-chat]').forEach((btn) => btn.addEventListener('click', () => openProblemModal(btn.getAttribute('data-open-support-chat') || '', CHAT_TYPE_SUPPORT)));
@@ -2942,7 +3055,7 @@ async function updateBuyerOrderInfo(orderId) {
   if (isFinalOrderStatus(order.status) || order.finalizado === true) { localToast('error', 'Esse pedido já foi finalizado e não pode ser alterado.'); return; }
   const textValue = String(document.querySelector(`[data-buyer-info-for="${CSS.escape(String(orderId))}"]`)?.value || '').trim();
   if (!textValue) { localToast('error', 'Preencha as informações do pedido.'); document.querySelector(`[data-buyer-info-for="${CSS.escape(String(orderId))}"]`)?.focus(); return; }
-  try { await setDoc(doc(lojaDb, 'pedidos', orderId), { buyerInfo: textValue, buyerInfoUpdatedAtMs: Date.now(), updatedAt: serverTimestamp() }, { merge: true }); localToast('success', 'Informações do pedido atualizadas.'); await loadBuyerOrders(); }
+  try { await setDoc(doc(lojaDb, 'pedidos', orderId), { buyerInfo: textValue, buyerInfoUpdatedAtMs: Date.now(), updatedAt: serverTimestamp() }, { merge: true }); localToast('success', 'Informações do pedido atualizadas.'); await loadBuyerOrders({ force: true }); }
   catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar as informações do pedido.'); }
 }
 
@@ -3363,7 +3476,7 @@ async function setSellerActiveFromSupport(sellerId, active) {
     await setDoc(doc(lojaDb, 'vendedor', cleanSellerId), { ativo: !!active, status: active ? 'ativo' : 'inativo', updatedAt: serverTimestamp(), alteradoPor: ghubProfile?.gameId || currentUser?.uid || '' }, { merge: true });
     if (!active) await deleteProductsBySellerId(cleanSellerId);
     localToast('success', active ? 'Vendedor ativado.' : 'Vendedor inativado e anúncios excluídos.');
-    await Promise.all([searchSupportSellers(), loadProducts(), loadSupportReports(), loadSupportSellerCount(), loadSupportWithdrawals(), loadSupportChats()]);
+    await Promise.all([searchSupportSellers(), loadProducts(true), loadSupportReports(), loadSupportSellerCount(), loadSupportWithdrawals(), loadSupportChats()]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar o vendedor.'); }
 }
 
@@ -3378,7 +3491,7 @@ async function deleteSellerFromSupport(sellerId) {
   try {
     await deleteSellerAccountAndProducts(cleanSellerId, { bySupport: true });
     localToast('success', 'Conta de vendedor, produtos, pedidos, chats e saques excluídos.');
-    await Promise.all([searchSupportSellers(), loadProducts(), loadSupportReports(), loadSupportSellerCount(), loadSupportWithdrawals(), loadSupportChats()]);
+    await Promise.all([searchSupportSellers(), loadProducts(true), loadSupportReports(), loadSupportSellerCount(), loadSupportWithdrawals(), loadSupportChats()]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível excluir o vendedor.'); }
 }
 
@@ -3416,7 +3529,7 @@ async function deleteProductFromSupport(productId) {
   try {
     await deleteDoc(doc(lojaDb, 'produtos', cleanProductId));
     localToast('success', 'Produto excluído.');
-    await Promise.all([searchSupportProducts(), loadProducts(), loadSupportReports()]);
+    await Promise.all([searchSupportProducts(), loadProducts(true), loadSupportReports()]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível excluir o produto.'); }
 }
 
@@ -3566,7 +3679,7 @@ async function refundOrderFromSupport(orderId) {
       supportOrderResults = supportOrderResults.map((item) => String(item.id) === cleanOrderId ? { ...item, status: 'reembolsado', finalizado: true, reembolsoSolicitado: false, reembolsoStatus: 'reembolsado', reembolsadoEmMs: nowMs } : item);
       renderSupportOrderResults();
     }
-    await Promise.all([loadSupportRefundRequests(), loadProducts(), loadSupportWithdrawals(), loadSupportSellerCount()]);
+    await Promise.all([loadSupportRefundRequests(), loadProducts(true), loadSupportWithdrawals(), loadSupportSellerCount()]);
     if (ghubProfile?.gameId && String(data.sellerId || '') === String(ghubProfile.gameId)) await loadSellerOrders();
     await loadBuyerOrders();
   } catch (err) { console.error(err); localToast('error', 'Não foi possível marcar o pedido como reembolso.'); }
@@ -3680,7 +3793,7 @@ async function deleteReportedProduct(productId, reportId = '') {
     await deleteDoc(doc(lojaDb, 'produtos', productId));
     if (reportId) await deleteDoc(doc(lojaDb, PRODUCT_REPORT_COLLECTION, reportId));
     localToast('success', 'Produto excluído.');
-    await Promise.all([loadProducts(), loadSupportReports()]);
+    await Promise.all([loadProducts(true), loadSupportReports()]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível excluir o produto.'); }
 }
 
@@ -3693,7 +3806,7 @@ async function inactivateSellerAndDeleteProducts(sellerId) {
     const snap = await getDocs(query(collection(lojaDb, 'produtos'), where('sellerId', '==', cleanSellerId)));
     await Promise.all(snap.docs.map((d) => deleteDoc(doc(lojaDb, 'produtos', d.id))));
     localToast('success', 'Vendedor inativado e anúncios excluídos.');
-    await Promise.all([loadProducts(), loadSupportReports(), loadSupportPanelData()]);
+    await Promise.all([loadProducts(true), loadSupportReports(), loadSupportPanelData()]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível inativar o vendedor.'); }
 }
 
@@ -3934,12 +4047,15 @@ async function handleAuthState(user) {
   }
 
   try {
-    ghubProfile = await findGuildaHubProfile(currentUser);
+    const profileCacheKey = getCurrentUserCacheKey();
+    const cachedProfile = lojaCacheGet('ghubProfile', LOJA_CACHE_TTL.PROFILE, profileCacheKey);
+    ghubProfile = cachedProfile || await findGuildaHubProfile(currentUser);
+    if (ghubProfile) lojaCacheSet('ghubProfile', ghubProfile, profileCacheKey);
     applySidebarUser(ghubProfile);
     renderSellerTop();
     await loadStoreStatus();
     await loadSupportAdminStatus();
-    await loadBuyerOrders();
+    await loadBuyerOrders({ reset: true });
     if (lojaStatus?.vendedor) {
       await Promise.all([loadSellerOrders(), loadSellerChats()]);
       renderSellerOrders();
