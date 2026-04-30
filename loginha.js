@@ -95,6 +95,7 @@ const els = {
   loading: qs('products-loading'),
   empty: qs('products-empty'),
   grid: qs('products-grid'),
+  productPagination: qs('products-pagination'),
 
   productModal: qs('product-modal'),
   productModalTitle: qs('modal-product-title'),
@@ -222,11 +223,20 @@ let selectedProductImageBase64 = '';
 let activeDraftChat = null;
 let activePaymentPoll = null;
 
+const PRODUCTS_PAGE_SIZE = 20;
+let productsPage = 1;
+
 const ORDERS_PAGE_SIZE = 20;
 let buyerOrdersPage = 1;
 let buyerOrdersHasNextPage = false;
 let buyerOrderPageCursors = [null];
 let buyerOrdersLoading = false;
+let allBuyerOrders = [];
+
+const SELLER_ORDERS_PAGE_SIZE = 10;
+let sellerOrdersPage = 1;
+let sellerOrdersHasNextPage = false;
+let allSellerOrders = [];
 
 const NOTIFICATION_BADGE_CLASS = 'ghub-notification-badge';
 
@@ -259,6 +269,138 @@ function resetBuyerOrdersPagination() {
   buyerOrdersPage = 1;
   buyerOrdersHasNextPage = false;
   buyerOrderPageCursors = [null];
+}
+
+function resetSellerOrdersPagination() {
+  sellerOrdersPage = 1;
+  sellerOrdersHasNextPage = false;
+}
+
+function getProductCreatedMs(product = {}) {
+  return Math.max(
+    Number(product.createdAtMs || 0),
+    Number(product.updatedAtMs || 0),
+    timestampToMs(product.createdAt),
+    timestampToMs(product.updatedAt)
+  );
+}
+
+function getProductSellerSales(product = {}) {
+  return Number(
+    product.sellerTotalVendasEntregues ??
+    product.vendedorTotalVendasEntregues ??
+    product.sellerSales ??
+    product.vendedorVendas ??
+    product.sellerTotalVendas ??
+    product.totalVendasSeller ??
+    product.totalVendas ??
+    product.totalVendasEntregues ??
+    0
+  ) || 0;
+}
+
+function getFavoriteStorageKey() {
+  const gid = String(ghubProfile?.gameId || currentUser?.uid || 'visitante').trim() || 'visitante';
+  return `ghub_loja_favorites_${gid}`;
+}
+
+function getFavoriteProductIds() {
+  try {
+    const raw = localStorage.getItem(getFavoriteStorageKey());
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveFavoriteProductIds(ids = []) {
+  try {
+    const clean = Array.from(new Set((ids || []).map((id) => String(id || '').trim()).filter(Boolean)));
+    localStorage.setItem(getFavoriteStorageKey(), JSON.stringify(clean));
+  } catch (_) {}
+}
+
+function isFavoriteProduct(productId) {
+  return getFavoriteProductIds().includes(String(productId || '').trim());
+}
+
+function toggleFavoriteProduct(productId) {
+  const id = String(productId || '').trim();
+  if (!id) return;
+  const current = getFavoriteProductIds();
+  const next = current.includes(id) ? current.filter((item) => item !== id) : [id, ...current];
+  saveFavoriteProductIds(next);
+  applyFilters();
+  const product = products.find((item) => String(item.id) === id);
+  if (product && els.productModal && !els.productModal.classList.contains('hidden')) renderProductModal(product);
+}
+
+function getProductRankScore(product = {}) {
+  const nowMs = Date.now();
+  const createdMs = getProductCreatedMs(product) || nowMs;
+  const ageDays = Math.max(0, (nowMs - createdMs) / 86400000);
+  const recencyScore = Math.max(0, 90 - ageDays) * 5;
+  const salesScore = Math.log1p(getProductSellerSales(product)) * 45 + Math.log1p(Number(product.totalVendas || product.totalVendasEntregues || 0)) * 20;
+  const manualBoost = Number(product.destaque === true) * 200 + Math.max(0, 999 - Number(product.ordem || 999)) * 0.1;
+  return recencyScore + salesScore + manualBoost;
+}
+
+function sortProductsForVitrine(list = []) {
+  return [...list].sort((a, b) => {
+    const favDiff = Number(isFavoriteProduct(b.id)) - Number(isFavoriteProduct(a.id));
+    if (favDiff) return favDiff;
+    const scoreDiff = getProductRankScore(b) - getProductRankScore(a);
+    if (Math.abs(scoreDiff) > 0.0001) return scoreDiff;
+    return (getProductCreatedMs(b) || 0) - (getProductCreatedMs(a) || 0) || String(a.titulo || '').localeCompare(String(b.titulo || ''));
+  });
+}
+
+function getPageSlice(list = [], page = 1, size = 20) {
+  const safePage = Math.max(1, Number(page || 1));
+  const start = (safePage - 1) * size;
+  return list.slice(start, start + size);
+}
+
+function upsertCachedProduct(product = {}) {
+  if (!product?.id) return;
+  const idx = products.findIndex((item) => String(item.id) === String(product.id));
+  if (idx >= 0) products[idx] = { ...products[idx], ...product };
+  else products.push(product);
+  lojaCacheSet('products', products, 'global');
+}
+
+async function fetchFreshProduct(productId) {
+  const cleanId = String(productId || '').trim();
+  if (!cleanId) throw new Error('product-not-found');
+  const snap = await getDoc(doc(lojaDb, 'produtos', cleanId));
+  if (!snap.exists()) throw new Error('product-not-found');
+  const fresh = normalizeProduct(snap);
+  upsertCachedProduct(fresh);
+  return fresh;
+}
+
+function getSellerFinanceSnapshot(seller = {}) {
+  const f = seller?.financeiro || {};
+  const saldoAtual = Number(f.saldoAtual ?? seller.saldoAtual ?? seller.saldo ?? 0) || 0;
+  const saldoPendente = Number(f.saldoPendente ?? seller.saldoPendente ?? 0) || 0;
+  const saldoEmSaque = Number(f.saldoEmSaque ?? seller.saldoEmSaque ?? seller.saquePendente ?? 0) || 0;
+  const totalSacado = Number(f.totalSacado ?? seller.totalSacado ?? 0) || 0;
+  const totalVendasEntregues = Number(f.totalVendasEntregues ?? seller.totalVendasEntregues ?? seller.totalVendas ?? 0) || 0;
+  return {
+    saldo: saldoAtual,
+    saldoAtual,
+    saldoPendente,
+    saldoEmSaque,
+    totalSacado,
+    totalVendasEntregues,
+    totalBrutoEntregue: Number(f.totalBrutoEntregue ?? 0) || 0,
+    totalLiquidoEntregue: Number(f.totalLiquidoEntregue ?? 0) || 0,
+    saldoTotalDisponivelAdmin: Math.max(0, saldoAtual + saldoPendente),
+    taxaPercentual: SELLER_FEE_PERCENT,
+    saqueMinimo: SELLER_WITHDRAW_MIN,
+    liberacaoDias: SELLER_RELEASE_DAYS
+  };
 }
 
 function getItemActivityMs(item = {}) {
@@ -757,7 +899,7 @@ function calculateSellerFinancials(orders = [], sellerData = {}) {
 
 async function syncSellerFinancialsToFirebase() {
   if (!lojaStatus?.vendedor || !ghubProfile?.gameId) return calculateSellerFinancials(sellerOrders, lojaStatus?.vendedor || {});
-  const finances = calculateSellerFinancials(sellerOrders, lojaStatus.vendedor);
+  const finances = getSellerFinanceSnapshot(lojaStatus.vendedor);
   const payload = {
     saldoAtual: finances.saldoAtual,
     saldoPendente: finances.saldoPendente,
@@ -787,6 +929,55 @@ async function syncSellerFinancialsToFirebase() {
     console.warn('Não foi possível salvar saldos do vendedor:', err);
   }
   return finances;
+}
+
+
+async function addDeliveredOrderToSellerFinance(order = {}) {
+  const sellerId = String(order.sellerId || ghubProfile?.gameId || '').trim();
+  if (!sellerId) return;
+  const gross = Number(order.total || order.precoUnitario || 0);
+  if (!Number.isFinite(gross) || gross <= 0) return;
+
+  const net = Math.max(0, gross * (1 - SELLER_FEE_RATE));
+  const current = getSellerFinanceSnapshot(lojaStatus?.vendedor || {});
+  const next = {
+    saldoAtual: current.saldoAtual,
+    saldoPendente: current.saldoPendente + net,
+    saldoEmSaque: current.saldoEmSaque,
+    totalSacado: current.totalSacado,
+    totalVendasEntregues: current.totalVendasEntregues + 1,
+    totalBrutoEntregue: current.totalBrutoEntregue + gross,
+    totalLiquidoEntregue: current.totalLiquidoEntregue + net,
+  };
+  const payload = {
+    saldoAtual: next.saldoAtual,
+    saldoPendente: next.saldoPendente,
+    saldoEmSaque: next.saldoEmSaque,
+    saquePendente: next.saldoEmSaque,
+    totalSacado: next.totalSacado,
+    totalVendas: next.totalVendasEntregues,
+    totalVendasEntregues: next.totalVendasEntregues,
+    financeiro: {
+      ...((lojaStatus?.vendedor && lojaStatus.vendedor.financeiro) || {}),
+      saldoAtual: next.saldoAtual,
+      saldoPendente: next.saldoPendente,
+      saldoEmSaque: next.saldoEmSaque,
+      totalSacado: next.totalSacado,
+      totalBrutoEntregue: next.totalBrutoEntregue,
+      totalLiquidoEntregue: next.totalLiquidoEntregue,
+      totalVendasEntregues: next.totalVendasEntregues,
+      taxaPercentual: SELLER_FEE_PERCENT,
+      saqueMinimo: SELLER_WITHDRAW_MIN,
+      liberacaoDias: SELLER_RELEASE_DAYS,
+      atualizadoEmMs: Date.now()
+    },
+    updatedAt: serverTimestamp()
+  };
+  await setDoc(doc(lojaDb, 'vendedor', sellerId), payload, { merge: true });
+  if (String(ghubProfile?.gameId || '') === sellerId && lojaStatus?.vendedor) {
+    lojaStatus.vendedor = { ...lojaStatus.vendedor, ...payload };
+    lojaCacheRemove('storeStatus', getCurrentUserCacheKey());
+  }
 }
 
 
@@ -1112,8 +1303,7 @@ async function loadProducts(force = false) {
     const snap = await getDocs(collection(lojaDb, 'produtos'));
     products = snap.docs
       .map(normalizeProduct)
-      .filter((product) => product.ativo !== false)
-      .sort((a, b) => Number(b.destaque) - Number(a.destaque) || (a.ordem || 999) - (b.ordem || 999) || a.titulo.localeCompare(b.titulo));
+      .filter((product) => product.ativo !== false);
     lojaCacheSet('products', products, 'global');
   } catch (err) {
     console.error('Erro ao carregar produtos da loja:', err?.code || err?.message || err, err);
@@ -1125,43 +1315,55 @@ async function loadProducts(force = false) {
   }
 }
 
-function applyFilters() {
+function applyFilters({ keepPage = false } = {}) {
   const search = String(els.search?.value || '').trim().toLowerCase();
   const category = String(els.category?.value || '').trim();
 
-  filteredProducts = products.filter((product) => {
+  filteredProducts = sortProductsForVitrine(products.filter((product) => {
     const matchesCategory = !category || product.categoriaId === category;
     const blob = `${product.titulo} ${product.descricao} ${product.categoriaNome} ${product.sellerName}`.toLowerCase();
     const matchesSearch = !search || blob.includes(search);
     return matchesCategory && matchesSearch;
-  });
+  }));
 
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PAGE_SIZE));
+  if (!keepPage || productsPage > totalPages) productsPage = 1;
   renderProducts();
 }
 
 function renderProducts() {
+  const total = filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(total / PRODUCTS_PAGE_SIZE));
+  const pageItems = getPageSlice(filteredProducts, productsPage, PRODUCTS_PAGE_SIZE);
+
   if (els.counter) {
-    const total = filteredProducts.length;
-    els.counter.textContent = total === 1 ? '1 produto encontrado' : `${total} produtos encontrados`;
+    els.counter.textContent = total === 1
+      ? `1 produto encontrado • Página ${productsPage}/${totalPages}`
+      : `${total} produtos encontrados • Página ${productsPage}/${totalPages}`;
   }
 
   if (loadingProducts) return;
 
-  els.empty?.classList.toggle('hidden', filteredProducts.length > 0);
+  els.empty?.classList.toggle('hidden', total > 0);
 
   if (!els.grid) return;
-  if (!filteredProducts.length) {
+  if (!total) {
     els.grid.innerHTML = '';
+    renderProductsPagination(totalPages, total);
     return;
   }
 
-  els.grid.innerHTML = filteredProducts.map((product) => {
+  els.grid.innerHTML = pageItems.map((product) => {
+    const favorite = isFavoriteProduct(product.id);
     const image = product.imagem
       ? `<img src="${escapeHtml(product.imagem)}" alt="${escapeHtml(product.titulo)}" class="h-full w-full object-cover">`
       : '<i data-lucide="package" class="h-8 w-8 sm:h-10 sm:w-10 text-gray-300"></i>';
 
     return `
-      <article class="group overflow-hidden rounded-2xl sm:rounded-3xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+      <article class="relative group overflow-hidden rounded-2xl sm:rounded-3xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+        <button type="button" data-toggle-favorite-product="${escapeHtml(product.id)}" class="absolute right-2 top-2 z-10 rounded-full bg-white/95 p-2 text-xs font-black ${favorite ? 'text-amber-600 ring-amber-200' : 'text-gray-400 ring-gray-200'} shadow-sm ring-1 hover:bg-white" title="${favorite ? 'Remover dos favoritos' : 'Favoritar produto'}">
+          <i data-lucide="${favorite ? 'star' : 'star'}" class="h-4 w-4 ${favorite ? 'fill-current' : ''}"></i>
+        </button>
         <button type="button" data-open-product="${escapeHtml(product.id)}" class="block w-full text-left">
           <div class="relative h-28 sm:h-44 bg-gray-50 flex items-center justify-center overflow-hidden">
             ${image}
@@ -1170,6 +1372,7 @@ function renderProducts() {
             <h4 class="line-clamp-2 min-h-[34px] sm:min-h-0 text-xs sm:text-base font-black text-gray-900">${escapeHtml(product.titulo)}</h4>
             <div class="mt-2 flex items-center justify-between gap-2">
               <span class="min-w-0 truncate rounded-full bg-gray-50 px-2 py-0.5 text-[10px] sm:text-[11px] font-black text-gray-500 ring-1 ring-gray-200">${escapeHtml(product.categoriaNome)}</span>
+              <span class="shrink-0 text-xs sm:text-sm font-black text-emerald-700">${moneyBRL(product.preco)}</span>
             </div>
           </div>
         </button>
@@ -1180,8 +1383,41 @@ function renderProducts() {
   els.grid.querySelectorAll('[data-open-product]').forEach((btn) => {
     btn.addEventListener('click', () => openProductModal(btn.getAttribute('data-open-product') || ''));
   });
+  els.grid.querySelectorAll('[data-toggle-favorite-product]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleFavoriteProduct(btn.getAttribute('data-toggle-favorite-product') || '');
+    });
+  });
 
+  renderProductsPagination(totalPages, total);
   initIcons();
+}
+
+function renderProductsPagination(totalPages, total) {
+  if (!els.productPagination) return;
+  if (!total || totalPages <= 1) {
+    els.productPagination.classList.add('hidden');
+    els.productPagination.innerHTML = '';
+    return;
+  }
+
+  els.productPagination.className = 'mt-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm';
+  els.productPagination.innerHTML = `
+    <div class="flex items-center justify-between gap-3">
+      <button type="button" data-products-page="prev" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40" ${productsPage <= 1 ? 'disabled' : ''}>Voltar</button>
+      <span class="text-xs font-black text-gray-500">Página atual: ${productsPage}/${totalPages}</span>
+      <button type="button" data-products-page="next" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40" ${productsPage >= totalPages ? 'disabled' : ''}>Próxima</button>
+    </div>`;
+
+  els.productPagination.querySelectorAll('[data-products-page]').forEach((btn) => btn.addEventListener('click', () => {
+    const dir = btn.getAttribute('data-products-page') || '';
+    if (dir === 'prev' && productsPage > 1) productsPage -= 1;
+    if (dir === 'next' && productsPage < totalPages) productsPage += 1;
+    renderProducts();
+    els.grid?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
 }
 
 async function getSellerPublicStats(sellerId) {
@@ -1197,11 +1433,11 @@ async function getSellerPublicStats(sellerId) {
   }
 }
 
-async function openProductModal(productId) {
-  const product = products.find((item) => String(item.id) === String(productId));
+function renderProductModal(product) {
   if (!product || !els.productModal || !els.productModalBody || !els.productModalTitle) return;
 
   const isOwnProduct = !!ghubProfile?.gameId && String(product.sellerId || '') === String(ghubProfile.gameId);
+  const favorite = isFavoriteProduct(product.id);
   els.productModalTitle.textContent = product.titulo;
 
   const image = product.imagem
@@ -1230,28 +1466,52 @@ async function openProductModal(productId) {
         <p id="modal-seller-rating" class="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black text-amber-700 ring-1 ring-amber-200">Nota: carregando...</p>
       </div>
       <div class="mt-3 flex flex-wrap gap-2">
+        <button type="button" data-toggle-favorite-product="${escapeHtml(product.id)}" class="rounded-xl border ${favorite ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-gray-200 bg-white text-gray-700'} px-3 py-2 text-xs font-black hover:bg-gray-50">
+          ${favorite ? 'Remover dos favoritos' : 'Favoritar para comprar depois'}
+        </button>
         <button type="button" data-report-product="${escapeHtml(product.id)}" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 hover:bg-amber-100">Denunciar produto</button>
       </div>
       <p class="mt-4 text-sm leading-relaxed text-gray-600">${escapeHtml(product.descricao || 'Produto disponível na loja.')}</p>
       <p class="mt-5 text-3xl font-black text-emerald-700">${moneyBRL(product.preco)}</p>
+      <p class="mt-1 text-xs font-bold text-gray-400">O valor é conferido novamente antes de gerar o Pix.</p>
     </div>
     ${buyButtonHtml}`;
 
-  els.productModal.classList.remove('hidden');
-  els.productModal.classList.add('flex');
   els.productModalBody.querySelector('[data-buy-product]')?.addEventListener('click', () => createOrder(product.id));
   els.productModalBody.querySelector('[data-report-product]')?.addEventListener('click', () => reportProduct(product.id));
+  els.productModalBody.querySelector('[data-toggle-favorite-product]')?.addEventListener('click', () => toggleFavoriteProduct(product.id));
+  initIcons();
+}
+
+async function openProductModal(productId) {
+  if (!els.productModal || !els.productModalBody || !els.productModalTitle) return;
+  const cachedProduct = products.find((item) => String(item.id) === String(productId));
+
+  els.productModalTitle.textContent = cachedProduct?.titulo || 'Produto';
+  els.productModalBody.innerHTML = '<div class="rounded-3xl border border-gray-100 bg-gray-50 p-6 text-center"><i data-lucide="loader-2" class="mx-auto mb-3 h-7 w-7 animate-spin text-emerald-500"></i><p class="text-sm font-bold text-gray-500">Carregando valor atual do produto...</p></div>';
+  els.productModal.classList.remove('hidden');
+  els.productModal.classList.add('flex');
   initIcons();
 
-  const stats = await getSellerPublicStats(product.sellerId);
-  const salesEl = qs('modal-seller-sales');
-  if (salesEl) {
-    const total = Number(stats.totalVendasEntregues || 0);
-    salesEl.textContent = total === 1 ? 'Vendedor com 1 venda entregue' : `Vendedor com ${total} vendas entregues`;
-  }
+  try {
+    const product = await fetchFreshProduct(productId);
+    if (product.ativo === false) throw new Error('product-inactive');
+    renderProductModal(product);
 
-  const rating = await getSellerRatingStats(product.sellerId);
-  renderSellerRatingBlock(rating);
+    const stats = await getSellerPublicStats(product.sellerId);
+    const salesEl = qs('modal-seller-sales');
+    if (salesEl) {
+      const total = Number(stats.totalVendasEntregues || product.sellerTotalVendasEntregues || product.totalVendas || 0);
+      salesEl.textContent = total === 1 ? 'Vendedor com 1 venda entregue' : `Vendedor com ${total} vendas entregues`;
+    }
+
+    const rating = await getSellerRatingStats(product.sellerId);
+    renderSellerRatingBlock(rating);
+  } catch (err) {
+    console.error('Erro ao abrir produto atual:', err);
+    els.productModalBody.innerHTML = '<div class="rounded-3xl border border-red-100 bg-red-50 p-5 text-center"><p class="font-black text-red-800">Não foi possível carregar o valor atual desse produto.</p><p class="mt-1 text-sm font-semibold text-red-700">Tente recarregar a loginha antes de comprar.</p></div>';
+    localToast('error', err?.message === 'product-not-found' ? 'Produto não encontrado.' : 'Não foi possível carregar o valor atual do produto.');
+  }
 }
 
 async function getSellerRatingStats(sellerId) {
@@ -1693,21 +1953,30 @@ function getLocalBuyerPayloadForPix() {
 }
 
 async function createOrder(productId) {
-  const product = products.find((item) => String(item.id) === String(productId));
-  if (!product) return;
   if (!currentUser) { localToast('error', 'Entre na GuildaHub para comprar.'); return; }
   if (!ghubProfile?.gameId) { localToast('error', 'Conclua seu perfil da GuildaHub antes de comprar.'); return; }
-  if (!product.disponivel) { localToast('error', 'Esse produto está esgotado.'); return; }
-  if (String(product.sellerId || '') && String(product.sellerId) === String(ghubProfile.gameId)) { localToast('error', 'Você não pode comprar seu próprio produto.'); return; }
 
   const btn = els.productModalBody?.querySelector('[data-buy-product]');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i> Gerando Pix...';
+    btn.innerHTML = '<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i> Conferindo valor atual...';
     initIcons();
   }
 
+  let product = null;
   try {
+    product = await fetchFreshProduct(productId);
+    renderProductModal(product);
+    if (!product.disponivel) throw new Error('out-of-stock');
+    if (String(product.sellerId || '') && String(product.sellerId) === String(ghubProfile.gameId)) throw new Error('self-purchase');
+
+    const freshBtn = els.productModalBody?.querySelector('[data-buy-product]');
+    if (freshBtn) {
+      freshBtn.disabled = true;
+      freshBtn.innerHTML = '<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i> Gerando Pix...';
+      initIcons();
+    }
+
     const buyer = getLocalBuyerPayloadForPix();
     if (!buyer?.gameId) throw new Error('buyer-profile-local-required');
 
@@ -1756,9 +2025,10 @@ async function createOrder(productId) {
       : '';
     localToast('error', messageMap[rawMessage] || backendMessage || rawMessage || 'Não foi possível gerar o pagamento Pix.');
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = 'Comprar agora';
+    const finalBtn = els.productModalBody?.querySelector('[data-buy-product]');
+    if (finalBtn) {
+      finalBtn.disabled = false;
+      finalBtn.innerHTML = 'Comprar agora';
     }
   }
 }
@@ -1915,6 +2185,40 @@ async function checkPixPaymentStatus(checkoutId, manual = false) {
   }
 }
 
+async function openSellerPanel() {
+  setMobileCollapsibleState(els.sellerForm, els.toggleSellerFormBtn, false, 'Fechar cadastro de produto', 'Abrir/editar cadastro de produto');
+  setMobileCollapsibleState(els.sellerProductsCard, els.toggleSellerProductsBtn, false, 'Fechar meus produtos', 'Abrir/editar meus produtos');
+  if (!lojaStatus?.vendedor) {
+    const seller = await createOrUpdateSellerProfile();
+    if (!seller) return;
+  }
+
+  openSellerModal();
+  renderSellerProfileCard();
+  await reloadSellerPanelData();
+  markSellerOrdersSeenIfOpen();
+  updateNotificationBadges();
+}
+
+async function reloadSellerPanelData() {
+  if (!lojaStatus?.vendedor || loadingSellerPanel) return;
+  loadingSellerPanel = true;
+
+  if (els.sellerProductsList) els.sellerProductsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando produtos...</div>';
+  if (els.sellerOrdersList) els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando pedidos...</div>';
+  if (els.sellerSupportChatsList) els.sellerSupportChatsList.innerHTML = '<div class="rounded-2xl border border-sky-100 bg-white p-4 text-sm font-semibold text-sky-700 text-center">Carregando chats de suporte...</div>';
+
+  try {
+    await Promise.all([loadSellerProducts(), loadSellerOrders({ reset: true }), loadSellerChats()]);
+    renderSellerOrders();
+    renderSellerSupportChats();
+    markSellerOrdersSeenIfOpen();
+    updateNotificationBadges();
+  } finally {
+    loadingSellerPanel = false;
+  }
+}
+
 function openSellerModal()
  {
   els.sellerModal?.classList.remove('hidden');
@@ -1932,7 +2236,7 @@ function renderSellerProfileCard() {
   if (!els.sellerProfileCard) return;
   if (!seller) { els.sellerProfileCard.innerHTML = '<p class="text-sm font-bold text-red-700">Perfil de vendedor não encontrado.</p>'; return; }
   const photo = seller.foto || ghubProfile?.foto || '';
-  const finances = calculateSellerFinancials(sellerOrders, seller);
+  const finances = getSellerFinanceSnapshot(seller);
   const withdrawAvailable = isSupportAdmin ? finances.saldoTotalDisponivelAdmin : finances.saldoAtual;
   const canWithdraw = isSupportAdmin ? withdrawAvailable > 0 : withdrawAvailable >= SELLER_WITHDRAW_MIN;
   const defaultWithdrawValue = canWithdraw ? Number(withdrawAvailable || 0).toFixed(2) : '';
@@ -1983,15 +2287,41 @@ async function loadSellerProducts(force = false) {
   renderSellerProducts();
 }
 
-async function loadSellerOrders() {
+async function loadSellerOrders(options = {}) {
+  const { reset = false, page = null, force = false } = options || {};
   const sellerId = ghubProfile?.gameId;
-  if (!sellerId) return;
+  if (!sellerId) {
+    allSellerOrders = [];
+    sellerOrders = [];
+    resetSellerOrdersPagination();
+    renderSellerOrders();
+    return;
+  }
+  if (reset) resetSellerOrdersPagination();
+
+  const targetPage = Math.max(1, Number(page || sellerOrdersPage || 1));
+  const cacheKey = String(sellerId);
+
   try {
-    const snap = await getDocs(query(collection(lojaDb, 'pedidos'), where('sellerId', '==', String(sellerId))));
-    sellerOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
-    await syncSellerFinancialsToFirebase();
+    const cached = !force ? lojaCacheGet('sellerOrders', LOJA_CACHE_TTL.SELLER_ORDERS, cacheKey) : null;
+    if (Array.isArray(cached)) {
+      allSellerOrders = cached;
+    } else {
+      // Sem orderBy para evitar erro de índice. A ordenação acontece no front e fica em cache.
+      const snap = await getDocs(query(collection(lojaDb, 'pedidos'), where('sellerId', '==', String(sellerId))));
+      allSellerOrders = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => Number(b?.createdAtMs || 0) - Number(a?.createdAtMs || 0));
+      lojaCacheSet('sellerOrders', allSellerOrders, cacheKey);
+    }
+
+    const totalPages = Math.max(1, Math.ceil(allSellerOrders.length / SELLER_ORDERS_PAGE_SIZE));
+    sellerOrdersPage = Math.min(targetPage, totalPages);
+    sellerOrdersHasNextPage = sellerOrdersPage < totalPages;
+    sellerOrders = getPageSlice(allSellerOrders, sellerOrdersPage, SELLER_ORDERS_PAGE_SIZE);
   } catch (err) {
     console.error('Erro ao carregar pedidos do vendedor:', err?.code || err?.message || err, err);
+    allSellerOrders = [];
     sellerOrders = [];
     localToast('error', `Não foi possível carregar seus pedidos. Erro: ${err?.code || err?.message || 'verifique as regras/índices'}`);
   }
@@ -2126,10 +2456,20 @@ function renderSellerSupportChats() {
 }
 
 function renderSellerOrders() {
-  if (els.sellerOrdersCounter) els.sellerOrdersCounter.textContent = sellerOrders.length === 1 ? '1 pedido recebido' : `${sellerOrders.length} pedidos recebidos`;
+  const totalOrders = allSellerOrders.length || sellerOrders.length;
+  const totalPages = Math.max(1, Math.ceil(totalOrders / SELLER_ORDERS_PAGE_SIZE));
+  if (els.sellerOrdersCounter) {
+    els.sellerOrdersCounter.textContent = totalOrders === 1
+      ? `1 pedido recebido • Página ${sellerOrdersPage}/${totalPages}`
+      : `${totalOrders} pedidos recebidos • Página ${sellerOrdersPage}/${totalPages}`;
+  }
   if (!els.sellerOrdersList) return;
-  if (!sellerOrders.length) { els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhum pedido recebido ainda.</div>'; return; }
-  els.sellerOrdersList.innerHTML = sellerOrders.map((order) => {
+  if (!sellerOrders.length) {
+    els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Nenhum pedido recebido ainda.</div>';
+    return;
+  }
+
+  const ordersHtml = sellerOrders.map((order) => {
     const status = String(order.status || 'pendente').toLowerCase();
     const refundRequested = status === 'reembolso_solicitado' || order.reembolsoSolicitado === true;
     const locked = isFinalOrderStatus(status) || order.finalizado === true || refundRequested;
@@ -2137,221 +2477,36 @@ function renderSellerOrders() {
     const sellerChat = getSellerChatForOrder(order.id);
     const chatExpired = sellerChat && isChatExpired(sellerChat);
     const canOpenChat = sellerChat && !chatExpired && !isChatClosed(sellerChat);
-    const chatHtml = sellerChat ? `<div class="mt-3 rounded-xl border ${canOpenChat ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'} p-3"><p class="text-[10px] font-black uppercase tracking-wider ${canOpenChat ? 'text-emerald-800' : 'text-gray-600'}">Chat temporário do pedido</p><p class="mt-1 text-xs font-semibold ${canOpenChat ? 'text-emerald-900' : 'text-gray-700'}">Status: ${escapeHtml(chatExpired ? 'expirado' : (sellerChat.status || 'ativo'))} • ${escapeHtml(getChatRemainingLabel(sellerChat))}</p>${canOpenChat ? `<button type="button" data-open-seller-chat="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Abrir chat com comprador</button>` : ''}</div>` : `<div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-amber-800">Chat ainda não iniciado</p><p class="mt-1 text-xs font-semibold text-amber-900">O chat será criado quando comprador ou vendedor enviar a primeira mensagem.</p><button type="button" data-open-seller-chat="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Enviar mensagem</button></div>`;
+    const chatHtml = sellerChat
+      ? `<div class="mt-3 rounded-xl border ${canOpenChat ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'} p-3"><p class="text-[10px] font-black uppercase tracking-wider ${canOpenChat ? 'text-emerald-800' : 'text-gray-600'}">Chat temporário do pedido</p><p class="mt-1 text-xs font-semibold ${canOpenChat ? 'text-emerald-900' : 'text-gray-700'}">Status: ${escapeHtml(chatExpired ? 'expirado' : (sellerChat.status || 'ativo'))} • ${escapeHtml(getChatRemainingLabel(sellerChat))}</p>${canOpenChat ? `<button type="button" data-open-seller-chat="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Abrir chat com comprador</button>` : ''}</div>`
+      : `<div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p class="text-[10px] font-black uppercase tracking-wider text-amber-800">Chat ainda não iniciado</p><p class="mt-1 text-xs font-semibold text-amber-900">O chat será criado quando comprador ou vendedor enviar a primeira mensagem.</p><button type="button" data-open-seller-chat="${escapeHtml(order.id)}" class="mt-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Enviar mensagem</button></div>`;
     return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-3"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(order.produtoTitulo || 'Produto')}</p><p class="mt-1 text-xs font-bold text-gray-400">Pedido: ${escapeHtml(order.id)}</p><p class="mt-1 text-xs font-semibold text-gray-500">Comprador: ${escapeHtml(order.buyerName || order.buyerNick || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">ID comprador: ${escapeHtml(order.buyerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Data: ${escapeHtml(created)}</p></div><span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span></div>${chatHtml}<div class="mt-3 flex items-center justify-between gap-3"><p class="text-base font-black text-emerald-700">${moneyBRL(order.total || order.precoUnitario || 0)}</p><div class="flex flex-wrap justify-end gap-2">${locked ? `<span class="rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-500">${refundRequested ? 'Reembolso solicitado' : 'Finalizado'}</span>` : `<button type="button" data-order-action="entregue" data-order-id="${escapeHtml(order.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Entregue</button><button type="button" data-order-action="reembolso_solicitado" data-order-id="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Solicitar reembolso</button>`}</div></div></div>`;
   }).join('');
+
+  const paginationHtml = totalPages > 1 ? `
+    <div class="mt-3 rounded-2xl border border-gray-100 bg-white p-3">
+      <div class="flex items-center justify-between gap-3">
+        <button type="button" data-seller-orders-page="prev" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40" ${sellerOrdersPage <= 1 ? 'disabled' : ''}>Voltar</button>
+        <span class="text-xs font-black text-gray-500">Página atual: ${sellerOrdersPage}/${totalPages}</span>
+        <button type="button" data-seller-orders-page="next" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40" ${sellerOrdersHasNextPage ? '' : 'disabled'}>Próxima</button>
+      </div>
+    </div>` : '';
+
+  els.sellerOrdersList.innerHTML = ordersHtml + paginationHtml;
   els.sellerOrdersList.querySelectorAll('[data-order-action]').forEach((btn) => btn.addEventListener('click', () => updateOrderStatus(btn.getAttribute('data-order-id') || '', btn.getAttribute('data-order-action') || '')));
   els.sellerOrdersList.querySelectorAll('[data-open-seller-chat]').forEach((btn) => btn.addEventListener('click', () => openProblemModal(btn.getAttribute('data-open-seller-chat') || '', CHAT_TYPE_SELLER)));
+  els.sellerOrdersList.querySelectorAll('[data-seller-orders-page]').forEach((btn) => btn.addEventListener('click', () => {
+    const dir = btn.getAttribute('data-seller-orders-page') || '';
+    if (dir === 'prev' && sellerOrdersPage > 1) loadSellerOrders({ page: sellerOrdersPage - 1 });
+    if (dir === 'next' && sellerOrdersHasNextPage) loadSellerOrders({ page: sellerOrdersPage + 1 });
+  }));
   initIcons();
   updateNotificationBadges();
 }
 
-async function openSellerPanel() {
-  setMobileCollapsibleState(els.sellerForm, els.toggleSellerFormBtn, false, 'Fechar cadastro de produto', 'Abrir/editar cadastro de produto');
-  setMobileCollapsibleState(els.sellerProductsCard, els.toggleSellerProductsBtn, false, 'Fechar meus produtos', 'Abrir/editar meus produtos');
-  if (!lojaStatus?.vendedor) {
-    const seller = await createOrUpdateSellerProfile();
-    if (!seller) return;
-  }
-
-  openSellerModal();
-  renderSellerProfileCard();
-  await reloadSellerPanelData();
-  markSellerOrdersSeenIfOpen();
-  updateNotificationBadges();
-}
-
-async function reloadSellerPanelData() {
-  if (!lojaStatus?.vendedor || loadingSellerPanel) return;
-  loadingSellerPanel = true;
-
-  if (els.sellerProductsList) els.sellerProductsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando produtos...</div>';
-  if (els.sellerOrdersList) els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando pedidos...</div>';
-  if (els.sellerSupportChatsList) els.sellerSupportChatsList.innerHTML = '<div class="rounded-2xl border border-sky-100 bg-white p-4 text-sm font-semibold text-sky-700 text-center">Carregando chats de suporte...</div>';
-
-  try {
-    await Promise.all([loadSellerProducts(), loadSellerOrders(), loadSellerChats()]);
-    renderSellerOrders();
-    renderSellerSupportChats();
-    markSellerOrdersSeenIfOpen();
-    updateNotificationBadges();
-  } finally {
-    loadingSellerPanel = false;
-  }
-}
-
-async function handleSellerProductSubmit(event) {
-  event.preventDefault();
-
-  if (!lojaStatus?.vendedor || !ghubProfile?.gameId) {
-    localToast('error', 'Crie seu perfil de vendedor antes de cadastrar produtos.');
-    return;
-  }
-
-  if (lojaStatus.vendedor.ativo === false || String(lojaStatus.vendedor.status || '').toLowerCase() === 'inativo') {
-    localToast('error', 'Sua conta de vendedor está inativa e não pode criar novos anúncios.');
-    return;
-  }
-
-  const title = String(els.sellerTitle?.value || '').trim();
-  const price = Number(els.sellerPrice?.value || 0);
-  const stock = Math.max(0, Math.floor(Number(els.sellerStock?.value || 0)));
-  const categoryId = String(els.sellerCategory?.value || '').trim();
-  const categoryName = getCategoryName(categoryId);
-  const imageFromUrl = String(els.sellerImage?.value || '').trim();
-  const image = selectedProductImageBase64 || imageFromUrl;
-  const rawDescription = String(els.sellerDescription?.value || '').trim();
-  if (rawDescription.length > 150) { localToast('error', 'A descrição do produto pode ter no máximo 150 caracteres.'); els.sellerDescription?.focus(); return; }
-  const description = rawDescription;
-  const ativo = !!els.sellerActive?.checked;
-  const destaque = !!els.sellerFeatured?.checked;
-
-  if (!title) {
-    localToast('error', 'Digite o nome do produto.');
-    return;
-  }
-
-  if (!Number.isFinite(price) || price < 0) {
-    localToast('error', 'Digite um preço válido.');
-    return;
-  }
-
-  if (!categoryId) {
-    localToast('error', 'Selecione uma categoria.');
-    return;
-  }
-
-  setButtonLoading(els.saveSellerProductBtn, true, editingProductId ? 'Salvar alterações' : 'Cadastrar produto');
-
-  try {
-    const seller = lojaStatus.vendedor;
-    const basePayload = {
-      sellerId: ghubProfile.gameId,
-      sellerName: seller.nome || seller.nick || ghubProfile.nick || 'Vendedor',
-      sellerPhoto: seller.foto || ghubProfile.foto || '',
-      vendedorId: ghubProfile.gameId,
-      vendedorNome: seller.nome || seller.nick || ghubProfile.nick || 'Vendedor',
-      vendedorFoto: seller.foto || ghubProfile.foto || '',
-
-      titulo: title,
-      descricao: description,
-      preco: price,
-      moeda: 'BRL',
-      imagem: image,
-      imagens: image ? [image] : [],
-      categoriaId: categoryId,
-      categoriaNome: categoryName,
-      tipoProduto: 'digital',
-      entregaTipo: 'manual',
-      estoqueAtivo: true,
-      estoqueQuantidade: stock,
-      ativo,
-      destaque,
-      updatedAt: serverTimestamp()
-    };
-
-    if (editingProductId) {
-      const existing = sellerProducts.find((item) => String(item.id) === String(editingProductId));
-      if (existing && String(existing.sellerId) !== String(ghubProfile.gameId)) {
-        throw new Error('Produto não pertence ao vendedor.');
-      }
-
-      await setDoc(doc(lojaDb, 'produtos', editingProductId), basePayload, { merge: true });
-      localToast('success', 'Produto atualizado.');
-    } else {
-      const payload = {
-        ...basePayload,
-        visualizacoes: 0,
-        totalVendas: 0,
-        createdAt: serverTimestamp()
-      };
-      const productRef = await addDoc(collection(lojaDb, 'produtos'), payload);
-      await setDoc(productRef, { id: productRef.id }, { merge: true });
-
-      await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), {
-        totalProdutos: sellerProducts.length + 1,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      localToast('success', 'Produto cadastrado na loja.');
-    }
-
-    resetSellerProductForm();
-    await Promise.all([loadProducts(true), loadSellerProducts(true)]);
-  } catch (err) {
-    console.error(err);
-    localToast('error', editingProductId ? 'Não foi possível atualizar o produto.' : 'Não foi possível cadastrar o produto. Confira se as regras do Firebase permitem escrita.');
-  } finally {
-    setButtonLoading(els.saveSellerProductBtn, false, editingProductId ? 'Salvar alterações' : 'Cadastrar produto');
-  }
-}
-
-async function toggleSellerProduct(productId, nextActive) {
-  if (!productId || !ghubProfile?.gameId) return;
-
-  try {
-    const product = sellerProducts.find((item) => String(item.id) === String(productId));
-    if (product && String(product.sellerId) !== String(ghubProfile.gameId)) {
-      localToast('error', 'Esse produto não pertence ao seu vendedor.');
-      return;
-    }
-
-    await setDoc(doc(lojaDb, 'produtos', productId), {
-      ativo: !!nextActive,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-
-    localToast('success', nextActive ? 'Produto ativado.' : 'Produto pausado.');
-    await Promise.all([loadProducts(true), loadSellerProducts(true)]);
-  } catch (err) {
-    console.error(err);
-    localToast('error', 'Não foi possível atualizar o produto.');
-  }
-}
-
-async function deleteSellerProduct(productId) {
-  if (!productId || !ghubProfile?.gameId) return;
-
-  const product = sellerProducts.find((item) => String(item.id) === String(productId));
-  if (!product) {
-    localToast('error', 'Produto não encontrado no seu painel.');
-    return;
-  }
-
-  if (String(product.sellerId || '') !== String(ghubProfile.gameId)) {
-    localToast('error', 'Esse produto não pertence ao seu vendedor.');
-    return;
-  }
-
-  const confirmed = await confirmTypedDelete({
-    title: 'Excluir produto',
-    message: `Essa ação vai remover definitivamente o produto "${product.titulo || product.id}" da loja. Isso não apaga pedidos já existentes.`
-  });
-  if (!confirmed) return;
-
-  try {
-    await deleteDoc(doc(lojaDb, 'produtos', productId));
-
-    if (editingProductId && String(editingProductId) === String(productId)) {
-      resetSellerProductForm();
-    }
-
-    await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), {
-      totalProdutos: Math.max(0, sellerProducts.length - 1),
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-
-    localToast('success', 'Produto excluído.');
-    await Promise.all([loadProducts(true), loadSellerProducts(true)]);
-  } catch (err) {
-    console.error(err);
-    localToast('error', 'Não foi possível excluir o produto.');
-  }
-}
-
 async function updateOrderStatus(orderId, action) {
   if (!orderId || !action) return;
-  const order = sellerOrders.find((item) => String(item.id) === String(orderId));
+  const order = sellerOrders.find((item) => String(item.id) === String(orderId)) || allSellerOrders.find((item) => String(item.id) === String(orderId));
   if (!order) return;
   if (String(order.sellerId) !== String(ghubProfile?.gameId || '')) { localToast('error', 'Esse pedido não pertence ao seu vendedor.'); return; }
   const currentStatus = String(order.status || '').toLowerCase();
@@ -2392,7 +2547,9 @@ async function updateOrderStatus(orderId, action) {
       }, { merge: true });
 
       localToast('success', 'Solicitação de reembolso enviada para o suporte.');
-      await Promise.all([loadSellerOrders(), loadBuyerOrders(), isSupportAdmin ? loadSupportRefundRequests() : Promise.resolve()]);
+      lojaCacheRemove('sellerOrders', String(ghubProfile?.gameId || ''));
+      lojaCacheRemove('buyerOrders', String(order.buyerId || ''));
+      await Promise.all([loadSellerOrders({ force: true }), loadBuyerOrders({ force: true }), isSupportAdmin ? loadSupportRefundRequests() : Promise.resolve()]);
     } catch (err) {
       console.error(err);
       localToast('error', 'Não foi possível solicitar o reembolso.');
@@ -2419,19 +2576,25 @@ async function updateOrderStatus(orderId, action) {
   }
   try {
     await setDoc(doc(lojaDb, 'pedidos', orderId), updates, { merge: true });
+    if (action === 'entregue') {
+      await addDeliveredOrderToSellerFinance(order);
+    }
     if (action === 'entregue' && order.produtoId) {
       const productRef = doc(lojaDb, 'produtos', String(order.produtoId));
       const currentProduct = sellerProducts.find((p) => String(p.id) === String(order.produtoId)) || products.find((p) => String(p.id) === String(order.produtoId));
-      await setDoc(productRef, { totalVendas: Number(currentProduct?.totalVendas || 0) + 1, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(productRef, { totalVendas: Number(currentProduct?.totalVendas || 0) + 1, updatedAt: serverTimestamp(), updatedAtMs: Date.now() }, { merge: true });
     }
     localToast('success', action === 'reembolsado' ? 'Pedido marcado como reembolsado.' : 'Pedido marcado como entregue.');
-    await Promise.all([loadSellerOrders(), loadProducts(true), loadSellerProducts(true), loadBuyerOrders()]);
+    lojaCacheRemove('sellerOrders', String(ghubProfile?.gameId || ''));
+    lojaCacheRemove('buyerOrders', String(order.buyerId || ''));
+    lojaCacheRemove('products', 'global');
+    await Promise.all([loadSellerOrders({ force: true }), loadProducts(true), loadSellerProducts(true), loadBuyerOrders({ force: true })]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar o pedido.'); }
 }
 
 async function requestSellerWithdraw() {
   if (!lojaStatus?.vendedor || !ghubProfile?.gameId) return;
-  const finances = calculateSellerFinancials(sellerOrders, lojaStatus.vendedor);
+  const finances = getSellerFinanceSnapshot(lojaStatus.vendedor);
   const withdrawAvailable = isSupportAdmin ? finances.saldoTotalDisponivelAdmin : finances.saldoAtual;
   const pix = String(qs('seller-withdraw-pix')?.value || '').trim();
   const amountRaw = String(qs('seller-withdraw-amount')?.value || '').replace(',', '.');
@@ -2470,7 +2633,8 @@ async function requestSellerWithdraw() {
     }, { merge: true });
     lojaStatus.vendedor = { ...lojaStatus.vendedor, saquePendente: nextPending, saldoEmSaque: nextPending, ultimoPixSaque: pix, financeiro: updatedFinance };
     localToast('success', 'Solicitação de saque enviada.');
-    await loadSellerOrders();
+    renderSellerProfileCard();
+    await loadSellerOrders({ force: true });
   } catch (err) { console.error(err); localToast('error', 'Não foi possível solicitar o saque. Confira as regras do Firebase.'); }
 }
 
@@ -2513,7 +2677,7 @@ async function deleteSellerAccountAndProducts(sellerId, { bySupport = false } = 
 
 async function deleteOwnSellerAccount() {
   if (!lojaStatus?.vendedor || !ghubProfile?.gameId) return;
-  const finances = calculateSellerFinancials(sellerOrders, lojaStatus.vendedor);
+  const finances = getSellerFinanceSnapshot(lojaStatus.vendedor);
   const confirmed = await confirmTypedDelete({
     title: 'Excluir conta de vendedor',
     message: `Essa ação é irreversível. Todos os produtos, pedidos vinculados, chats abertos e qualquer saldo atual, pendente ou em saque serão perdidos. Saldo atual: ${moneyBRL(finances.saldoAtual)}. Saldo pendente: ${moneyBRL(finances.saldoPendente)}. Em saque: ${moneyBRL(finances.saldoEmSaque)}.`
@@ -2524,6 +2688,7 @@ async function deleteOwnSellerAccount() {
     lojaStatus.vendedor = null;
     sellerProducts = [];
     sellerOrders = [];
+    allSellerOrders = [];
     sellerChats = [];
     supportWithdrawals = [];
     closeSellerModal();
@@ -2923,31 +3088,46 @@ async function escalateActiveChatToSupport
 
 async function loadBuyerOrders(options = {}) {
   const { reset = false, page = null, force = false } = options || {};
-  if (!currentUser || !ghubProfile?.gameId) { buyerOrders = []; resetBuyerOrdersPagination(); renderBuyerOrders(); return; }
+  if (!currentUser || !ghubProfile?.gameId) {
+    allBuyerOrders = [];
+    buyerOrders = [];
+    resetBuyerOrdersPagination();
+    renderBuyerOrders();
+    return;
+  }
   if (buyerOrdersLoading) return;
   buyerOrdersLoading = true;
   if (reset) resetBuyerOrdersPagination();
+
   const targetPage = Math.max(1, Number(page || buyerOrdersPage || 1));
+  const cacheKey = String(ghubProfile.gameId);
   if (els.buyerOrdersList) els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando compras...</div>';
+
   try {
-    const cursor = buyerOrderPageCursors[targetPage - 1] || null;
-    const base = [where('buyerId', '==', String(ghubProfile.gameId)), orderBy('createdAtMs', 'desc')];
-    const orderQuery = cursor
-      ? query(collection(lojaDb, 'pedidos'), ...base, startAfter(cursor), limit(ORDERS_PAGE_SIZE + 1))
-      : query(collection(lojaDb, 'pedidos'), ...base, limit(ORDERS_PAGE_SIZE + 1));
-    const [ordersSnap] = await Promise.all([
-      getDocs(orderQuery),
-      loadBuyerProblems(),
-      loadBuyerRatings()
-    ]);
-    const docs = ordersSnap.docs;
-    const pageDocs = docs.slice(0, ORDERS_PAGE_SIZE);
-    buyerOrdersHasNextPage = docs.length > ORDERS_PAGE_SIZE;
-    buyerOrdersPage = targetPage;
-    if (pageDocs.length) buyerOrderPageCursors[targetPage] = pageDocs[pageDocs.length - 1];
-    buyerOrders = pageDocs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
+    const cached = !force ? lojaCacheGet('buyerOrders', LOJA_CACHE_TTL.BUYER_ORDERS, cacheKey) : null;
+    if (Array.isArray(cached)) {
+      allBuyerOrders = cached;
+      await Promise.all([loadBuyerProblems(), loadBuyerRatings()]);
+    } else {
+      // Sem orderBy/startAfter para não depender de índice composto e evitar failed-precondition.
+      const [ordersSnap] = await Promise.all([
+        getDocs(query(collection(lojaDb, 'pedidos'), where('buyerId', '==', String(ghubProfile.gameId)))),
+        loadBuyerProblems(),
+        loadBuyerRatings()
+      ]);
+      allBuyerOrders = ordersSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => Number(b?.createdAtMs || 0) - Number(a?.createdAtMs || 0));
+      lojaCacheSet('buyerOrders', allBuyerOrders, cacheKey);
+    }
+
+    const totalPages = Math.max(1, Math.ceil(allBuyerOrders.length / ORDERS_PAGE_SIZE));
+    buyerOrdersPage = Math.min(targetPage, totalPages);
+    buyerOrdersHasNextPage = buyerOrdersPage < totalPages;
+    buyerOrders = getPageSlice(allBuyerOrders, buyerOrdersPage, ORDERS_PAGE_SIZE);
   } catch (err) {
     console.error('Erro ao carregar compras:', err?.code || err?.message || err, err);
+    allBuyerOrders = [];
     buyerOrders = [];
     buyerProblems = [];
     localToast('error', `Não foi possível carregar suas compras. Erro: ${err?.code || err?.message || 'verifique as regras/índices'}`);
@@ -4027,7 +4207,9 @@ async function handleAuthState(user) {
   lojaStatus = { comprador: null, vendedor: null };
   sellerProducts = [];
   sellerOrders = [];
+  allSellerOrders = [];
   buyerOrders = [];
+  allBuyerOrders = [];
   supportChats = [];
   supportVerifications = [];
   supportReports = [];
@@ -4057,7 +4239,7 @@ async function handleAuthState(user) {
     await loadSupportAdminStatus();
     await loadBuyerOrders({ reset: true });
     if (lojaStatus?.vendedor) {
-      await Promise.all([loadSellerOrders(), loadSellerChats()]);
+      await Promise.all([loadSellerOrders({ reset: true }), loadSellerChats()]);
       renderSellerOrders();
       renderSellerSupportChats();
     }
