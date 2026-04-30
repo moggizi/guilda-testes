@@ -6,7 +6,7 @@ const {
   json,
   cors,
   getLojaDb,
-  verifyBuyerFromRequest,
+  getBuyerFromLocalProfile,
   getMercadoPagoPayment,
   approveCheckoutPayment,
   mapPaymentStatus,
@@ -26,8 +26,8 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const buyer = await verifyBuyerFromRequest(req);
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    const buyer = getBuyerFromLocalProfile(body);
     const checkoutId = String(req.query?.checkoutId || body.checkoutId || '').trim();
 
     if (!checkoutId) return json(res, 400, { ok: false, error: 'checkout-id-required' });
@@ -89,7 +89,7 @@ module.exports = async (req, res) => {
     });
   } catch (err) {
     console.error('[LOJA_MP_STATUS]', err?.message || err);
-    const status = err.message === 'buyer-auth-required' ? 401 : 500;
+    const status = err.message === 'buyer-profile-local-required' ? 400 : 500;
     return json(res, status, { ok: false, error: err.message || 'internal-error' });
   }
 };

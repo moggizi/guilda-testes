@@ -7,7 +7,7 @@ const {
   json,
   cors,
   getLojaDb,
-  verifyBuyerFromRequest,
+  getBuyerFromLocalProfile,
   ensureBuyerProfile,
   normalizeProductDoc,
   getBaseUrl,
@@ -32,9 +32,9 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const buyer = await verifyBuyerFromRequest(req);
     const lojaDb = getLojaDb();
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const buyer = getBuyerFromLocalProfile(body);
     const productId = String(body.productId || '').trim();
 
     if (!productId) return json(res, 400, { ok: false, error: 'product-id-required' });
@@ -113,10 +113,9 @@ module.exports = async (req, res) => {
     const checkoutId = checkoutRef.id;
     const orderId = lojaDb.collection('pedidos').doc().id;
     const baseUrl = getBaseUrl(req);
-    if (!baseUrl || !/^https:\/\//i.test(baseUrl)) {
-      return json(res, 500, { ok: false, error: 'invalid-app-base-url', message: 'APP_BASE_URL precisa ser uma URL https válida.' });
-    }
-    const notification_url = `${baseUrl}/api/loja_mp_webhook?checkoutId=${encodeURIComponent(checkoutId)}`;
+    const notification_url = baseUrl && /^https:\/\//i.test(baseUrl)
+      ? `${baseUrl}/api/loja_mp_webhook?checkoutId=${encodeURIComponent(checkoutId)}`
+      : '';
 
     // Mercado Pago pode recusar e-mail inválido, domínio .local ou e-mail igual ao dono da conta.
     // O e-mail real do comprador continua salvo no Firestore; aqui usamos um pagador técnico válido.
@@ -152,25 +151,27 @@ module.exports = async (req, res) => {
     const idempotencyKey = makeIdempotencyKey();
     let mpPayment;
     try {
+      const paymentPayload = {
+        transaction_amount: Number(amount.toFixed(2)),
+        description: `Guilda HUB - ${product.titulo}`.slice(0, 255),
+        payment_method_id: 'pix',
+        payer: { email: payerEmail },
+        external_reference: `loja:${checkoutId}|pedido:${orderId}|produto:${product.id}|buyer:${buyer.gameId}|seller:${product.sellerId || 'ghub'}`,
+        metadata: {
+          checkout_id: checkoutId,
+          order_id: orderId,
+          product_id: product.id,
+          buyer_id: buyer.gameId,
+          seller_id: product.sellerId || 'ghub',
+          buyer_email: buyer.email || '',
+        },
+      };
+      if (notification_url) paymentPayload.notification_url = notification_url;
+
       mpPayment = await mercadoPagoFetch('/v1/payments', {
         method: 'POST',
         headers: { 'X-Idempotency-Key': idempotencyKey },
-        body: JSON.stringify({
-          transaction_amount: Number(amount.toFixed(2)),
-          description: `Guilda HUB - ${product.titulo}`.slice(0, 255),
-          payment_method_id: 'pix',
-          payer: { email: payerEmail },
-          notification_url,
-          external_reference: `loja:${checkoutId}|pedido:${orderId}|produto:${product.id}|buyer:${buyer.gameId}|seller:${product.sellerId || 'ghub'}`,
-          metadata: {
-            checkout_id: checkoutId,
-            order_id: orderId,
-            product_id: product.id,
-            buyer_id: buyer.gameId,
-            seller_id: product.sellerId || 'ghub',
-            buyer_email: buyer.email || '',
-          },
-        }),
+        body: JSON.stringify(paymentPayload),
       });
     } catch (mpErr) {
       const details = mpErr?.details || {};
@@ -242,7 +243,7 @@ module.exports = async (req, res) => {
     });
   } catch (err) {
     console.error('[LOJA_MP_CREATE_PIX]', err?.message || err, err?.details || '');
-    const status = err.message === 'buyer-auth-required' ? 401 : 500;
+    const status = err.message === 'buyer-profile-local-required' ? 400 : 500;
     return json(res, status, { ok: false, error: err.message || 'internal-error' });
   }
 };

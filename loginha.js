@@ -1424,6 +1424,19 @@ async function handleTopSellerClick() {
   openVerificationModal(null);
 }
 
+
+function getLocalBuyerPayloadForPix() {
+  if (!ghubProfile?.gameId) return null;
+  return {
+    gameId: String(ghubProfile.gameId || ''),
+    id: String(ghubProfile.gameId || ''),
+    uid: String(currentUser?.uid || ghubProfile.uid || ''),
+    email: normalizeEmail(currentUser?.email || ghubProfile.email || ghubProfile.playerEmail || ''),
+    nick: String(ghubProfile.nick || ghubProfile.nome || ghubProfile.name || '').trim(),
+    foto: ghubProfile.foto || ghubProfile.photo || ''
+  };
+}
+
 async function createOrder(productId) {
   const product = products.find((item) => String(item.id) === String(productId));
   if (!product) return;
@@ -1440,15 +1453,15 @@ async function createOrder(productId) {
   }
 
   try {
-    const token = await currentUser.getIdToken(true);
+    const buyer = getLocalBuyerPayloadForPix();
+    if (!buyer?.gameId) throw new Error('buyer-profile-local-required');
 
     const response = await fetch('/api/loja_mp_create_pix', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ productId: product.id })
+      body: JSON.stringify({ productId: product.id, buyer })
     });
 
     const rawResponse = await response.text().catch(() => '');
@@ -1468,6 +1481,7 @@ async function createOrder(productId) {
   } catch (err) {
     console.error(err);
     const messageMap = {
+      'buyer-profile-local-required': 'Não foi possível identificar seu perfil local da GuildaHub.',
       'buyer-auth-required': 'Entre novamente na GuildaHub para comprar.',
       'buyer-profile-not-found': 'Não foi possível localizar seu perfil da GuildaHub.',
       'product-not-found': 'Produto não encontrado.',
@@ -1568,15 +1582,19 @@ function startPaymentPolling(checkoutId) {
 
 async function checkPixPaymentStatus(checkoutId, manual = false) {
   const cleanCheckoutId = String(checkoutId || '').trim();
-  if (!cleanCheckoutId || !currentUser) return;
+  if (!cleanCheckoutId) return;
 
   const statusEl = qs('pix-payment-status');
   if (manual && statusEl) statusEl.textContent = 'Verificando pagamento...';
 
   try {
-    const token = await currentUser.getIdToken();
-    const response = await fetch(`/api/loja_mp_status?checkoutId=${encodeURIComponent(cleanCheckoutId)}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+    const buyer = getLocalBuyerPayloadForPix();
+    if (!buyer?.gameId) throw new Error('buyer-profile-local-required');
+
+    const response = await fetch('/api/loja_mp_status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checkoutId: cleanCheckoutId, buyer })
     });
     const rawResponse = await response.text().catch(() => '');
     let data = {};

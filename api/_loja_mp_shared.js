@@ -278,6 +278,24 @@ async function verifyBuyerFromRequest(req) {
   };
 }
 
+
+function getBuyerFromLocalProfile(body = {}) {
+  const source = body.buyer || body.profile || body.ghubProfile || body.comprador || body;
+  const gameId = normalizeDigits(
+    source.gameId || source.id || source.playerId || source.idPerfil || body.buyerId || body.gameId || ''
+  );
+
+  if (!gameId) throw new Error('buyer-profile-local-required');
+
+  return {
+    uid: String(source.uid || source.userId || body.uid || '').trim(),
+    email: normalizeEmail(source.email || source.playerEmail || body.email || ''),
+    gameId,
+    nick: String(source.nick || source.nome || source.name || source.apelido || '').trim(),
+    foto: source.foto || source.photo || source.avatar || '',
+  };
+}
+
 async function ensureBuyerProfile(lojaDb, buyer) {
   await lojaDb.collection('comprador').doc(String(buyer.gameId)).set({
     id: buyer.gameId,
@@ -597,6 +615,7 @@ module.exports = {
   getEnv,
   getLojaDb,
   verifyBuyerFromRequest,
+  getBuyerFromLocalProfile,
   ensureBuyerProfile,
   normalizeProductDoc,
   getBaseUrl,
