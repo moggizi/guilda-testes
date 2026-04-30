@@ -119,7 +119,7 @@ module.exports = async (req, res) => {
 
     // Mercado Pago pode recusar e-mail inválido, domínio .local ou e-mail igual ao dono da conta.
     // O e-mail real do comprador continua salvo no Firestore; aqui usamos um pagador técnico válido.
-    const safeBuyerId = String(buyer.gameId || buyer.uid || 'anon')
+    const safeBuyerId = String(buyer.email || 'anon')
       .replace(/[^a-zA-Z0-9_.-]/g, '')
       .slice(0, 48) || 'anon';
     const payerEmail = `comprador-${safeBuyerId}@guildahub.online`;
@@ -153,7 +153,7 @@ module.exports = async (req, res) => {
     try {
       const paymentPayload = {
         transaction_amount: Number(amount.toFixed(2)),
-        description: `Guilda HUB - ${product.titulo}`.slice(0, 255),
+        description: `Loginha - HUB - ${product.titulo}`.slice(0, 255),
         payment_method_id: 'pix',
         payer: { email: payerEmail },
         external_reference: `loja:${checkoutId}|pedido:${orderId}|produto:${product.id}|buyer:${buyer.gameId}|seller:${product.sellerId || 'ghub'}`,
