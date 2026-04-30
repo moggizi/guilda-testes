@@ -6,9 +6,10 @@ const CACHE_PREFIX = 'ghub_loja_cache_v1';
 export const LOJA_CACHE_TTL = Object.freeze({
   PROFILE: 24 * 60 * 60 * 1000,
   CATEGORIES: 24 * 60 * 60 * 1000,
-  PRODUCTS: 30 * 60 * 1000,
+  PRODUCTS: 60 * 1000,
   STORE_STATUS: 10 * 60 * 1000,
   SELLER_PRODUCTS: 15 * 60 * 1000,
+  SELLER_ORDERS: 5 * 60 * 1000,
 });
 
 function now() {
