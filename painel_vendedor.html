@@ -22,8 +22,73 @@
   <link rel="stylesheet" href="./style.css" />
 
   <style>
-    body[data-loja-page]:not([data-loja-page="store"]) #store-home-content { display: none; }
-    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder { display: block; }
+    body[data-loja-page]:not([data-loja-page="store"]) #store-home-content { display: none !important; }
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder { display: block !important; }
+
+    /* Telas separadas: o layout já nasce no HTML; JS só preenche os dados. */
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0;
+    }
+
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder > [id$="-modal"] {
+      position: static !important;
+      inset: auto !important;
+      z-index: auto !important;
+      display: block !important;
+      width: 100% !important;
+      padding: 0 !important;
+    }
+
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder > [id$="-modal"] > .absolute,
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder > [id$="-modal"] > [class*="backdrop-blur"] {
+      display: none !important;
+    }
+
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder > [id$="-modal"] > .relative {
+      width: 100% !important;
+      max-width: none !important;
+      max-height: none !important;
+      overflow: visible !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder [data-close-buyer-modal],
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder [data-close-seller-modal],
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder [data-close-support-modal],
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder [data-close-verification-modal] {
+      display: none !important;
+    }
+
+    body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder .sticky {
+      position: static !important;
+    }
+
+    @media (max-width: 640px) {
+      body[data-loja-page]:not([data-loja-page="store"]) main > div {
+        padding: 12px !important;
+      }
+
+      body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder {
+        max-width: none;
+      }
+
+      body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder .rounded-3xl {
+        border-radius: 16px !important;
+      }
+
+      body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder .p-5 {
+        padding: 14px !important;
+      }
+
+      body[data-loja-page]:not([data-loja-page="store"]) #loja-page-placeholder .gap-4 {
+        gap: 12px !important;
+      }
+    }
   </style>
 
 </head>
@@ -166,96 +231,20 @@
 
       <div class="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
 
-        <section id="loja-page-placeholder" class="hidden rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="text-xs font-black uppercase tracking-wider text-emerald-600">Loginha</p>
-              <h2 id="loja-page-placeholder-title" class="mt-1 text-2xl font-black text-gray-900">Painel do vendedor</h2>
-              <p id="loja-page-placeholder-text" class="mt-2 text-sm font-semibold text-gray-500">Gerencie produtos, pedidos, saldo e atendimento.</p>
-            </div>
-            <a href="loginha.html" class="shrink-0 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-black text-gray-700 hover:bg-gray-50">Vitrine</a>
-          </div>
-        </section>
-
-        <section id="store-home-content" class="grid lg:grid-cols-[260px_1fr] gap-6">
-          <aside class="space-y-4">
-            <div class="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
-              <p class="text-sm font-black text-gray-900">Filtros</p>
-
-              <div class="mt-4">
-                <label for="store-search" class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Buscar</label>
-                <div class="relative">
-                  <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
-                  <input id="store-search" type="search" placeholder="Passe, diamante, skin..." class="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-50">
-                </div>
-              </div>
-
-              <div class="mt-4">
-                <label for="store-category" class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Categoria</label>
-                <select id="store-category" class="w-full rounded-2xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-50">
-                  <option value="">Todas</option>
-                </select>
-              </div>
-
-              <button id="btn-clear-filters" type="button" class="mt-4 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-600 hover:bg-gray-50 transition">
-                Limpar filtros
-              </button>
-            </div>
-
-            <div class="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
-              <p class="text-sm font-black text-gray-900">Categorias rápidas</p>
-              <div id="category-chips" class="mt-3 flex flex-wrap gap-2">
-                <button type="button" class="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200" data-category-chip="">Todas</button>
-              </div>
-            </div>
-          </aside>
-
-          <section class="space-y-4">
-            <div class="flex items-center justify-between gap-3 flex-wrap">
+        <section id="loja-page-placeholder" class="block w-full max-w-6xl mx-auto space-y-4">
+          <div class="rounded-3xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 class="text-xl font-black text-gray-900">Produtos disponíveis</h3>
-                <p id="products-counter" class="text-sm text-gray-500 mt-1">Carregando produtos...</p>
+                <p class="text-xs font-black uppercase tracking-wider text-emerald-600">Loginha</p>
+                <h2 class="mt-1 text-2xl font-black text-gray-900">Painel do vendedor</h2>
+                <p class="mt-1 text-sm font-semibold text-gray-500">Gerencie produtos, pedidos, saldo e atendimento.</p>
               </div>
-              <button id="btn-seller-profile" type="button" class="hidden relative inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-100 transition">
-                <i data-lucide="store" class="w-4 h-4"></i> Perfil do vendedor
-              </button>
+              <a href="loginha.html" class="inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-700 hover:bg-gray-50">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i> Voltar para a vitrine
+              </a>
             </div>
-
-            <div id="products-loading" class="rounded-3xl border border-gray-100 bg-white p-10 text-center shadow-sm">
-              <i data-lucide="loader-2" class="mx-auto mb-3 h-8 w-8 animate-spin text-emerald-500"></i>
-              <p class="text-sm font-semibold text-gray-500">Carregando loginha...</p>
-            </div>
-
-            <div id="products-empty" class="hidden rounded-3xl border border-gray-100 bg-white p-10 text-center shadow-sm">
-              <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-50 text-gray-400">
-                <i data-lucide="package-x" class="w-7 h-7"></i>
-              </div>
-              <p class="font-bold text-gray-900">Nenhum produto encontrado</p>
-              <p class="mt-1 text-sm text-gray-500">Tente limpar os filtros ou cadastre produtos ativos no Firebase da loja.</p>
-            </div>
-
-            <div id="products-grid" class="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4"></div>
-            <div id="products-pagination" class="mt-4"></div>
-          </section>
-        </section>
-      </div>
-    </main>
-  </div>
-
-  <div id="product-modal" class="fixed inset-0 z-[70] hidden items-end sm:items-center justify-center p-0 sm:p-4">
-    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-close-product-modal></div>
-    <div class="relative z-10 w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
-      <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 rounded-t-3xl">
-        <h3 id="modal-product-title" class="text-lg font-black text-gray-900">Produto</h3>
-        <button type="button" data-close-product-modal class="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-      <div id="modal-product-body" class="p-5 space-y-4"></div>
-    </div>
-  </div>
-
-  <div id="seller-modal" class="fixed inset-0 z-[75] hidden items-end sm:items-center justify-center p-0 sm:p-4">
+          </div>
+          <div id="seller-modal" class="block w-full">
     <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-close-seller-modal></div>
     <div class="relative z-10 w-full sm:max-w-5xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[94vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
       <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 rounded-t-3xl">
@@ -382,6 +371,87 @@
       </div>
     </div>
   </div>
+        </section>
+
+        <section id="store-home-content" class="grid lg:grid-cols-[260px_1fr] gap-6">
+          <aside class="space-y-4">
+            <div class="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p class="text-sm font-black text-gray-900">Filtros</p>
+
+              <div class="mt-4">
+                <label for="store-search" class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Buscar</label>
+                <div class="relative">
+                  <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+                  <input id="store-search" type="search" placeholder="Passe, diamante, skin..." class="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-50">
+                </div>
+              </div>
+
+              <div class="mt-4">
+                <label for="store-category" class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Categoria</label>
+                <select id="store-category" class="w-full rounded-2xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-50">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+
+              <button id="btn-clear-filters" type="button" class="mt-4 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-600 hover:bg-gray-50 transition">
+                Limpar filtros
+              </button>
+            </div>
+
+            <div class="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p class="text-sm font-black text-gray-900">Categorias rápidas</p>
+              <div id="category-chips" class="mt-3 flex flex-wrap gap-2">
+                <button type="button" class="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200" data-category-chip="">Todas</button>
+              </div>
+            </div>
+          </aside>
+
+          <section class="space-y-4">
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 class="text-xl font-black text-gray-900">Produtos disponíveis</h3>
+                <p id="products-counter" class="text-sm text-gray-500 mt-1">Carregando produtos...</p>
+              </div>
+              <button id="btn-seller-profile" type="button" class="hidden relative inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-100 transition">
+                <i data-lucide="store" class="w-4 h-4"></i> Perfil do vendedor
+              </button>
+            </div>
+
+            <div id="products-loading" class="rounded-3xl border border-gray-100 bg-white p-10 text-center shadow-sm">
+              <i data-lucide="loader-2" class="mx-auto mb-3 h-8 w-8 animate-spin text-emerald-500"></i>
+              <p class="text-sm font-semibold text-gray-500">Carregando loginha...</p>
+            </div>
+
+            <div id="products-empty" class="hidden rounded-3xl border border-gray-100 bg-white p-10 text-center shadow-sm">
+              <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-50 text-gray-400">
+                <i data-lucide="package-x" class="w-7 h-7"></i>
+              </div>
+              <p class="font-bold text-gray-900">Nenhum produto encontrado</p>
+              <p class="mt-1 text-sm text-gray-500">Tente limpar os filtros ou cadastre produtos ativos no Firebase da loja.</p>
+            </div>
+
+            <div id="products-grid" class="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4"></div>
+            <div id="products-pagination" class="mt-4"></div>
+          </section>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="product-modal" class="fixed inset-0 z-[70] hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-close-product-modal></div>
+    <div class="relative z-10 w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl">
+      <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 rounded-t-3xl">
+        <h3 id="modal-product-title" class="text-lg font-black text-gray-900">Produto</h3>
+        <button type="button" data-close-product-modal class="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div id="modal-product-body" class="p-5 space-y-4"></div>
+    </div>
+  </div>
+
+  
 
   <div id="buyer-modal" class="fixed inset-0 z-[74] hidden items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-close-buyer-modal></div>

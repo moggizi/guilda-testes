@@ -10,6 +10,9 @@ export const LOJA_CACHE_TTL = Object.freeze({
   STORE_STATUS: 10 * 60 * 1000,
   SELLER_PRODUCTS: 12 * 60 * 60 * 1000,
   SELLER_ORDERS: 5 * 60 * 1000,
+  SELLER_CHATS: 2 * 60 * 1000,
+  BUYER_ORDERS: 5 * 60 * 1000,
+  SUPPORT_PANEL: 2 * 60 * 1000,
   SELLER_STATS: 6 * 60 * 60 * 1000,
 });
 

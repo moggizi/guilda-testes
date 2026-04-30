@@ -558,7 +558,7 @@ function mountLojaPanelInline(modal, type = '') {
 
   const panel = modal.querySelector(':scope > .relative') || modal.firstElementChild;
   if (panel) {
-    panel.className = 'w-full overflow-visible rounded-3xl border border-gray-100 bg-white shadow-sm';
+    panel.className = 'w-full overflow-visible bg-transparent shadow-none border-0 rounded-none';
   }
 
   modal.querySelectorAll('[data-close-buyer-modal], [data-close-seller-modal], [data-close-support-modal], [data-close-verification-modal]').forEach((btn) => {
@@ -2369,7 +2369,7 @@ async function checkPixPaymentStatus(checkoutId, manual = false) {
       }
       if (statusEl) statusEl.textContent = `Pagamento aprovado. Pedido criado: ${data.orderId || '-'}`;
       localToast('success', 'Pagamento aprovado. Pedido criado.');
-      await Promise.all([loadProducts(true), loadBuyerOrders({ reset: true, force: true })]);
+      await Promise.all([loadProducts(true), loadBuyerOrders({ reset: true })]);
       setTimeout(() => closeProductModal(), 1000);
       return;
     }
@@ -2479,15 +2479,29 @@ async function loadSellerProducts(force = false) {
 }
 
 async function loadSellerOrders(options = {}) {
-  const { reset = false, page = null, force = false } = options || {};
+  const { reset = false, page = null, force = false, silent = false } = options || {};
   const sellerId = ghubProfile?.gameId;
   if (!sellerId) { sellerOrders = []; resetSellerOrdersPagination(); renderSellerOrders(); return; }
   if (sellerOrdersLoading) return;
   sellerOrdersLoading = true;
   if (reset) resetSellerOrdersPagination();
   const targetPage = Math.max(1, Number(page || sellerOrdersPage || 1));
+  const ordersCacheKey = `${sellerId}:page:${targetPage}`;
+  const cachedOrders = !force ? lojaCacheGet('sellerOrders', LOJA_CACHE_TTL.SELLER_ORDERS, ordersCacheKey) : null;
+  if (cachedOrders && Array.isArray(cachedOrders.orders)) {
+    sellerOrders = cachedOrders.orders;
+    sellerOrdersHasNextPage = !!cachedOrders.hasNextPage;
+    sellerOrdersPage = Number(cachedOrders.page || targetPage) || targetPage;
+    renderSellerOrders();
+    renderSellerSupportChats();
+    renderSellerProfileCard();
+    markSellerOrdersSeenIfOpen();
+    updateNotificationBadges();
+    sellerOrdersLoading = false;
+    return;
+  }
 
-  if (els.sellerOrdersList) els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando pedidos...</div>';
+  if (!silent && els.sellerOrdersList) els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando pedidos...</div>';
 
   try {
     const cursor = sellerOrderPageCursors[targetPage - 1] || null;
@@ -2504,6 +2518,7 @@ async function loadSellerOrders(options = {}) {
     sellerOrders = pageDocs
       .map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
+    lojaCacheSet('sellerOrders', { orders: sellerOrders, hasNextPage: sellerOrdersHasNextPage, page: sellerOrdersPage }, ordersCacheKey);
   } catch (err) {
     console.error('Erro ao carregar pedidos do vendedor:', err?.code || err?.message || err, err);
     sellerOrders = [];
@@ -2682,7 +2697,7 @@ async function openSellerPanel() {
     if (!seller) return;
   }
 
-  await loadStoreStatus(true);
+  await loadStoreStatus();
   if (!lojaStatus?.vendedor) {
     openVerificationModal(sellerVerification);
     return;
@@ -2694,16 +2709,16 @@ async function openSellerPanel() {
   updateNotificationBadges();
 }
 
-async function reloadSellerPanelData() {
+async function reloadSellerPanelData(force = false) {
   if (!lojaStatus?.vendedor || loadingSellerPanel) return;
   loadingSellerPanel = true;
 
-  if (els.sellerProductsList) els.sellerProductsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando produtos...</div>';
-  if (els.sellerOrdersList) els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando pedidos...</div>';
-  if (els.sellerSupportChatsList) els.sellerSupportChatsList.innerHTML = '<div class="rounded-2xl border border-sky-100 bg-white p-4 text-sm font-semibold text-sky-700 text-center">Carregando chats de suporte...</div>';
+  if (force && els.sellerProductsList) els.sellerProductsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando produtos...</div>';
+  if (force && els.sellerOrdersList) els.sellerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando pedidos...</div>';
+  if (force && els.sellerSupportChatsList) els.sellerSupportChatsList.innerHTML = '<div class="rounded-2xl border border-sky-100 bg-white p-4 text-sm font-semibold text-sky-700 text-center">Carregando chats de suporte...</div>';
 
   try {
-    await Promise.all([loadSellerProducts(true), loadSellerOrders({ reset: true, force: true }), loadSellerChats()]);
+    await Promise.all([loadSellerProducts(force), loadSellerOrders({ reset: true, force }), loadSellerChats(force)]);
     renderSellerOrders();
     renderSellerSupportChats();
     markSellerOrdersSeenIfOpen();
@@ -2826,7 +2841,7 @@ async function handleSellerProductSubmit(event) {
     }
 
     resetSellerProductForm();
-    await Promise.all([loadProducts(true), loadSellerProducts(true)]);
+    await Promise.all([loadProducts(true), loadSellerProducts(false)]);
   } catch (err) {
     console.error(err);
     localToast('error', editingProductId ? 'Não foi possível atualizar o produto.' : 'Não foi possível cadastrar o produto. Confira se as regras do Firebase permitem escrita.');
@@ -2860,7 +2875,7 @@ async function toggleSellerProduct(productId, nextActive) {
     lojaCacheRemove('products', 'global');
 
     localToast('success', nextActive ? 'Produto ativado.' : 'Produto pausado.');
-    await Promise.all([loadProducts(true), loadSellerProducts(true)]);
+    await Promise.all([loadProducts(true), loadSellerProducts(false)]);
   } catch (err) {
     console.error(err);
     localToast('error', 'Não foi possível atualizar o produto.');
@@ -2902,7 +2917,7 @@ async function deleteSellerProduct(productId) {
     lojaCacheRemove('sellerProducts', String(ghubProfile.gameId));
     lojaCacheRemove('products', 'global');
     localToast('success', 'Produto excluído.');
-    await Promise.all([loadProducts(true), loadSellerProducts(true)]);
+    await Promise.all([loadProducts(true), loadSellerProducts(false)]);
   } catch (err) {
     console.error(err);
     localToast('error', 'Não foi possível excluir o produto.');
@@ -2952,7 +2967,7 @@ async function updateOrderStatus(orderId, action) {
       }, { merge: true });
 
       localToast('success', 'Solicitação de reembolso enviada para o suporte.');
-      await Promise.all([loadSellerOrders({ reset: true, force: true }), loadBuyerOrders({ reset: true, force: true }), isSupportAdmin ? loadSupportRefundRequests() : Promise.resolve()]);
+      await Promise.all([loadSellerOrders({ reset: true }), loadBuyerOrders({ reset: true }), isSupportAdmin ? loadSupportRefundRequests() : Promise.resolve()]);
     } catch (err) {
       console.error(err);
       localToast('error', 'Não foi possível solicitar o reembolso.');
@@ -2987,7 +3002,7 @@ async function updateOrderStatus(orderId, action) {
       if (String(order.sellerId) === String(ghubProfile?.gameId || '')) await loadStoreStatus(true);
     }
     localToast('success', action === 'reembolsado' ? 'Pedido marcado como reembolsado.' : 'Pedido marcado como entregue.');
-    await Promise.all([loadSellerOrders({ reset: true, force: true }), loadProducts(true), loadSellerProducts(true), loadBuyerOrders({ reset: true, force: true })]);
+    await Promise.all([loadSellerOrders({ reset: true }), loadProducts(true), loadSellerProducts(false), loadBuyerOrders({ reset: true })]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar o pedido.'); }
 }
 
@@ -3033,7 +3048,7 @@ async function requestSellerWithdraw() {
     lojaStatus.vendedor = { ...lojaStatus.vendedor, saquePendente: nextPending, saldoEmSaque: nextPending, ultimoPixSaque: pix, financeiro: updatedFinance };
     localToast('success', 'Solicitação de saque enviada.');
     await loadStoreStatus(true);
-    await loadSellerOrders({ reset: true, force: true });
+    await loadSellerOrders({ reset: true });
   } catch (err) { console.error(err); localToast('error', 'Não foi possível solicitar o saque. Confira as regras do Firebase.'); }
 }
 
@@ -3107,7 +3122,7 @@ function openBuyerModal() {
     els.buyerModal?.classList.add('flex');
   }
   initIcons();
-  loadBuyerOrders({ reset: true, force: true }).then(() => {
+  loadBuyerOrders({ reset: true }).then(() => {
     markBuyerOrdersSeenIfOpen();
     updateNotificationBadges();
   });
@@ -3179,15 +3194,23 @@ async function loadBuyerProblems() {
   }
 }
 
-async function loadSellerChats() {
+async function loadSellerChats(force = false) {
   if (!currentUser || !ghubProfile?.gameId) {
     sellerChats = [];
+    return;
+  }
+  const cacheKey = String(ghubProfile.gameId);
+  const cached = !force ? lojaCacheGet('sellerChats', LOJA_CACHE_TTL.SELLER_CHATS, cacheKey) : null;
+  if (Array.isArray(cached)) {
+    sellerChats = cached;
+    updateNotificationBadges();
     return;
   }
   try {
     const snap = await getDocs(query(collection(lojaDb, CHAT_COLLECTION), where('sellerId', '==', String(ghubProfile.gameId))));
     sellerChats = snap.docs.map(normalizeChatDoc);
     await markExpiredChatsIfNeeded(sellerChats);
+    lojaCacheSet('sellerChats', sellerChats, cacheKey);
     updateNotificationBadges();
   } catch (err) {
     console.warn('Não foi possível carregar chats do vendedor:', err);
@@ -3423,7 +3446,7 @@ async function submitProblem(event) {
       if (els.problemDescription) els.problemDescription.value = '';
       openChatModalWithChat({ id: createdChat.orderId || createdChat.pedidoId || createdChat.id, ...(createdChat.orderSnapshot || {}), produtoTitulo: createdChat.produtoTitulo, buyerId: createdChat.buyerId, buyerName: createdChat.buyerName, sellerId: createdChat.sellerId, sellerName: createdChat.sellerName, total: createdChat.total }, createdChat);
       localToast('success', 'Chat aberto e mensagem enviada.');
-      await Promise.all([loadBuyerOrders(), loadSellerChats().then(() => { renderSellerOrders(); renderSellerSupportChats(); }), isSupportAdmin ? loadSupportPanelData() : Promise.resolve()]);
+      await Promise.all([loadBuyerOrders(), loadSellerChats().then(() => { renderSellerOrders(); renderSellerSupportChats(); }), isSupportAdmin ? loadSupportPanelData({ force: true }) : Promise.resolve()]);
       return;
     }
     if (!snap.exists()) throw new Error('chat-not-found');
@@ -3443,7 +3466,7 @@ async function submitProblem(event) {
     renderChatMessages(nextChat);
     markChatSeen(nextChat);
     localToast('success', 'Mensagem enviada.');
-    await Promise.all([loadBuyerOrders(), loadSellerChats().then(() => { renderSellerOrders(); renderSellerSupportChats(); }), isSupportAdmin ? loadSupportPanelData() : Promise.resolve()]);
+    await Promise.all([loadBuyerOrders(), loadSellerChats().then(() => { renderSellerOrders(); renderSellerSupportChats(); }), isSupportAdmin ? loadSupportPanelData({ force: true }) : Promise.resolve()]);
   } catch (err) {
     console.error(err);
     localToast('error', 'Não foi possível enviar a mensagem. Confira as regras do Firebase.');
@@ -3460,7 +3483,7 @@ async function resolveActiveChat() {
     await closeAndDeleteChat(chat, 'encerrado');
     localToast('success', 'Chat encerrado.');
     closeProblemModal();
-    await Promise.all([loadBuyerOrders(), loadSellerChats().then(() => { renderSellerOrders(); renderSellerSupportChats(); }), isSupportAdmin ? loadSupportPanelData() : Promise.resolve()]);
+    await Promise.all([loadBuyerOrders(), loadSellerChats().then(() => { renderSellerOrders(); renderSellerSupportChats(); }), isSupportAdmin ? loadSupportPanelData({ force: true }) : Promise.resolve()]);
   } catch (err) {
     console.error(err);
     localToast('error', 'Não foi possível terminar o chat.');
@@ -3488,13 +3511,27 @@ async function escalateActiveChatToSupport
 }
 
 async function loadBuyerOrders(options = {}) {
-  const { reset = false, page = null, force = false } = options || {};
+  const { reset = false, page = null, force = false, silent = false } = options || {};
   if (!currentUser || !ghubProfile?.gameId) { buyerOrders = []; resetBuyerOrdersPagination(); renderBuyerOrders(); return; }
   if (buyerOrdersLoading) return;
   buyerOrdersLoading = true;
   if (reset) resetBuyerOrdersPagination();
   const targetPage = Math.max(1, Number(page || buyerOrdersPage || 1));
-  if (els.buyerOrdersList) els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando compras...</div>';
+  const ordersCacheKey = `${ghubProfile.gameId}:page:${targetPage}`;
+  const cachedOrders = !force ? lojaCacheGet('buyerOrders', LOJA_CACHE_TTL.BUYER_ORDERS, ordersCacheKey) : null;
+  if (cachedOrders && Array.isArray(cachedOrders.orders)) {
+    buyerOrders = cachedOrders.orders;
+    buyerProblems = Array.isArray(cachedOrders.problems) ? cachedOrders.problems : buyerProblems;
+    buyerRatings = Array.isArray(cachedOrders.ratings) ? cachedOrders.ratings : buyerRatings;
+    buyerOrdersHasNextPage = !!cachedOrders.hasNextPage;
+    buyerOrdersPage = Number(cachedOrders.page || targetPage) || targetPage;
+    renderBuyerOrders();
+    markBuyerOrdersSeenIfOpen();
+    updateNotificationBadges();
+    buyerOrdersLoading = false;
+    return;
+  }
+  if (!silent && els.buyerOrdersList) els.buyerOrdersList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando compras...</div>';
   try {
     const cursor = buyerOrderPageCursors[targetPage - 1] || null;
     const base = [where('buyerId', '==', String(ghubProfile.gameId))];
@@ -3512,6 +3549,7 @@ async function loadBuyerOrders(options = {}) {
     buyerOrdersPage = targetPage;
     if (pageDocs.length) buyerOrderPageCursors[targetPage] = pageDocs[pageDocs.length - 1];
     buyerOrders = pageDocs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
+    lojaCacheSet('buyerOrders', { orders: buyerOrders, problems: buyerProblems, ratings: buyerRatings, hasNextPage: buyerOrdersHasNextPage, page: buyerOrdersPage }, ordersCacheKey);
   } catch (err) {
     console.error('Erro ao carregar compras:', err?.code || err?.message || err, err);
     buyerOrders = [];
@@ -3690,14 +3728,36 @@ async function loadSupportSellerCount() {
   }
 }
 
-async function loadSupportPanelData() {
+async function loadSupportPanelData(options = {}) {
   if (!isSupportAdmin) return;
-  if (els.supportVerificationsList) els.supportVerificationsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando verificações...</div>';
-  if (els.supportChatsList) els.supportChatsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando chats...</div>';
-  if (els.supportReportsList) els.supportReportsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando denúncias...</div>';
-  if (els.supportWithdrawalsList) els.supportWithdrawalsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando saques...</div>';
-  if (els.supportRefundsList) els.supportRefundsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando reembolsos...</div>';
+  const { force = false, silent = false } = options || {};
+  const cached = !force ? lojaCacheGet('supportPanel', LOJA_CACHE_TTL.SUPPORT_PANEL, 'global') : null;
+  if (cached && typeof cached === 'object') {
+    supportSellerTotal = Number(cached.supportSellerTotal || 0);
+    supportVerifications = Array.isArray(cached.supportVerifications) ? cached.supportVerifications : [];
+    supportChats = Array.isArray(cached.supportChats) ? cached.supportChats : [];
+    supportReports = Array.isArray(cached.supportReports) ? cached.supportReports : [];
+    supportWithdrawals = Array.isArray(cached.supportWithdrawals) ? cached.supportWithdrawals : [];
+    supportRefundRequests = Array.isArray(cached.supportRefundRequests) ? cached.supportRefundRequests : [];
+    if (els.supportSellersTotal) els.supportSellersTotal.textContent = supportSellerTotal === 1 ? 'Vendedores: 1 conta' : `Vendedores: ${supportSellerTotal} contas`;
+    renderSupportVerifications();
+    renderSupportChats();
+    renderSupportReports();
+    renderSupportWithdrawals();
+    renderSupportRefundRequests();
+    markSupportQueuesSeenIfOpen();
+    updateNotificationBadges();
+    return;
+  }
+  if (!silent) {
+    if (els.supportVerificationsList) els.supportVerificationsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando verificações...</div>';
+    if (els.supportChatsList) els.supportChatsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando chats...</div>';
+    if (els.supportReportsList) els.supportReportsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando denúncias...</div>';
+    if (els.supportWithdrawalsList) els.supportWithdrawalsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando saques...</div>';
+    if (els.supportRefundsList) els.supportRefundsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando reembolsos...</div>';
+  }
   await Promise.all([loadSupportSellerCount(), loadSupportVerifications(), loadSupportChats(), loadSupportReports(), loadSupportWithdrawals(), loadSupportRefundRequests()]);
+  lojaCacheSet('supportPanel', { supportSellerTotal, supportVerifications, supportChats, supportReports, supportWithdrawals, supportRefundRequests }, 'global');
   markSupportQueuesSeenIfOpen();
   updateNotificationBadges();
 }
@@ -4265,8 +4325,8 @@ async function refundOrderFromSupport(orderId) {
       renderSupportOrderResults();
     }
     await Promise.all([loadSupportRefundRequests(), loadProducts(true), loadSupportWithdrawals(), loadSupportSellerCount()]);
-    if (ghubProfile?.gameId && String(data.sellerId || '') === String(ghubProfile.gameId)) await loadSellerOrders({ reset: true, force: true });
-    await loadBuyerOrders({ reset: true, force: true });
+    if (ghubProfile?.gameId && String(data.sellerId || '') === String(ghubProfile.gameId)) await loadSellerOrders({ reset: true });
+    await loadBuyerOrders({ reset: true });
   } catch (err) { console.error(err); localToast('error', 'Não foi possível marcar o pedido como reembolso.'); }
 }
 
@@ -4321,8 +4381,8 @@ async function deleteRefundRequestFromSupport(orderId) {
     localToast('success', 'Solicitação de reembolso apagada. O pedido voltou para análise normal.');
     await loadSupportRefundRequests();
     if (normalizeSearchText(els.supportOrderSearch?.value || '')) await searchSupportOrders();
-    if (ghubProfile?.gameId && String(data.sellerId || '') === String(ghubProfile.gameId)) await loadSellerOrders({ reset: true, force: true });
-    await loadBuyerOrders({ reset: true, force: true });
+    if (ghubProfile?.gameId && String(data.sellerId || '') === String(ghubProfile.gameId)) await loadSellerOrders({ reset: true });
+    await loadBuyerOrders({ reset: true });
   } catch (err) {
     console.error(err);
     localToast('error', 'Não foi possível apagar a solicitação de reembolso.');
@@ -4546,7 +4606,7 @@ function bindEvents() {
 
   els.buyerProfileBtn?.addEventListener('click', openBuyerModal);
   els.supportPanelBtn?.addEventListener('click', openSupportModal);
-  els.reloadSupportPanelBtn?.addEventListener('click', loadSupportPanelData);
+  els.reloadSupportPanelBtn?.addEventListener('click', () => loadSupportPanelData({ force: true }));
   els.supportSellerSearchBtn?.addEventListener('click', searchSupportSellers);
   els.supportProductSearchBtn?.addEventListener('click', searchSupportProducts);
   els.supportOrderSearchBtn?.addEventListener('click', searchSupportOrders);
@@ -4587,7 +4647,7 @@ function bindEvents() {
       localToast('error', err?.message || 'Não foi possível processar a imagem.');
     }
   });
-  els.reloadSellerDataBtn?.addEventListener('click', reloadSellerPanelData);
+  els.reloadSellerDataBtn?.addEventListener('click', () => reloadSellerPanelData(true));
   els.verificationForm?.addEventListener('submit', submitSellerVerification);
   els.verificationRgFront?.addEventListener('change', (event) => handleVerificationFileChange('front', event.target.files?.[0] || null));
   els.verificationRgBack?.addEventListener('change', (event) => handleVerificationFileChange('back', event.target.files?.[0] || null));
@@ -4675,13 +4735,22 @@ async function handleAuthState(user) {
     renderSellerTop();
     await loadStoreStatus();
     await loadSupportAdminStatus();
-    await loadBuyerOrders({ reset: true });
-    if (lojaStatus?.vendedor) {
-      await Promise.all([loadSellerOrders({ reset: true, force: true }), loadSellerChats()]);
-      renderSellerOrders();
-      renderSellerSupportChats();
+    if (lojaPageMode === 'compras') {
+      await loadBuyerOrders({ reset: true });
+    } else {
+      loadBuyerOrders({ reset: true, silent: true }).catch(() => null);
     }
-    if (isSupportAdmin) await loadSupportPanelData();
+    if (lojaStatus?.vendedor) {
+      if (lojaPageMode === 'painel_vendedor') {
+        await Promise.all([loadSellerOrders({ reset: true }), loadSellerChats()]);
+        renderSellerOrders();
+        renderSellerSupportChats();
+      } else {
+        loadSellerOrders({ reset: true, silent: true }).catch(() => null);
+        loadSellerChats().then(() => { renderSellerOrders(); renderSellerSupportChats(); }).catch(() => null);
+      }
+    }
+    if (isSupportAdmin && lojaPageMode === 'suporte') await loadSupportPanelData();
     updateNotificationBadges();
     if (lojaPageMode !== 'store') {
       setTimeout(() => openAutoPagePanel(), 50);
