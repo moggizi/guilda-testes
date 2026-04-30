@@ -219,6 +219,209 @@ let selectedProductImageBase64 = '';
 let activeDraftChat = null;
 let activePaymentPoll = null;
 
+const NOTIFICATION_BADGE_CLASS = 'ghub-notification-badge';
+
+function getSeenStorageKey() {
+  const gid = String(ghubProfile?.gameId || currentUser?.uid || 'visitante').trim() || 'visitante';
+  return `ghub_loja_seen_${gid}`;
+}
+
+function getSeenState() {
+  try {
+    const raw = localStorage.getItem(getSeenStorageKey());
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveSeenState(state) {
+  try {
+    localStorage.setItem(getSeenStorageKey(), JSON.stringify(state || {}));
+  } catch (_) {}
+}
+
+function getItemActivityMs(item = {}) {
+  return Math.max(
+    Number(item.updatedAtMs || 0),
+    Number(item.createdAtMs || 0),
+    Number(item.reembolsoSolicitadoEmMs || 0),
+    Number(item.reembolsoFinalizadoEmMs || 0),
+    Number(item.reembolsadoEmMs || 0),
+    Number(item.entregueEmMs || 0),
+    Number(item.entrega?.entregueEmMs || 0),
+    Number(item.buyerInfoUpdatedAtMs || 0),
+    Number(item.deliveryInfoUpdatedAtMs || 0),
+    timestampToMs(item.updatedAt),
+    timestampToMs(item.createdAt),
+    timestampToMs(item.reembolsoSolicitadoEm),
+    timestampToMs(item.reembolsadoEm),
+    timestampToMs(item.entrega?.entregueEm)
+  );
+}
+
+function getChatActivityMs(chat = {}) {
+  const messages = Array.isArray(chat.mensagens) ? chat.mensagens : [];
+  const lastMessageMs = messages.reduce((max, msg) => Math.max(max, Number(msg?.createdAtMs || 0) || timestampToMs(msg?.createdAt)), 0);
+  return Math.max(
+    Number(chat.lastMessageAtMs || 0),
+    Number(chat.updatedAtMs || 0),
+    Number(chat.createdAtMs || 0),
+    lastMessageMs,
+    timestampToMs(chat.updatedAt),
+    timestampToMs(chat.createdAt)
+  );
+}
+
+function getLastChatMessage(chat = {}) {
+  const messages = Array.isArray(chat.mensagens) ? chat.mensagens : [];
+  if (!messages.length) return null;
+  return [...messages].sort((a, b) => (Number(a?.createdAtMs || 0) || timestampToMs(a?.createdAt)) - (Number(b?.createdAtMs || 0) || timestampToMs(b?.createdAt))).at(-1) || null;
+}
+
+function isMessageFromCurrentUser(message = {}) {
+  const gid = String(ghubProfile?.gameId || '').trim();
+  const uid = String(currentUser?.uid || '').trim();
+  const email = normalizeEmail(currentUser?.email || ghubProfile?.email || '');
+  const authorId = String(message.autorId || message.authorId || '').trim();
+  const authorUid = String(message.autorUid || message.authorUid || '').trim();
+  const authorEmail = normalizeEmail(message.autorEmail || message.authorEmail || '');
+  return (!!gid && authorId === gid) || (!!uid && authorUid === uid) || (!!email && authorEmail === email);
+}
+
+function isChatUnreadForCurrentUser(chat = {}) {
+  if (!chat || chat.__draft || isChatExpired(chat) || isChatClosed(chat)) return false;
+  const chatId = String(chat.id || getChatId(chat.orderId || chat.pedidoId || '', chat.tipo || CHAT_TYPE_SELLER));
+  if (!chatId) return false;
+  const activityMs = getChatActivityMs(chat);
+  if (!activityMs) return false;
+  const lastMessage = getLastChatMessage(chat);
+  if (lastMessage && isMessageFromCurrentUser(lastMessage)) return false;
+  const seen = getSeenState();
+  const lastSeen = Number(seen.chats?.[chatId] || 0);
+  return activityMs > lastSeen;
+}
+
+function hasUnseenItem(namespace, item = {}, activityGetter = getItemActivityMs) {
+  const id = String(item.id || item.orderId || item.pedidoId || '').trim();
+  if (!id) return false;
+  const activityMs = activityGetter(item);
+  if (!activityMs) return false;
+  const seen = getSeenState();
+  return activityMs > Number(seen?.[namespace]?.[id] || 0);
+}
+
+function markSeenItems(namespace, items = [], activityGetter = getItemActivityMs) {
+  if (!currentUser || !ghubProfile?.gameId) return;
+  const state = getSeenState();
+  state[namespace] = state[namespace] && typeof state[namespace] === 'object' ? state[namespace] : {};
+  items.forEach((item) => {
+    const id = String(item?.id || item?.orderId || item?.pedidoId || '').trim();
+    if (!id) return;
+    state[namespace][id] = Math.max(Number(state[namespace][id] || 0), activityGetter(item), Date.now());
+  });
+  saveSeenState(state);
+}
+
+function markChatSeen(chat = {}) {
+  if (!chat || chat.__draft) return;
+  markSeenItems('chats', [chat], getChatActivityMs);
+  updateNotificationBadges();
+}
+
+function isModalOpen(modal) {
+  return !!modal && !modal.classList.contains('hidden');
+}
+
+function isBuyerModalOpen() { return isModalOpen(els.buyerModal); }
+function isSellerModalOpen() { return isModalOpen(els.sellerModal); }
+function isSupportModalOpen() { return isModalOpen(els.supportModal); }
+
+function ensureNotificationBadge(target) {
+  if (!target) return null;
+  if (!target.classList.contains('fixed') && !target.classList.contains('absolute') && !target.classList.contains('sticky')) target.classList.add('relative');
+  let badge = target.querySelector(`.${NOTIFICATION_BADGE_CLASS}`);
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = `${NOTIFICATION_BADGE_CLASS} absolute -right-1 -top-1 hidden min-w-[18px] rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-white ring-2 ring-white`;
+    target.appendChild(badge);
+  }
+  return badge;
+}
+
+function setNotificationBadge(target, count) {
+  const badge = ensureNotificationBadge(target);
+  if (!badge) return;
+  const value = Math.max(0, Number(count || 0));
+  badge.textContent = value > 9 ? '9+' : String(value);
+  badge.classList.toggle('hidden', value <= 0);
+}
+
+function markBuyerOrdersSeenIfOpen() {
+  if (!isBuyerModalOpen()) return;
+  markSeenItems('buyerOrders', buyerOrders, getItemActivityMs);
+}
+
+function markSellerOrdersSeenIfOpen() {
+  if (!isSellerModalOpen()) return;
+  markSeenItems('sellerOrders', sellerOrders, getItemActivityMs);
+}
+
+function markSupportQueuesSeenIfOpen() {
+  if (!isSupportModalOpen()) return;
+  markSeenItems('supportRefundRequests', supportRefundRequests, getItemActivityMs);
+  markSeenItems('supportReports', supportReports, getItemActivityMs);
+  markSeenItems('supportWithdrawals', supportWithdrawals, getItemActivityMs);
+  markSeenItems('supportVerifications', supportVerifications, getItemActivityMs);
+}
+
+function getRelevantSupportChatsForCurrentUser() {
+  const gid = String(ghubProfile?.gameId || '').trim();
+  if (!gid) return [];
+  const map = new Map();
+  [...buyerProblems, ...sellerChats].forEach((chat) => {
+    if (String(chat?.tipo || '') !== CHAT_TYPE_SUPPORT) return;
+    if (String(chat.buyerId || '') !== gid && String(chat.sellerId || '') !== gid) return;
+    map.set(String(chat.id || getChatId(chat.orderId || chat.pedidoId || '', CHAT_TYPE_SUPPORT)), chat);
+  });
+  return Array.from(map.values());
+}
+
+function updateNotificationBadges() {
+  if (!currentUser || !ghubProfile?.gameId) {
+    setNotificationBadge(els.buyerProfileBtn, 0);
+    setNotificationBadge(els.topSellerBtn, 0);
+    setNotificationBadge(els.sellerProfileBtn, 0);
+    setNotificationBadge(els.supportPanelBtn, 0);
+    setNotificationBadge(els.floatingSupportBtn, 0);
+    return;
+  }
+
+  const buyerOrderNewCount = buyerOrders.filter((order) => hasUnseenItem('buyerOrders', order, getItemActivityMs)).length;
+  const buyerChatUnreadCount = buyerProblems.filter(isChatUnreadForCurrentUser).length;
+  setNotificationBadge(els.buyerProfileBtn, buyerOrderNewCount + buyerChatUnreadCount);
+
+  const sellerOrderNewCount = lojaStatus?.vendedor ? sellerOrders.filter((order) => hasUnseenItem('sellerOrders', order, getItemActivityMs)).length : 0;
+  const sellerChatUnreadCount = lojaStatus?.vendedor ? sellerChats.filter(isChatUnreadForCurrentUser).length : 0;
+  const sellerTotal = sellerOrderNewCount + sellerChatUnreadCount;
+  setNotificationBadge(els.topSellerBtn, sellerTotal);
+  setNotificationBadge(els.sellerProfileBtn, sellerTotal);
+
+  const supportQueueCount = isSupportAdmin
+    ? supportRefundRequests.filter((item) => hasUnseenItem('supportRefundRequests', item, getItemActivityMs)).length
+      + supportReports.filter((item) => hasUnseenItem('supportReports', item, getItemActivityMs)).length
+      + supportWithdrawals.filter((item) => hasUnseenItem('supportWithdrawals', item, getItemActivityMs)).length
+      + supportVerifications.filter((item) => hasUnseenItem('supportVerifications', item, getItemActivityMs)).length
+      + supportChats.filter(isChatUnreadForCurrentUser).length
+    : 0;
+  setNotificationBadge(els.supportPanelBtn, supportQueueCount);
+
+  const floatingSupportCount = getRelevantSupportChatsForCurrentUser().filter(isChatUnreadForCurrentUser).length;
+  setNotificationBadge(els.floatingSupportBtn, floatingSupportCount);
+}
+
+
 function localToast(type, message) {
   if (typeof showToast === 'function') {
     showToast(type, message);
@@ -758,6 +961,7 @@ function renderSellerTop() {
   }
 
   initIcons();
+  updateNotificationBadges();
 }
 
 async function loadStoreStatus() {
@@ -1720,6 +1924,8 @@ async function loadSellerOrders() {
   renderSellerOrders();
   renderSellerSupportChats();
   renderSellerProfileCard();
+  markSellerOrdersSeenIfOpen();
+  updateNotificationBadges();
 }
 
 function renderSellerProducts() {
@@ -1842,6 +2048,7 @@ function renderSellerSupportChats() {
   els.sellerSupportChatsList.innerHTML = supportSellerChats.map((chat) => `<div class="rounded-2xl border border-sky-100 bg-white p-3"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">Chat aberto pelo suporte</p><p class="mt-1 text-xs font-bold text-sky-700">${escapeHtml(chat.assunto || chat.produtoTitulo || 'Suporte GuildaHub')}</p><p class="mt-1 text-xs font-semibold text-gray-600">${escapeHtml(getChatRemainingLabel(chat))}</p></div><span class="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-black text-sky-700 ring-1 ring-sky-200">SUPORTE</span></div><button type="button" data-open-seller-support-chat="${escapeHtml(chat.id)}" class="mt-3 rounded-xl bg-sky-600 px-3 py-2 text-xs font-black text-white hover:bg-sky-700">Abrir chat com suporte</button></div>`).join('');
   els.sellerSupportChatsList.querySelectorAll('[data-open-seller-support-chat]').forEach((btn) => btn.addEventListener('click', () => openChatById(btn.getAttribute('data-open-seller-support-chat') || '')));
   initIcons();
+  updateNotificationBadges();
 }
 
 function renderSellerOrders() {
@@ -1862,6 +2069,7 @@ function renderSellerOrders() {
   els.sellerOrdersList.querySelectorAll('[data-order-action]').forEach((btn) => btn.addEventListener('click', () => updateOrderStatus(btn.getAttribute('data-order-id') || '', btn.getAttribute('data-order-action') || '')));
   els.sellerOrdersList.querySelectorAll('[data-open-seller-chat]').forEach((btn) => btn.addEventListener('click', () => openProblemModal(btn.getAttribute('data-open-seller-chat') || '', CHAT_TYPE_SELLER)));
   initIcons();
+  updateNotificationBadges();
 }
 
 async function openSellerPanel() {
@@ -1875,6 +2083,8 @@ async function openSellerPanel() {
   openSellerModal();
   renderSellerProfileCard();
   await reloadSellerPanelData();
+  markSellerOrdersSeenIfOpen();
+  updateNotificationBadges();
 }
 
 async function reloadSellerPanelData() {
@@ -1889,6 +2099,8 @@ async function reloadSellerPanelData() {
     await Promise.all([loadSellerProducts(), loadSellerOrders(), loadSellerChats()]);
     renderSellerOrders();
     renderSellerSupportChats();
+    markSellerOrdersSeenIfOpen();
+    updateNotificationBadges();
   } finally {
     loadingSellerPanel = false;
   }
@@ -2250,9 +2462,18 @@ async function deleteOwnSellerAccount() {
   }
 }
 
-function openBuyerModal() { if (!currentUser) { localToast('error', 'Entre na GuildaHub para ver suas compras.'); return; } els.buyerModal?.classList.remove('hidden'); els.buyerModal?.classList.add('flex'); initIcons(); loadBuyerOrders(); }
+function openBuyerModal() {
+  if (!currentUser) { localToast('error', 'Entre na GuildaHub para ver suas compras.'); return; }
+  els.buyerModal?.classList.remove('hidden');
+  els.buyerModal?.classList.add('flex');
+  initIcons();
+  loadBuyerOrders().then(() => {
+    markBuyerOrdersSeenIfOpen();
+    updateNotificationBadges();
+  });
+}
 
-function closeBuyerModal() { els.buyerModal?.classList.add('hidden'); els.buyerModal?.classList.remove('flex'); }
+function closeBuyerModal() { els.buyerModal?.classList.add('hidden'); els.buyerModal?.classList.remove('flex'); updateNotificationBadges(); }
 
 
 
@@ -2311,6 +2532,7 @@ async function loadBuyerProblems() {
     const snap = await getDocs(query(collection(lojaDb, CHAT_COLLECTION), where('buyerId', '==', String(ghubProfile.gameId))));
     buyerProblems = snap.docs.map(normalizeChatDoc);
     await markExpiredChatsIfNeeded(buyerProblems);
+    updateNotificationBadges();
   } catch (err) {
     console.warn('Não foi possível carregar chats do comprador:', err);
     buyerProblems = [];
@@ -2326,6 +2548,7 @@ async function loadSellerChats() {
     const snap = await getDocs(query(collection(lojaDb, CHAT_COLLECTION), where('sellerId', '==', String(ghubProfile.gameId))));
     sellerChats = snap.docs.map(normalizeChatDoc);
     await markExpiredChatsIfNeeded(sellerChats);
+    updateNotificationBadges();
   } catch (err) {
     console.warn('Não foi possível carregar chats do vendedor:', err);
     sellerChats = [];
@@ -2482,6 +2705,7 @@ function openChatModalWithChat(order, chat) {
   }
 
   renderChatMessages(chat);
+  if (!draft) markChatSeen(chat);
 
   if (els.problemDescription) {
     els.problemDescription.value = '';
@@ -2577,6 +2801,7 @@ async function submitProblem(event) {
     await setDoc(ref, nextChat, { merge: true });
     if (els.problemDescription) els.problemDescription.value = '';
     renderChatMessages(nextChat);
+    markChatSeen(nextChat);
     localToast('success', 'Mensagem enviada.');
     await Promise.all([loadBuyerOrders(), loadSellerChats().then(() => { renderSellerOrders(); renderSellerSupportChats(); }), isSupportAdmin ? loadSupportPanelData() : Promise.resolve()]);
   } catch (err) {
@@ -2634,6 +2859,8 @@ async function loadBuyerOrders() {
     buyerOrders = ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b?.createdAtMs || b?.createdAt?.seconds || 0) - Number(a?.createdAtMs || a?.createdAt?.seconds || 0));
   } catch (err) { console.error('Erro ao carregar compras:', err?.code || err?.message || err, err); buyerOrders = []; buyerProblems = []; localToast('error', `Não foi possível carregar suas compras. Erro: ${err?.code || err?.message || 'verifique as regras/índices'}`); }
   renderBuyerOrders();
+  markBuyerOrdersSeenIfOpen();
+  updateNotificationBadges();
 }
 
 function renderBuyerOrders() {
@@ -2644,7 +2871,8 @@ function renderBuyerOrders() {
 
   els.buyerOrdersList.innerHTML = buyerOrders.map((order) => {
     const status = String(order.status || 'pendente').toLowerCase();
-    const locked = isFinalOrderStatus(status) || order.finalizado === true;
+    const isRefundRequested = status === 'reembolso_solicitado' || order.reembolsoSolicitado === true;
+    const locked = isFinalOrderStatus(status) || order.finalizado === true || isRefundRequested;
     const created = formatDateTimeBR(order.createdAtMs || order.createdAt);
     const needsBuyerInfo = categoryRequiresBuyerInfo(order.categoriaId);
     const needsSellerInfo = categoryRequiresSellerDeliveryInfo(order.categoriaId);
@@ -2704,6 +2932,7 @@ function renderBuyerOrders() {
   els.buyerOrdersList.querySelectorAll('[data-open-problem]').forEach((btn) => btn.addEventListener('click', () => openProblemModal(btn.getAttribute('data-open-problem') || '', CHAT_TYPE_SELLER)));
   els.buyerOrdersList.querySelectorAll('[data-open-support-chat]').forEach((btn) => btn.addEventListener('click', () => openProblemModal(btn.getAttribute('data-open-support-chat') || '', CHAT_TYPE_SUPPORT)));
   els.buyerOrdersList.querySelectorAll('[data-rate-order-seller]').forEach((btn) => btn.addEventListener('click', () => rateSeller(btn.getAttribute('data-rate-seller-id') || '', Number(btn.getAttribute('data-rate-order-seller') || 0), btn.getAttribute('data-rate-order-id') || '')));
+  updateNotificationBadges();
 }
 
 async function updateBuyerOrderInfo(orderId) {
@@ -2743,6 +2972,7 @@ async function loadSupportAdminStatus() {
 function renderSupportTop() {
   els.supportPanelBtn?.classList.toggle('hidden', !isSupportAdmin);
   initIcons();
+  updateNotificationBadges();
 }
 
 function openSupportModal() {
@@ -2753,12 +2983,16 @@ function openSupportModal() {
   els.supportModal?.classList.remove('hidden');
   els.supportModal?.classList.add('flex');
   initIcons();
-  loadSupportPanelData();
+  loadSupportPanelData().then(() => {
+    markSupportQueuesSeenIfOpen();
+    updateNotificationBadges();
+  });
 }
 
 function closeSupportModal() {
   els.supportModal?.classList.add('hidden');
   els.supportModal?.classList.remove('flex');
+  updateNotificationBadges();
 }
 
 async function loadSupportSellerCount() {
@@ -2782,6 +3016,8 @@ async function loadSupportPanelData() {
   if (els.supportWithdrawalsList) els.supportWithdrawalsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando saques...</div>';
   if (els.supportRefundsList) els.supportRefundsList.innerHTML = '<div class="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm font-semibold text-gray-500 text-center">Carregando reembolsos...</div>';
   await Promise.all([loadSupportSellerCount(), loadSupportVerifications(), loadSupportChats(), loadSupportReports(), loadSupportWithdrawals(), loadSupportRefundRequests()]);
+  markSupportQueuesSeenIfOpen();
+  updateNotificationBadges();
 }
 
 async function loadSupportVerifications() {
@@ -3040,6 +3276,8 @@ function renderSupportRefundRequests() {
   els.supportRefundsList.querySelectorAll('[data-support-delete-refund-request]').forEach((btn) => btn.addEventListener('click', () => deleteRefundRequestFromSupport(btn.getAttribute('data-support-delete-refund-request') || '')));
   els.supportRefundsList.querySelectorAll('[data-support-refund-chat]').forEach((btn) => btn.addEventListener('click', () => openOrderChatFromSupport(btn.getAttribute('data-support-refund-chat') || '')));
   initIcons();
+  markSupportQueuesSeenIfOpen();
+  updateNotificationBadges();
 }
 
 async function loadSupportReports() {
@@ -3498,6 +3736,7 @@ function renderSupportChats() {
   els.supportChatsList.innerHTML = activeChats.map((chat) => `<div class="rounded-2xl border border-sky-100 bg-sky-50 p-3"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(chat.produtoTitulo || 'Pedido')}</p><p class="mt-1 text-xs font-bold text-sky-700">Pedido: ${escapeHtml(chat.orderId || chat.pedidoId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-600">Comprador: ${escapeHtml(chat.buyerName || chat.buyerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-600">Vendedor: ${escapeHtml(chat.sellerName || chat.sellerId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-600">${escapeHtml(getChatRemainingLabel(chat))}</p></div><span class="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-sky-700 ring-1 ring-sky-200">SUPORTE</span></div><button type="button" data-open-support-panel-chat="${escapeHtml(chat.id)}" class="mt-3 w-full rounded-xl bg-sky-600 px-3 py-2 text-xs font-black text-white hover:bg-sky-700">Abrir chat</button></div>`).join('');
   els.supportChatsList.querySelectorAll('[data-open-support-panel-chat]').forEach((btn) => btn.addEventListener('click', () => openSupportChatFromPanel(btn.getAttribute('data-open-support-panel-chat') || '')));
   initIcons();
+  updateNotificationBadges();
 }
 
 async function openChatById(chatId, cachedChat = null) {
@@ -3701,6 +3940,13 @@ async function handleAuthState(user) {
     await loadStoreStatus();
     await loadSupportAdminStatus();
     await loadBuyerOrders();
+    if (lojaStatus?.vendedor) {
+      await Promise.all([loadSellerOrders(), loadSellerChats()]);
+      renderSellerOrders();
+      renderSellerSupportChats();
+    }
+    if (isSupportAdmin) await loadSupportPanelData();
+    updateNotificationBadges();
   } catch (err) {
     console.error(err);
     applySidebarUser(null);
