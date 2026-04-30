@@ -113,13 +113,17 @@ module.exports = async (req, res) => {
     const checkoutId = checkoutRef.id;
     const orderId = lojaDb.collection('pedidos').doc().id;
     const baseUrl = getBaseUrl(req);
-    const notification_url = `${baseUrl}/api/loja_mp_webhook`;
+    if (!baseUrl || !/^https:\/\//i.test(baseUrl)) {
+      return json(res, 500, { ok: false, error: 'invalid-app-base-url', message: 'APP_BASE_URL precisa ser uma URL https válida.' });
+    }
+    const notification_url = `${baseUrl}/api/loja_mp_webhook?checkoutId=${encodeURIComponent(checkoutId)}`;
 
-    // O Mercado Pago pode recusar o pagamento quando o e-mail do pagador é
-    // inválido ou quando é o mesmo e-mail da conta dona do Access Token.
-    // Como o e-mail real do comprador já fica salvo no Firestore, usamos um
-    // e-mail técnico válido e estável só para criar o Pix.
-    const payerEmail = `comprador-${String(buyer.gameId || buyer.uid || 'anon').replace(/[^a-zA-Z0-9._-]/g, '')}@guildahub.online`;
+    // Mercado Pago pode recusar e-mail inválido, domínio .local ou e-mail igual ao dono da conta.
+    // O e-mail real do comprador continua salvo no Firestore; aqui usamos um pagador técnico válido.
+    const safeBuyerId = String(buyer.gameId || buyer.uid || 'anon')
+      .replace(/[^a-zA-Z0-9_.-]/g, '')
+      .slice(0, 48) || 'anon';
+    const payerEmail = `comprador-${safeBuyerId}@guildahub.online`;
 
     await checkoutRef.set({
       id: checkoutId,
@@ -164,28 +168,43 @@ module.exports = async (req, res) => {
             product_id: product.id,
             buyer_id: buyer.gameId,
             seller_id: product.sellerId || 'ghub',
+            buyer_email: buyer.email || '',
           },
         }),
       });
     } catch (mpErr) {
       const details = mpErr?.details || {};
-      const causeMessage = Array.isArray(details?.cause)
-        ? details.cause.map((item) => item?.description || item?.message || item?.code || '').filter(Boolean).join(' | ')
+      const cause = Array.isArray(details.cause) && details.cause.length
+        ? details.cause.map((c) => c.description || c.message || c.code).filter(Boolean).join(' | ')
         : '';
-      const mpMessage = String(details?.message || causeMessage || details?.error || mpErr?.message || 'Erro ao criar Pix no Mercado Pago');
+      const mpMessage = details.message || details.error || cause || 'erro desconhecido';
+
+      console.error('[LOJA_MP_CREATE_PIX] Mercado Pago recusou', {
+        mp_status: mpErr?.status || 0,
+        mp_response: details,
+        checkoutId,
+        productId: product.id,
+        payerEmail,
+        idempotencyKey,
+      });
+
       await checkoutRef.set({
-        status: 'failed',
-        paymentStatus: 'failed',
+        status: 'mp_error',
+        paymentStatus: 'mp_error',
+        mpErrorStatus: mpErr?.status || 0,
         mpErrorMessage: mpMessage,
-        mpErrorDetails: details,
-        failedAtMs: Date.now(),
+        mpErrorRaw: details,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAtMs: Date.now(),
       }, { merge: true });
-      const err = new Error('mercado-pago-error');
-      err.status = mpErr?.status || 502;
-      err.publicMessage = mpMessage;
-      err.details = details;
-      throw err;
+
+      return json(res, 400, {
+        ok: false,
+        error: 'mercado-pago-error',
+        message: `Mercado Pago recusou: ${mpMessage}`,
+        mp_status: mpErr?.status || 0,
+        mp_response: details,
+      });
     }
 
     const tx = mpPayment.point_of_interaction?.transaction_data || {};
@@ -223,11 +242,7 @@ module.exports = async (req, res) => {
     });
   } catch (err) {
     console.error('[LOJA_MP_CREATE_PIX]', err?.message || err, err?.details || '');
-    const status = err.message === 'buyer-auth-required' ? 401 : (err.status || 500);
-    return json(res, status, {
-      ok: false,
-      error: err.message || 'internal-error',
-      message: err.publicMessage || '',
-    });
+    const status = err.message === 'buyer-auth-required' ? 401 : 500;
+    return json(res, status, { ok: false, error: err.message || 'internal-error' });
   }
 };

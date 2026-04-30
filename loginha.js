@@ -1453,7 +1453,7 @@ async function createOrder(productId) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.ok === false) {
-      throw new Error(data.error || 'payment-create-failed');
+      throw new Error(data.message || data.error || 'payment-create-failed');
     }
 
     renderPixPaymentInfo(product, data);
@@ -1470,7 +1470,11 @@ async function createOrder(productId) {
       'invalid-amount': 'Valor do produto inválido.',
       'mercado-pago-error': 'Não foi possível gerar o Pix no Mercado Pago.'
     };
-    localToast('error', messageMap[err.message] || 'Não foi possível gerar o pagamento Pix.');
+    const rawMessage = String(err?.message || '').trim();
+    const backendMessage = rawMessage.startsWith('Mercado Pago recusou:') || rawMessage === 'invalid-app-base-url'
+      ? rawMessage
+      : '';
+    localToast('error', messageMap[rawMessage] || backendMessage || 'Não foi possível gerar o pagamento Pix.');
   } finally {
     if (btn) {
       btn.disabled = false;
