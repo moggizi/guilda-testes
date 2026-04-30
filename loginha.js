@@ -17,7 +17,8 @@ import {
   deleteDoc,
   deleteField,
   limit,
-  startAfter
+  startAfter,
+  documentId
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { setupSidebar, initIcons, logout, showToast, auth, db } from './logic.js';
 import { lojaCacheGet, lojaCacheSet, lojaCacheRemove, LOJA_CACHE_TTL } from './caches_loja.js';
@@ -928,6 +929,7 @@ async function syncSellerFinancialsToFirebase() {
   };
   try {
     await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), payload, { merge: true });
+    lojaCacheRemove('sellerStats', 'global');
     lojaStatus.vendedor = { ...lojaStatus.vendedor, ...payload };
   } catch (err) {
     console.warn('Não foi possível salvar saldos do vendedor:', err);
@@ -1250,7 +1252,6 @@ async function loadProducts(force = false) {
     products = sortProductsForVitrine(cached.map((item) => ({ ...item })));
     setProductsLoading(false);
     applyFilters();
-    setTimeout(() => refreshProductsSilently(), 0);
     return;
   }
 
@@ -1261,7 +1262,7 @@ async function loadProducts(force = false) {
     products = snap.docs
       .map(normalizeProduct)
       .filter((product) => product.ativo !== false);
-    await loadSellerStatsForProducts(products);
+    await loadSellerStatsForProducts(products, force);
     products = sortProductsForVitrine(products);
     lojaCacheSet('products', products, 'global');
   } catch (err) {
@@ -1289,23 +1290,49 @@ async function refreshProductsSilently() {
   }
 }
 
-async function loadSellerStatsForProducts(productList = []) {
-  const sellerIds = new Set(productList.map((product) => String(product.sellerId || '').trim()).filter(Boolean));
-  sellerStatsById = new Map();
-  if (!sellerIds.size) return;
+async function loadSellerStatsForProducts(productList = [], force = false) {
+  const sellerIds = Array.from(new Set(
+    productList.map((product) => String(product.sellerId || '').trim()).filter(Boolean)
+  ));
 
-  try {
-    const snap = await getDocs(collection(lojaDb, 'vendedor'));
-    snap.docs.forEach((d) => {
-      if (!sellerIds.has(String(d.id))) return;
-      const data = d.data() || {};
-      sellerStatsById.set(String(d.id), {
-        totalVendas: Number(data.totalVendas || data.totalVendasEntregues || data.financeiro?.totalVendasEntregues || 0),
-        totalVendasEntregues: Number(data.totalVendasEntregues || data.totalVendas || data.financeiro?.totalVendasEntregues || 0),
-        notaMedia: Number(data.notaMedia || 0),
-        notaTotal: Number(data.notaTotal || 0)
+  sellerStatsById = new Map();
+  if (!sellerIds.length) return;
+
+  const cached = !force ? lojaCacheGet('sellerStats', LOJA_CACHE_TTL.SELLER_STATS, 'global') : null;
+  if (Array.isArray(cached)) {
+    cached.forEach((item) => {
+      const id = String(item?.id || '').trim();
+      if (!id || !sellerIds.includes(id)) return;
+      sellerStatsById.set(id, {
+        totalVendas: Number(item.totalVendas || item.totalVendasEntregues || 0),
+        totalVendasEntregues: Number(item.totalVendasEntregues || item.totalVendas || 0),
+        notaMedia: Number(item.notaMedia || 0),
+        notaTotal: Number(item.notaTotal || 0)
       });
     });
+  }
+
+  const missingIds = sellerIds.filter((id) => !sellerStatsById.has(id));
+  if (!missingIds.length) return;
+
+  try {
+    const chunks = [];
+    for (let i = 0; i < missingIds.length; i += 30) chunks.push(missingIds.slice(i, i + 30));
+
+    for (const chunk of chunks) {
+      const snap = await getDocs(query(collection(lojaDb, 'vendedor'), where(documentId(), 'in', chunk)));
+      snap.docs.forEach((d) => {
+        const data = d.data() || {};
+        sellerStatsById.set(String(d.id), {
+          totalVendas: Number(data.totalVendas || data.totalVendasEntregues || data.financeiro?.totalVendasEntregues || 0),
+          totalVendasEntregues: Number(data.totalVendasEntregues || data.totalVendas || data.financeiro?.totalVendasEntregues || 0),
+          notaMedia: Number(data.notaMedia || 0),
+          notaTotal: Number(data.notaTotal || 0)
+        });
+      });
+    }
+
+    lojaCacheSet('sellerStats', Array.from(sellerStatsById.entries()).map(([id, data]) => ({ id, ...data })), 'global');
   } catch (err) {
     console.warn('Não foi possível carregar ranking dos vendedores. Usando vendas salvas nos produtos:', err?.code || err?.message || err);
   }
@@ -2842,6 +2869,7 @@ async function deleteOwnSellerAccount() {
   try {
     await deleteSellerAccountAndProducts(ghubProfile.gameId);
     lojaStatus.vendedor = null;
+    lojaCacheRemove('sellerProducts', String(ghubProfile.gameId));
     sellerProducts = [];
     sellerOrders = [];
     sellerChats = [];
