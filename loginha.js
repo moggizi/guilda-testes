@@ -2074,9 +2074,10 @@ async function updateOrderStatus(orderId, action) {
     updates.entrega = { ...(order?.entrega || {}), status: 'entregue', informacoes: deliveryInfoText || order.entrega?.informacoes || '', entregueEm: serverTimestamp(), entregueEmMs: nowMs };
   }
   if (action === 'reembolsado') {
-    updates.reembolsadoEmMs = nowMs;
-    updates.pagamento = { ...(order?.pagamento || {}), status: 'reembolsado', reembolsadoEm: serverTimestamp(), reembolsadoEmMs: nowMs };
-    updates.entrega = { ...(order?.entrega || {}), status: 'reembolso_emitido' };
+    updates.status = 'reembolso_solicitado';
+    updates.finalizado = false;
+    updates.reembolsoSolicitadoEmMs = nowMs;
+    updates.entrega = { ...(order?.entrega || {}), status: 'reembolso_pendente' };
   }
   try {
     await setDoc(doc(lojaDb, 'pedidos', orderId), updates, { merge: true });
@@ -2085,7 +2086,7 @@ async function updateOrderStatus(orderId, action) {
       const currentProduct = sellerProducts.find((p) => String(p.id) === String(order.produtoId)) || products.find((p) => String(p.id) === String(order.produtoId));
       await setDoc(productRef, { totalVendas: Number(currentProduct?.totalVendas || 0) + 1, updatedAt: serverTimestamp() }, { merge: true });
     }
-    localToast('success', action === 'reembolsado' ? 'Pedido marcado como reembolsado.' : 'Pedido marcado como entregue.');
+    localToast('success', action === 'reembolsado' ? 'Solicitação de reembolso enviada ao suporte.' : 'Pedido marcado como entregue.');
     await Promise.all([loadSellerOrders(), loadProducts(), loadSellerProducts(), loadBuyerOrders()]);
   } catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar o pedido.'); }
 }
@@ -3112,7 +3113,8 @@ function renderSupportOrderResults() {
         <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${getOrderStatusClass(status)}">${escapeHtml(status.toUpperCase())}</span>
       </div>
       <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-        ${isRefunded ? '<span class="rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-black text-red-700 ring-1 ring-red-200">Já reembolsado</span>' : `<button type="button" data-admin-refund-order="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Marcar reembolso</button>`}
+        ${isRefunded ? '<span class="rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-black text-red-700 ring-1 ring-red-200">Já reembolsado</span>' : 
+         (status === 'reembolso_solicitado' ? `<button type="button" data-admin-refund-order="${escapeHtml(order.id)}" class="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700 shadow-md animate-pulse">Aprovar Reembolso!</button>` : `<button type="button" data-admin-refund-order="${escapeHtml(order.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Forçar Reembolso</button>`)}
         <button type="button" data-admin-open-order-chat="${escapeHtml(order.id)}" class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Abrir chat do pedido</button>
       </div>
     </div>`;
