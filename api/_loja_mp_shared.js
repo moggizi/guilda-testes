@@ -175,7 +175,7 @@ function normalizeProductDoc(docSnap) {
     preco: Number(data.preco ?? data.price ?? 0),
     moeda: data.moeda || data.currency || 'BRL',
     imagem: data.imagem || data.image || (Array.isArray(data.imagens) ? data.imagens[0] : '') || '',
-    categoriaId,
+    categoriaId: categoryId, // CORREÇÃO: Mapeado corretamente para a variável categoryId
     categoriaNome: data.categoriaNome || data.categoryName || categoryId || '',
     sellerId,
     sellerName: String(data.sellerName || data.vendedorNome || data.sellerNome || sellerId || 'Vendedor').trim(),
