@@ -1499,7 +1499,7 @@ async function createOrder(productId) {
     const backendMessage = rawMessage.startsWith('Mercado Pago recusou:') || rawMessage === 'invalid-app-base-url'
       ? rawMessage
       : '';
-    localToast('error', messageMap[rawMessage] || backendMessage || 'Não foi possível gerar o pagamento Pix.');
+    localToast('error', messageMap[rawMessage] || backendMessage || rawMessage || 'Não foi possível gerar o pagamento Pix.');
   } finally {
     if (btn) {
       btn.disabled = false;
