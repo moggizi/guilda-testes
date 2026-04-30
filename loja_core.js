@@ -536,9 +536,41 @@ function isModalOpen(modal) {
   return !!modal && !modal.classList.contains('hidden');
 }
 
-function isBuyerModalOpen() { return isModalOpen(els.buyerModal); }
-function isSellerModalOpen() { return isModalOpen(els.sellerModal); }
-function isSupportModalOpen() { return isModalOpen(els.supportModal); }
+function isInlineLojaPage(type = '') {
+  const page = String(lojaPageMode || document.body?.dataset?.lojaPage || 'store');
+  if (type) return page === String(type);
+  return page === 'compras' || page === 'painel_vendedor' || page === 'suporte';
+}
+
+function mountLojaPanelInline(modal, type = '') {
+  if (!modal || !isInlineLojaPage(type)) return false;
+  const target = qs('loja-page-placeholder');
+  if (!target) return false;
+
+  if (modal.parentElement !== target) target.appendChild(modal);
+
+  modal.className = 'mt-5 block w-full';
+  modal.classList.remove('hidden', 'flex');
+
+  modal.querySelectorAll(':scope > .absolute, :scope > [class*="backdrop-blur"]').forEach((el) => {
+    el.classList.add('hidden');
+  });
+
+  const panel = modal.querySelector(':scope > .relative') || modal.firstElementChild;
+  if (panel) {
+    panel.className = 'w-full overflow-visible rounded-3xl border border-gray-100 bg-white shadow-sm';
+  }
+
+  modal.querySelectorAll('[data-close-buyer-modal], [data-close-seller-modal], [data-close-support-modal], [data-close-verification-modal]').forEach((btn) => {
+    btn.classList.add('hidden');
+  });
+
+  return true;
+}
+
+function isBuyerModalOpen() { return isInlineLojaPage('compras') || isModalOpen(els.buyerModal); }
+function isSellerModalOpen() { return isInlineLojaPage('painel_vendedor') || isModalOpen(els.sellerModal); }
+function isSupportModalOpen() { return isInlineLojaPage('suporte') || isModalOpen(els.supportModal); }
 
 function ensureNotificationBadge(target) {
   if (!target) return null;
@@ -1225,7 +1257,11 @@ async function loadStoreStatus(force = false) {
   const cacheKey = getCurrentUserCacheKey();
   const cached = !force ? lojaCacheGet('storeStatus', LOJA_CACHE_TTL.STORE_STATUS, cacheKey) : null;
   if (cached) {
-    lojaStatus = cached;
+    lojaStatus = {
+      comprador: cached.comprador || null,
+      vendedor: isSellerApprovedForPanel(cached.vendedor || null, null) ? cached.vendedor : null
+    };
+    if (cached.vendedor && !lojaStatus.vendedor) lojaCacheRemove('storeStatus', cacheKey);
     renderSellerTop();
     renderSupportTop();
     return;
@@ -1240,9 +1276,23 @@ async function loadStoreStatus(force = false) {
       getDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId))
     ]);
 
+    const rawSeller = sellerSnap.exists() ? { id: sellerSnap.id, ...sellerSnap.data() } : null;
+    let approvedSeller = null;
+
+    if (rawSeller) {
+      if (isSellerApprovedForPanel(rawSeller, null)) {
+        approvedSeller = rawSeller;
+      } else {
+        const verificationSnap = await getDoc(doc(lojaDb, VERIFICATION_COLLECTION, String(ghubProfile.gameId)));
+        const verificationData = verificationSnap.exists() ? { id: verificationSnap.id, ...verificationSnap.data() } : null;
+        sellerVerification = verificationData;
+        approvedSeller = isSellerApprovedForPanel(rawSeller, verificationData) ? rawSeller : null;
+      }
+    }
+
     lojaStatus = {
       comprador: buyerSnap.exists() ? { id: buyerSnap.id, ...buyerSnap.data() } : null,
-      vendedor: sellerSnap.exists() ? { id: sellerSnap.id, ...sellerSnap.data() } : null
+      vendedor: approvedSeller
     };
     lojaCacheSet('storeStatus', lojaStatus, cacheKey);
   } catch (err) {
@@ -1857,6 +1907,18 @@ async function loadSellerVerification() {
   }
 }
 
+function isSellerApprovedForPanel(sellerData = null, verificationData = null) {
+  if (!sellerData) return false;
+  const status = getVerificationStatusLabel(
+    verificationData?.status ||
+    sellerData?.verificacaoStatus ||
+    sellerData?.verificationStatus ||
+    sellerData?.statusVerificacao ||
+    ''
+  );
+  return sellerData?.verificado === true || status === 'aprovado';
+}
+
 function openVerificationModal(data = null) {
   if (!currentUser) {
     localToast('error', 'Entre na GuildaHub para solicitar verificação.');
@@ -1887,8 +1949,12 @@ function openVerificationModal(data = null) {
 
   if (els.verificationStatus) {
     els.verificationStatus.className = statusClasses[status] || statusClasses.default;
-    if (status === 'aprovado') els.verificationStatus.textContent = 'Sua verificação foi aprovada. Toque em “Quero vender” novamente para criar o perfil de vendedor.';
-    else if (status === 'recusado') els.verificationStatus.textContent = verification?.motivoRecusa || 'Sua verificação foi recusada. Você ainda pode comprar normalmente.';
+    if (status === 'aprovado') {
+      els.verificationStatus.innerHTML = 'Sua verificação foi aprovada. Você já pode ativar o painel do vendedor.';
+      if (!lojaStatus?.vendedor) {
+        els.verificationStatus.innerHTML += '<button id="btn-activate-approved-seller" type="button" class="mt-3 w-full rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Ativar painel do vendedor</button>';
+      }
+    } else if (status === 'recusado') els.verificationStatus.textContent = verification?.motivoRecusa || 'Sua verificação foi recusada. Você ainda pode comprar normalmente.';
     else if (status === 'pendente') els.verificationStatus.textContent = 'Sua verificação está em análise. Aguarde a aprovação para vender.';
     else els.verificationStatus.textContent = 'Antes de vender, envie seus dados para análise. Se aprovado, você poderá criar o perfil de vendedor.';
   }
@@ -1896,12 +1962,21 @@ function openVerificationModal(data = null) {
   setVerificationImageStatus('front', verification?.rgFrenteBase64 ? 'Imagem enviada.' : 'Imagem será comprimida para caber no Firestore.');
   setVerificationImageStatus('back', verification?.rgVersoBase64 ? 'Imagem enviada.' : 'Imagem será comprimida para caber no Firestore.');
 
-  els.verificationModal?.classList.remove('hidden');
-  els.verificationModal?.classList.add('flex');
+  if (!mountLojaPanelInline(els.verificationModal, 'painel_vendedor')) {
+    els.verificationModal?.classList.remove('hidden');
+    els.verificationModal?.classList.add('flex');
+  }
+
+  qs('btn-activate-approved-seller')?.addEventListener('click', async () => {
+    const seller = await createOrUpdateSellerProfile();
+    if (seller) await openSellerPanel();
+  });
+
   initIcons();
 }
 
 function closeVerificationModal() {
+  if (isInlineLojaPage('painel_vendedor')) return;
   els.verificationModal?.classList.add('hidden');
   els.verificationModal?.classList.remove('flex');
 }
@@ -2000,6 +2075,16 @@ async function createOrUpdateSellerProfile() {
     const sellerRef = doc(lojaDb, 'vendedor', payload.gameId);
     const sellerSnap = await getDoc(sellerRef);
     const existing = sellerSnap.exists() ? sellerSnap.data() : null;
+    const verification = sellerVerification || await loadSellerVerification();
+    const verificationStatus = getVerificationStatusLabel(verification?.status);
+
+    if (!isSellerApprovedForPanel(existing || { id: payload.gameId }, verification)) {
+      if (verificationStatus === 'pendente') localToast('info', 'Sua solicitação de vendedor ainda está em análise.');
+      else if (verificationStatus === 'recusado') localToast('error', 'Sua solicitação de vendedor foi recusada.');
+      else localToast('info', 'Envie a solicitação e aguarde aprovação para vender.');
+      openVerificationModal(verification);
+      return null;
+    }
 
     const sellerPayload = {
       ...existing,
@@ -2014,7 +2099,9 @@ async function createOrUpdateSellerProfile() {
       tipo: existing?.tipo || 'externo',
       status: existing?.status || 'ativo',
       ativo: existing?.ativo !== false,
-      verificado: existing?.verificado === true,
+      verificado: true,
+      verificacaoStatus: 'aprovado',
+      verificationId: verification?.id || payload.gameId,
       totalProdutos: Number(existing?.totalProdutos || 0),
       totalVendas: Number(existing?.totalVendas || 0),
       updatedAt: serverTimestamp(),
@@ -2322,12 +2409,15 @@ async function checkPixPaymentStatus(checkoutId, manual = false) {
 
 function openSellerModal()
  {
-  els.sellerModal?.classList.remove('hidden');
-  els.sellerModal?.classList.add('flex');
+  if (!mountLojaPanelInline(els.sellerModal, 'painel_vendedor')) {
+    els.sellerModal?.classList.remove('hidden');
+    els.sellerModal?.classList.add('flex');
+  }
   initIcons();
 }
 
 function closeSellerModal() {
+  if (isInlineLojaPage('painel_vendedor')) return;
   els.sellerModal?.classList.add('hidden');
   els.sellerModal?.classList.remove('flex');
 }
@@ -2593,6 +2683,10 @@ async function openSellerPanel() {
   }
 
   await loadStoreStatus(true);
+  if (!lojaStatus?.vendedor) {
+    openVerificationModal(sellerVerification);
+    return;
+  }
   openSellerModal();
   renderSellerProfileCard();
   await reloadSellerPanelData();
@@ -3008,8 +3102,10 @@ async function deleteOwnSellerAccount() {
 
 function openBuyerModal() {
   if (!currentUser) { localToast('error', 'Entre na GuildaHub para ver suas compras.'); return; }
-  els.buyerModal?.classList.remove('hidden');
-  els.buyerModal?.classList.add('flex');
+  if (!mountLojaPanelInline(els.buyerModal, 'compras')) {
+    els.buyerModal?.classList.remove('hidden');
+    els.buyerModal?.classList.add('flex');
+  }
   initIcons();
   loadBuyerOrders({ reset: true, force: true }).then(() => {
     markBuyerOrdersSeenIfOpen();
@@ -3017,7 +3113,7 @@ function openBuyerModal() {
   });
 }
 
-function closeBuyerModal() { els.buyerModal?.classList.add('hidden'); els.buyerModal?.classList.remove('flex'); updateNotificationBadges(); }
+function closeBuyerModal() { if (isInlineLojaPage('compras')) return; els.buyerModal?.classList.add('hidden'); els.buyerModal?.classList.remove('flex'); updateNotificationBadges(); }
 
 
 
@@ -3563,8 +3659,10 @@ function openSupportModal() {
     localToast('error', 'Acesso restrito ao suporte.');
     return;
   }
-  els.supportModal?.classList.remove('hidden');
-  els.supportModal?.classList.add('flex');
+  if (!mountLojaPanelInline(els.supportModal, 'suporte')) {
+    els.supportModal?.classList.remove('hidden');
+    els.supportModal?.classList.add('flex');
+  }
   initIcons();
   loadSupportPanelData().then(() => {
     markSupportQueuesSeenIfOpen();
@@ -3573,6 +3671,7 @@ function openSupportModal() {
 }
 
 function closeSupportModal() {
+  if (isInlineLojaPage('suporte')) return;
   els.supportModal?.classList.add('hidden');
   els.supportModal?.classList.remove('flex');
   updateNotificationBadges();
