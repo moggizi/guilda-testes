@@ -20,6 +20,10 @@ function getEnv(name) {
   return (v && String(v).trim()) || '';
 }
 
+function hasAnyEnv(names) {
+  return names.some((name) => !!getEnv(name));
+}
+
 function json(res, status, data) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -208,11 +212,22 @@ async function verifyBuyerFromRequest(req) {
   const idToken = authz.toLowerCase().startsWith('bearer ') ? authz.slice(7).trim() : '';
   if (!idToken) throw new Error('buyer-auth-required');
 
+  if (!hasAnyEnv([
+    'GHUB_FIREBASE_SERVICE_ACCOUNT_JSON',
+    'GHUB_FIREBASE_SERVICE_ACCOUNT',
+    'GHUB_FIREBASE_PROJECT_ID',
+    'FIREBASE_SERVICE_ACCOUNT',
+    'FIREBASE_SERVICE_ACCOUNT_JSON',
+  ])) {
+    throw new Error('ghub-auth-env-missing');
+  }
+
   let decoded;
   try {
     decoded = await getGhubAdmin().auth().verifyIdToken(idToken);
-  } catch (_) {
-    throw new Error('buyer-auth-required');
+  } catch (err) {
+    console.error('[LOJA_MP_AUTH] Token não validado no Firebase principal.', err?.code || err?.message || err);
+    throw new Error('ghub-auth-invalid');
   }
 
   const uid = String(decoded?.uid || '');
