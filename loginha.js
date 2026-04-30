@@ -1451,9 +1451,16 @@ async function createOrder(productId) {
       body: JSON.stringify({ productId: product.id })
     });
 
-    const data = await response.json().catch(() => ({}));
+    const rawResponse = await response.text().catch(() => '');
+    let data = {};
+    try { data = rawResponse ? JSON.parse(rawResponse) : {}; } catch (_) { data = {}; }
+
     if (!response.ok || data.ok === false) {
-      throw new Error(data.message || data.error || 'payment-create-failed');
+      const backendError = data.message || data.error || '';
+      if (!backendError && response.status === 404) throw new Error('api-not-found');
+      if (!backendError && response.status === 401) throw new Error('buyer-auth-required');
+      if (!backendError && response.status >= 500) throw new Error('api-server-error');
+      throw new Error(backendError || `http-${response.status}` || 'payment-create-failed');
     }
 
     renderPixPaymentInfo(product, data);
@@ -1468,7 +1475,11 @@ async function createOrder(productId) {
       'out-of-stock': 'Esse produto ficou sem estoque.',
       'self-purchase': 'Você não pode comprar seu próprio produto.',
       'invalid-amount': 'Valor do produto inválido.',
-      'mercado-pago-error': 'Não foi possível gerar o Pix no Mercado Pago.'
+      'mercado-pago-error': 'Não foi possível gerar o Pix no Mercado Pago.',
+      'api-not-found': 'A API de pagamento não foi encontrada nessa URL de teste. Use uma URL que tenha a pasta /api publicada.',
+      'api-server-error': 'A API de pagamento respondeu erro interno. Veja os Runtime Logs da Vercel.',
+      'ghub-auth-env-missing': 'A API não encontrou o Firebase principal da GuildaHub. Confira GHUB_FIREBASE_SERVICE_ACCOUNT na Vercel.',
+      'ghub-auth-invalid': 'Sua sessão não foi validada pela API. Entre novamente na GuildaHub.'
     };
     const rawMessage = String(err?.message || '').trim();
     const backendMessage = rawMessage.startsWith('Mercado Pago recusou:') || rawMessage === 'invalid-app-base-url'
@@ -1567,10 +1578,13 @@ async function checkPixPaymentStatus(checkoutId, manual = false) {
     const response = await fetch(`/api/loja_mp_status?checkoutId=${encodeURIComponent(cleanCheckoutId)}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    const data = await response.json().catch(() => ({}));
+    const rawResponse = await response.text().catch(() => '');
+    let data = {};
+    try { data = rawResponse ? JSON.parse(rawResponse) : {}; } catch (_) { data = {}; }
 
     if (!response.ok || data.ok === false) {
-      throw new Error(data.error || 'payment-status-failed');
+      if (!data.error && response.status === 404) throw new Error('api-not-found');
+      throw new Error(data.message || data.error || 'payment-status-failed');
     }
 
     const status = String(data.status || data.paymentStatus || '').toLowerCase();
