@@ -80,7 +80,7 @@ function absoluteUrl(req, path) {
 const PLAN_PRICES = {
   plus: 5.99,
   pro: 8.99,
-  business: 89,90,
+  business: 61.99,
   vitalicio: 599.99,
 };
 
