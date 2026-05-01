@@ -208,8 +208,8 @@ module.exports = async (req, res) => {
         payment_method_id: 'pix',
         payer: { 
           email: payerEmail,
-          first_name: `ID GuildaHUB: ${buyer.gameId}`,
-          last_name: `(${buyer.nick || 'Comprador'})`
+          first_name: `ID GUILDA•HUB: ${buyer.gameId}`,
+          last_name: `- ${buyer.nick || 'Comprador'}`
         },
         external_reference: `loja:${checkoutId}|pedido:${orderId}|produto:${product.id}|buyer:${buyer.gameId}|seller:${product.sellerId || 'ghub'}`,
         metadata: {
