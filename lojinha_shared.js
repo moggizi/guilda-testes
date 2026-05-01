@@ -2613,8 +2613,8 @@ async function loadSellerOrders(options = {}) {
     const cursor = sellerOrderPageCursors[targetPage - 1] || null;
     const base = [where('sellerId', '==', String(sellerId))];
     const sellerQuery = cursor
-      ? query(collection(lojaDb, 'pedidos'), ...base, orderBy('createdAtMs', 'desc'), startAfter(cursor), limit(ORDERS_PAGE_SIZE + 1))
-      : query(collection(lojaDb, 'pedidos'), ...base, orderBy('createdAtMs', 'desc'), limit(ORDERS_PAGE_SIZE + 1));
+      ? query(collection(lojaDb, 'pedidos'), ...base, startAfter(cursor), limit(ORDERS_PAGE_SIZE + 1))
+      : query(collection(lojaDb, 'pedidos'), ...base, limit(ORDERS_PAGE_SIZE + 1));
     const snap = await getDocs(sellerQuery);
     const docs = snap.docs;
     const pageDocs = docs.slice(0, ORDERS_PAGE_SIZE);
@@ -3385,9 +3385,9 @@ function startBuyerOrdersRealtime() {
   if (!currentUser || !ghubProfile?.gameId || buyerOrdersUnsub) return;
   const buyerId = String(ghubProfile.gameId);
   try {
-    const q = query(collection(lojaDb, 'pedidos'), where('buyerId', '==', buyerId), orderBy('createdAtMs', 'desc'), limit(ORDERS_PAGE_SIZE));
+    const q = query(collection(lojaDb, 'pedidos'), where('buyerId', '==', buyerId), limit(ORDERS_PAGE_SIZE));
     buyerOrdersUnsub = onSnapshot(q, (snap) => {
-      buyerOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      buyerOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b.createdAtMs || b.createdAt?.seconds || 0) - Number(a.createdAtMs || a.createdAt?.seconds || 0));
       buyerOrdersPage = 1;
       buyerOrdersHasNextPage = snap.docs.length >= ORDERS_PAGE_SIZE;
       cacheBuyerOrdersPage();
@@ -3427,9 +3427,9 @@ function startSellerOrdersRealtime() {
   if (!currentUser || !ghubProfile?.gameId || sellerOrdersUnsub) return;
   const sellerId = String(ghubProfile.gameId);
   try {
-    const q = query(collection(lojaDb, 'pedidos'), where('sellerId', '==', sellerId), orderBy('createdAtMs', 'desc'), limit(ORDERS_PAGE_SIZE));
+    const q = query(collection(lojaDb, 'pedidos'), where('sellerId', '==', sellerId), limit(ORDERS_PAGE_SIZE));
     sellerOrdersUnsub = onSnapshot(q, (snap) => {
-      sellerOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      sellerOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => Number(b.createdAtMs || b.createdAt?.seconds || 0) - Number(a.createdAtMs || a.createdAt?.seconds || 0));
       sellerOrdersPage = 1;
       sellerOrdersHasNextPage = snap.docs.length >= ORDERS_PAGE_SIZE;
       cacheSellerOrdersPage();
@@ -3470,9 +3470,9 @@ function startSellerChatsRealtime() {
 function startSupportChatsRealtime() {
   if (!isSupportAdmin || supportChatsUnsub) return;
   try {
-    const q = query(collection(lojaDb, CHAT_COLLECTION), where('tipo', '==', CHAT_TYPE_SUPPORT), orderBy('lastMessageAtMs', 'desc'), limit(30));
+    const q = query(collection(lojaDb, CHAT_COLLECTION), where('tipo', '==', CHAT_TYPE_SUPPORT), limit(30));
     supportChatsUnsub = onSnapshot(q, async (snap) => {
-      supportChats = snap.docs.map(normalizeChatDoc);
+      supportChats = snap.docs.map(normalizeChatDoc).sort((a, b) => Number(b.lastMessageAtMs || b.createdAtMs || 0) - Number(a.lastMessageAtMs || a.createdAtMs || 0));
       await markExpiredChatsIfNeeded(supportChats);
       lojaCacheSet('supportPanel', { chats: supportChats, refunds: supportRefundRequests, reports: supportReports, withdrawals: supportWithdrawals, verifications: supportVerifications }, 'admin');
       renderSupportChats();
@@ -3489,9 +3489,9 @@ function startSupportChatsRealtime() {
 function startSupportRefundsRealtime() {
   if (!isSupportAdmin || supportRefundsUnsub) return;
   try {
-    const q = query(collection(lojaDb, 'pedidos'), where('status', '==', 'reembolso_solicitado'), orderBy('reembolsoSolicitadoEmMs', 'desc'), limit(20));
+    const q = query(collection(lojaDb, 'pedidos'), where('status', '==', 'reembolso_solicitado'), limit(20));
     supportRefundsUnsub = onSnapshot(q, (snap) => {
-      supportRefundRequests = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((order) => String(order.reembolsoStatus || '').toLowerCase() !== 'reembolsado');
+      supportRefundRequests = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((order) => String(order.reembolsoStatus || '').toLowerCase() !== 'reembolsado').sort((a, b) => Number(b.reembolsoSolicitadoEmMs || b.updatedAtMs || b.createdAtMs || 0) - Number(a.reembolsoSolicitadoEmMs || a.updatedAtMs || a.createdAtMs || 0));
       lojaCacheSet('supportPanel', { chats: supportChats, refunds: supportRefundRequests, reports: supportReports, withdrawals: supportWithdrawals, verifications: supportVerifications }, 'admin');
       renderSupportRefundRequests();
       updateNotificationBadges();
@@ -3867,8 +3867,8 @@ async function loadBuyerOrders(options = {}) {
     const cursor = buyerOrderPageCursors[targetPage - 1] || null;
     const base = [where('buyerId', '==', String(ghubProfile.gameId))];
     const orderQuery = cursor
-      ? query(collection(lojaDb, 'pedidos'), ...base, orderBy('createdAtMs', 'desc'), startAfter(cursor), limit(ORDERS_PAGE_SIZE + 1))
-      : query(collection(lojaDb, 'pedidos'), ...base, orderBy('createdAtMs', 'desc'), limit(ORDERS_PAGE_SIZE + 1));
+      ? query(collection(lojaDb, 'pedidos'), ...base, startAfter(cursor), limit(ORDERS_PAGE_SIZE + 1))
+      : query(collection(lojaDb, 'pedidos'), ...base, limit(ORDERS_PAGE_SIZE + 1));
     const [ordersSnap] = await Promise.all([
       getDocs(orderQuery),
       loadBuyerProblems(),
@@ -4303,7 +4303,7 @@ async function deleteWithdrawalRequest(withdrawId) {
 async function loadSupportRefundRequests() {
   if (!isSupportAdmin) return;
   try {
-    const snap = await getDocs(query(collection(lojaDb, 'pedidos'), where('status', '==', 'reembolso_solicitado'), orderBy('reembolsoSolicitadoEmMs', 'desc'), limit(20)));
+    const snap = await getDocs(query(collection(lojaDb, 'pedidos'), where('status', '==', 'reembolso_solicitado'), limit(20)));
     supportRefundRequests = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
       .filter((order) => String(order.reembolsoStatus || '').toLowerCase() !== 'reembolsado');
@@ -4804,7 +4804,7 @@ async function createSupportChatWithSeller(sellerId, sellerName = '', source = '
 
 async function loadSupportChats() {
   try {
-    const snap = await getDocs(query(collection(lojaDb, CHAT_COLLECTION), where('tipo', '==', CHAT_TYPE_SUPPORT), orderBy('lastMessageAtMs', 'desc'), limit(30)));
+    const snap = await getDocs(query(collection(lojaDb, CHAT_COLLECTION), where('tipo', '==', CHAT_TYPE_SUPPORT), limit(30)));
     supportChats = snap.docs.map(normalizeChatDoc).sort((a,b) => Number(b.lastMessageAtMs || b.createdAtMs || 0) - Number(a.lastMessageAtMs || a.createdAtMs || 0));
     await markExpiredChatsIfNeeded(supportChats);
   } catch (err) {
