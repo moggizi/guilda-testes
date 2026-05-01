@@ -1,3 +1,2 @@
-import { initLojaPage } from './lojinha_core.js';
-
-initLojaPage('store');
+import { initLojinhaVitrine } from './lojinha_vitrine.js';
+initLojinhaVitrine();
