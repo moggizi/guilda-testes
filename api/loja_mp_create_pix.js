@@ -203,7 +203,7 @@ module.exports = async (req, res) => {
     try {
      const paymentPayload = {
         transaction_amount: amount,
-        description: `Loginha - HUB - ${product.titulo}`.slice(0, 255),
+        description: `LOJINHA - HUB - ${product.titulo}`.slice(0, 255),
         date_of_expiration: new Date(expiresAtMs).toISOString(),
         payment_method_id: 'pix',
         payer: { 
