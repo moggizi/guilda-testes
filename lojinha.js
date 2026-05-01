@@ -1,3 +1,3 @@
 import { initLojaPage } from './lojinha_core.js';
 
-initLojaPage('compras');
+initLojaPage('store');

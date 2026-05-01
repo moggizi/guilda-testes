@@ -1,3 +1,3 @@
-import { initLojaPage } from './loja_core.js';
+import { initLojaPage } from './lojinha_core.js';
 
 initLojaPage('painel_vendedor');
