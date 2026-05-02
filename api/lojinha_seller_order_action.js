@@ -198,37 +198,46 @@ module.exports = async (req, res) => {
 
       const sellerRef = lojaDb.collection('vendedor').doc(sellerId);
       const verificationRef = lojaDb.collection('verificacao').doc(sellerId);
+      const productRef = productId ? lojaDb.collection('produtos').doc(productId) : null;
       const sellerSnap = await tx.get(sellerRef);
       const verificationSnap = await tx.get(verificationRef);
+      const productSnap = productRef ? await tx.get(productRef) : null;
       if (!sellerSnap.exists) throw new Error('seller-inactive');
       const seller = sellerSnap.data() || {};
       const verification = verificationSnap.exists ? (verificationSnap.data() || {}) : null;
+      const product = productSnap?.exists ? (productSnap.data() || {}) : null;
+      const productBelongsToSeller = !!product && String(product.sellerId || product.vendedorId || '').trim() === sellerId;
       const sellerAuthUid = String(seller.authUid || seller.lojinhaUid || seller.lojaAuthUid || '').trim();
       const orderSellerAuthUid = String(order.sellerAuthUid || order.sellerLojinhaUid || '').trim();
       const verificationAuthUid = String(verification?.authUid || verification?.lojinhaUid || verification?.lojaAuthUid || '').trim();
+      const productSellerAuthUid = productBelongsToSeller ? String(product.sellerAuthUid || product.sellerLojinhaUid || product.lojinhaUid || '').trim() : '';
       const sellerEmail = String(seller.authEmail || seller.email || seller.playerEmail || '').trim().toLowerCase();
       const verificationEmail = String(verification?.authEmail || verification?.email || verification?.playerEmail || '').trim().toLowerCase();
       const orderSellerEmail = String(order.sellerAuthEmail || order.sellerEmail || '').trim().toLowerCase();
+      const productSellerEmail = productBelongsToSeller ? String(product.sellerAuthEmail || product.sellerEmail || '').trim().toLowerCase() : '';
       const authEmail = String(lojaAuth.authEmail || '').trim().toLowerCase();
       const authMatchesSeller = !!sellerAuthUid && sellerAuthUid === lojaAuth.authUid;
       const authMatchesOrder = !!orderSellerAuthUid && orderSellerAuthUid === lojaAuth.authUid;
       const authMatchesVerification = !!verificationAuthUid && verificationAuthUid === lojaAuth.authUid;
+      const authMatchesProduct = !!productSellerAuthUid && productSellerAuthUid === lojaAuth.authUid;
       const emailMatchesSeller = !!authEmail && !!sellerEmail && authEmail === sellerEmail;
       const emailMatchesVerification = !!authEmail && !!verificationEmail && authEmail === verificationEmail;
       const emailMatchesOrder = !!authEmail && !!orderSellerEmail && authEmail === orderSellerEmail;
+      const emailMatchesProduct = !!authEmail && !!productSellerEmail && authEmail === productSellerEmail;
 
-      if (!authMatchesSeller && !authMatchesOrder && !authMatchesVerification && !emailMatchesSeller && !emailMatchesVerification && !emailMatchesOrder) {
+      if (!authMatchesSeller && !authMatchesOrder && !authMatchesVerification && !authMatchesProduct && !emailMatchesSeller && !emailMatchesVerification && !emailMatchesOrder && !emailMatchesProduct) {
         throw new Error('seller-not-authorized');
       }
       if (!isSellerActive(seller, verification)) throw new Error('seller-inactive');
       if (!isOrderPending(order)) throw new Error('order-not-pending');
 
       const nowMs = Date.now();
-      if (!sellerAuthUid && (emailMatchesSeller || emailMatchesVerification || authMatchesVerification || emailMatchesOrder)) {
+      const canRepairSellerAuth = authMatchesOrder || authMatchesVerification || authMatchesProduct || emailMatchesSeller || emailMatchesVerification || emailMatchesOrder || emailMatchesProduct;
+      if (lojaAuth.authUid && sellerAuthUid !== lojaAuth.authUid && canRepairSellerAuth) {
         tx.set(sellerRef, {
           authUid: lojaAuth.authUid,
           lojinhaUid: lojaAuth.authUid,
-          authEmail: lojaAuth.authEmail || seller.authEmail || seller.email || verification?.authEmail || verification?.email || '',
+          authEmail: lojaAuth.authEmail || seller.authEmail || seller.email || verification?.authEmail || verification?.email || product?.sellerAuthEmail || '',
           updatedAt: FieldValue.serverTimestamp(),
           updatedAtMs: nowMs,
         }, { merge: true });
@@ -237,8 +246,10 @@ module.exports = async (req, res) => {
         orderPatch = {
           status: 'entregue',
           finalizado: true,
-          sellerAuthUid: order.sellerAuthUid || lojaAuth.authUid,
-          sellerLojinhaUid: order.sellerLojinhaUid || lojaAuth.authUid,
+          sellerAuthUid: lojaAuth.authUid,
+          sellerLojinhaUid: lojaAuth.authUid,
+          sellerAuthEmail: lojaAuth.authEmail || order.sellerAuthEmail || order.sellerEmail || '',
+          sellerEmail: lojaAuth.authEmail || order.sellerEmail || order.sellerAuthEmail || '',
           deliveryInfo: deliveryInfo || order.deliveryInfo || '',
           deliveryInfoUpdatedAtMs: nowMs,
           entregueEmMs: nowMs,
@@ -256,8 +267,10 @@ module.exports = async (req, res) => {
         orderPatch = {
           status: 'reembolso_solicitado',
           finalizado: false,
-          sellerAuthUid: order.sellerAuthUid || lojaAuth.authUid,
-          sellerLojinhaUid: order.sellerLojinhaUid || lojaAuth.authUid,
+          sellerAuthUid: lojaAuth.authUid,
+          sellerLojinhaUid: lojaAuth.authUid,
+          sellerAuthEmail: lojaAuth.authEmail || order.sellerAuthEmail || order.sellerEmail || '',
+          sellerEmail: lojaAuth.authEmail || order.sellerEmail || order.sellerAuthEmail || '',
           reembolsoSolicitado: true,
           reembolsoStatus: 'pendente',
           reembolsoMotivo: motivo || 'Solicitado pelo vendedor.',
