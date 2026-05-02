@@ -2390,29 +2390,26 @@ async function createOrUpdateSellerProfile() {
     return null;
   }
 
+  // Sempre confirma/cria a conta real na Auth da Lojinha antes de ativar o painel.
+  // A criação/reativação do documento vendedor é feita pela API/Admin SDK,
+  // porque as rules bloqueiam create/update sensível direto pelo front.
   const lojinhaAuthResult = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, silent: false });
   if (!lojinhaAuthResult?.user) return null;
 
   setButtonLoading(els.topSellerBtn, true, getSellerReadyHtml());
 
   try {
-    const sellerRef = doc(lojaDb, 'vendedor', payload.gameId);
-    const sellerSnap = await getDoc(sellerRef).catch((err) => {
-      console.warn('Vendedor ainda não legível/ativo:', err?.code || err?.message || err);
-      return null;
-    });
-    const existing = sellerSnap?.exists?.() ? sellerSnap.data() : null;
     const verification = sellerVerification || await loadSellerVerification();
     const verificationStatus = getVerificationStatusLabel(verification?.status);
 
-    if (isSellerVerificationBlocked(verification) || isSellerRecordBlocked(existing)) {
+    if (isSellerVerificationBlocked(verification)) {
       clearSellerLocalState(payload.gameId);
       localToast('error', 'Sua conta de vendedor foi removida ou revogada pelo suporte. Envie uma nova solicitação se quiser vender novamente.');
       openVerificationModal(verification);
       return null;
     }
 
-    if (!isSellerApprovedForPanel(existing || { id: payload.gameId }, verification)) {
+    if (verificationStatus !== 'aprovado') {
       if (verificationStatus === 'pendente') localToast('info', 'Sua solicitação de vendedor ainda está em análise.');
       else if (verificationStatus === 'recusado') localToast('error', 'Sua solicitação de vendedor foi recusada.');
       else localToast('info', 'Envie a solicitação e aguarde aprovação para vender.');
@@ -2420,41 +2417,36 @@ async function createOrUpdateSellerProfile() {
       return null;
     }
 
-    const sellerPayload = {
-      ...existing,
-      id: payload.gameId,
+    const data = await callLojinhaApi('/api/lojinha_activate_seller', {
       gameId: payload.gameId,
-      uid: payload.uid,
       ghubUid: payload.uid,
-      authUid: lojinhaAuthResult.user.uid || existing?.authUid || '',
-      lojinhaUid: lojinhaAuthResult.user.uid || existing?.lojinhaUid || '',
-      authEmail: normalizeEmail(lojinhaAuthResult.user.email || payload.email || existing?.authEmail || ''),
       email: payload.email,
-      playerEmail: payload.email,
-      nome: payload.nick || existing?.nome || '',
-      nick: payload.nick || existing?.nick || '',
-      foto: payload.foto || existing?.foto || '',
-      tipo: existing?.tipo || 'externo',
-      status: existing?.status || 'ativo',
-      ativo: existing?.ativo !== false,
-      verificado: true,
-      verificacaoStatus: 'aprovado',
-      verificationId: verification?.id || payload.gameId,
-      totalProdutos: Number(existing?.totalProdutos || 0),
-      totalVendas: Number(existing?.totalVendas || 0),
-      updatedAt: serverTimestamp(),
-      ...(existing?.createdAt ? {} : { createdAt: serverTimestamp() })
-    };
+      nick: payload.nick,
+      foto: payload.foto
+    }, { forceRefresh: true });
 
-    await setDoc(sellerRef, sellerPayload, { merge: true });
+    const sellerPayload = data.vendedor || data.seller || null;
+    if (!sellerPayload) throw new Error(data.error || 'seller-activation-failed');
+
     lojaStatus.vendedor = { id: payload.gameId, ...sellerPayload };
     lojaCacheRemove('storeStatus', getCurrentUserCacheKey());
+    lojaCacheRemove('sellerProducts', String(payload.gameId));
+    lojaCacheRemove('sellerOrders', `${payload.gameId}:page:1`);
     renderSellerTop();
-    localToast('success', sellerSnap.exists() ? 'Perfil de vendedor atualizado.' : 'Perfil de vendedor criado.');
+    localToast('success', data.created ? 'Perfil de vendedor criado.' : 'Painel do vendedor ativado.');
     return lojaStatus.vendedor;
   } catch (err) {
     console.error(err);
-    localToast('error', 'Não foi possível ativar o painel do vendedor. Se sua verificação já foi aprovada, peça ao suporte para reativar/criar o vendedor.');
+    const map = {
+      'loja-auth-required': 'Entre novamente na conta da Lojinha para ativar o painel.',
+      'loja-auth-invalid': 'Sessão da Lojinha expirada. Entre novamente.',
+      'verification-not-found': 'Sua solicitação de vendedor não foi encontrada.',
+      'verification-not-approved': 'Sua solicitação ainda não foi aprovada pelo suporte.',
+      'verification-owner-mismatch': 'A conta da Lojinha não bate com a solicitação aprovada.',
+      'seller-revoked': 'Sua conta de vendedor foi removida ou revogada pelo suporte.',
+      'seller-blocked': 'Sua conta de vendedor está bloqueada.'
+    };
+    localToast('error', map[String(err?.message || '')] || 'Não foi possível ativar o painel do vendedor. Confira sua conta da Lojinha e tente novamente.');
     return null;
   } finally {
     renderSellerTop();
@@ -3400,6 +3392,14 @@ async function updateOrderStatus(orderId, action) {
     const sellerAuth = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, silent: false });
     if (!sellerAuth?.user) {
       localToast('error', 'Entre novamente na conta da Lojinha para alterar o pedido.');
+      return;
+    }
+
+    // Se o painel abriu por cache mas a sessão da Auth da Lojinha não está ativa/igual ao vendedor,
+    // o token da API falha. Garante token novo antes de chamar a Vercel.
+    const freshSellerToken = await getLojinhaAuthToken(true);
+    if (!freshSellerToken) {
+      localToast('error', 'Sessão da Lojinha expirada. Entre novamente para alterar o pedido.');
       return;
     }
 
