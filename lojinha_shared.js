@@ -47,6 +47,9 @@ const lojaFirebaseConfig = {
 const lojaApp = getApps().find((app) => app.name === 'loja-ghub') || initializeApp(lojaFirebaseConfig, 'loja-ghub');
 const lojaDb = getFirestore(lojaApp);
 const lojaAuth = getAuth(lojaApp);
+const lojaPersistenceReady = setPersistence(lojaAuth, browserLocalPersistence).catch((err) => {
+  console.warn('Não foi possível ativar persistência local da Auth da lojinha:', err);
+});
 let lojaLastAuthUser = null;
 let lojaAuthFirstStateResolved = false;
 let resolveLojaAuthFirstState = null;
@@ -57,9 +60,6 @@ onAuthStateChanged(lojaAuth, (user) => {
     lojaAuthFirstStateResolved = true;
     if (typeof resolveLojaAuthFirstState === 'function') resolveLojaAuthFirstState(lojaLastAuthUser);
   }
-});
-const lojaPersistenceReady = setPersistence(lojaAuth, browserLocalPersistence).catch((err) => {
-  console.warn('Não foi possível ativar persistência local da Auth da lojinha:', err);
 });
 const lojaAuthReady = Promise.all([lojaPersistenceReady, lojaAuthFirstStateReady]).then(() => lojaAuth.currentUser || lojaLastAuthUser || null);
 function getCurrentLojaAuthUserSync() {
@@ -72,8 +72,18 @@ function getCurrentLojaAuthEmailSync() {
   return normalizeEmail(getCurrentLojaAuthUserSync()?.email || '');
 }
 async function waitForCurrentLojaAuthUser() {
-  await lojaAuthReady.catch(() => null);
+  await lojaPersistenceReady.catch(() => null);
+  if (typeof lojaAuth.authStateReady === 'function') {
+    await lojaAuth.authStateReady().catch(() => null);
+  } else {
+    await lojaAuthReady.catch(() => null);
+  }
   return getCurrentLojaAuthUserSync();
+}
+
+async function resetLojinhaAuthSession() {
+  try { await signOutFirebase(lojaAuth); } catch (_) {}
+  lojaLastAuthUser = null;
 }
 
 const qs = (id) => document.getElementById(id);
@@ -86,6 +96,22 @@ const escapeHtml = (str) => String(str ?? '')
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');
 const moneyBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function isUsableImageSrc(value) {
+  const src = String(value || '').trim();
+  if (!src) return false;
+  if (/^https?:\/\//i.test(src) || src.startsWith('/')) return true;
+  if (/^data:image\//i.test(src)) {
+    if (src.includes(';base64,')) {
+      const base64 = String(src.split(',')[1] || '').trim();
+      return base64.length > 50 && base64.length % 4 !== 1;
+    }
+    return src.length > 50;
+  }
+  return false;
+}
+function getUsableProfilePhoto(...sources) {
+  return sources.map((src) => String(src || '').trim()).find(isUsableImageSrc) || '';
+}
 
 const DEFAULT_CATEGORIES = [
   { id: 'conta', nome: 'Conta', ordem: 1 },
@@ -316,6 +342,64 @@ function saveSeenState(state) {
 
 function getCurrentUserCacheKey() {
   return String(currentUser?.uid || currentUser?.email || ghubProfile?.gameId || 'global').trim() || 'global';
+}
+
+function getLojinhaAuthEmailMarkerKey(email) {
+  return `ghub_loja_auth_email_v1:${normalizeEmail(email)}`;
+}
+
+function markLojinhaAuthEmailExists(email) {
+  const clean = normalizeEmail(email);
+  if (!clean) return;
+  try { localStorage.setItem(getLojinhaAuthEmailMarkerKey(clean), String(Date.now())); } catch (_) {}
+}
+
+function hasLojinhaAuthEmailMarker(email) {
+  const clean = normalizeEmail(email);
+  if (!clean) return false;
+  try { return !!localStorage.getItem(getLojinhaAuthEmailMarkerKey(clean)); } catch (_) { return false; }
+}
+
+function hasCachedLojinhaRole(role = '') {
+  const cached = lojaCacheGet('storeStatus', LOJA_CACHE_TTL.STORE_STATUS, getCurrentUserCacheKey());
+  if (!cached || typeof cached !== 'object') return false;
+  const cleanRole = getRoleCollectionName(role || 'comprador');
+  if (cleanRole === 'vendedor') return !!cached.vendedor || !!cached.comprador;
+  return !!cached.comprador || !!cached.vendedor;
+}
+
+let lojinhaAccountStatusCache = { key: '', value: null, savedAt: 0 };
+async function getGhubAuthToken(forceRefresh = false) {
+  const user = auth?.currentUser || currentUser || null;
+  if (!user || typeof user.getIdToken !== 'function') return '';
+  try { return await user.getIdToken(!!forceRefresh); } catch (_) { return ''; }
+}
+
+async function fetchLojinhaAccountStatus(force = false) {
+  if (!currentUser || !ghubProfile?.gameId) return null;
+  const key = `${currentUser.uid || currentUser.email || ''}:${ghubProfile.gameId}`;
+  if (!force && lojinhaAccountStatusCache.key === key && lojinhaAccountStatusCache.value && Date.now() - lojinhaAccountStatusCache.savedAt < 2 * 60 * 1000) {
+    return lojinhaAccountStatusCache.value;
+  }
+  const token = await getGhubAuthToken(true);
+  if (!token) return null;
+  try {
+    const response = await fetch('/api/lojinha_account_status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ gameId: ghubProfile.gameId })
+    });
+    const raw = await response.text().catch(() => '');
+    let data = {};
+    try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = {}; }
+    if (!response.ok || data.ok === false) return null;
+    lojinhaAccountStatusCache = { key, value: data, savedAt: Date.now() };
+    if (data.authExists && data.email) markLojinhaAuthEmailExists(data.email);
+    return data;
+  } catch (err) {
+    console.warn('Não foi possível consultar o status da conta da Lojinha:', err?.message || err);
+    return null;
+  }
 }
 
 
@@ -1270,7 +1354,7 @@ function renderSellerTop() {
     els.topSellerAvatarWrap.classList.toggle('hidden', !readySeller);
   }
 
-  const photo = seller?.foto || seller?.sellerPhoto || ghubProfile?.foto || '';
+  const photo = getUsableProfilePhoto(seller?.foto, seller?.sellerPhoto, ghubProfile?.foto);
   if (readySeller && photo && els.topSellerAvatar && els.topSellerAvatarIcon) {
     els.topSellerAvatar.src = photo;
     els.topSellerAvatar.classList.remove('hidden');
@@ -1943,16 +2027,31 @@ const lojinhaAuthEmailExistsCache = new Map();
 async function getLojinhaAuthAccountExists(email) {
   const clean = normalizeEmail(email);
   if (!clean) return null;
+  if (hasLojinhaAuthEmailMarker(clean)) {
+    lojinhaAuthEmailExistsCache.set(clean, true);
+    return true;
+  }
   if (lojinhaAuthEmailExistsCache.has(clean)) return lojinhaAuthEmailExistsCache.get(clean);
   try {
     await lojaPersistenceReady.catch(() => null);
     const methods = await fetchSignInMethodsForEmail(lojaAuth, clean);
-    const exists = Array.isArray(methods) && methods.length > 0;
+    let exists = Array.isArray(methods) && methods.length > 0;
+    if (!exists) {
+      const serverStatus = await fetchLojinhaAccountStatus(false);
+      exists = !!serverStatus?.authExists;
+    }
+    if (exists) markLojinhaAuthEmailExists(clean);
     lojinhaAuthEmailExistsCache.set(clean, exists);
     return exists;
   } catch (err) {
     console.warn('Não foi possível verificar se o email já existe na Auth da Lojinha:', err?.code || err?.message || err);
-    return null;
+    const serverStatus = await fetchLojinhaAccountStatus(false);
+    if (serverStatus?.authExists) {
+      markLojinhaAuthEmailExists(clean);
+      lojinhaAuthEmailExistsCache.set(clean, true);
+      return true;
+    }
+    return hasLojinhaAuthEmailMarker(clean) ? true : null;
   }
 }
 
@@ -1991,14 +2090,14 @@ function buildInactiveSellerProfilePayload(authUser = null, existing = {}) {
   };
 }
 
-async function ensureInactiveSellerProfileForBuyer(authUser = null) {
+async function ensureInactiveSellerProfileForBuyer(authUser = null, overrides = {}) {
   if (!currentUser || !ghubProfile?.gameId) return null;
   const sellerRef = doc(lojaDb, 'vendedor', String(ghubProfile.gameId));
   try {
     const sellerSnap = await getDoc(sellerRef).catch(() => null);
     const existing = sellerSnap?.exists?.() ? { id: sellerSnap.id, ...sellerSnap.data() } : null;
     if (existing && (isSellerRecordBlocked(existing) || isSellerApprovedForPanel(existing, null))) return existing;
-    const payload = buildInactiveSellerProfilePayload(authUser || getCurrentLojaAuthUserSync(), existing || {});
+    const payload = buildInactiveSellerProfilePayload(authUser || getCurrentLojaAuthUserSync(), { ...(existing || {}), ...(overrides || {}) });
     await setDoc(sellerRef, payload, { merge: true });
     return { id: ghubProfile.gameId, ...payload };
   } catch (err) {
@@ -2099,6 +2198,7 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
   }
 
   if (isSameLojinhaAuthEmail(email)) {
+    markLojinhaAuthEmailExists(email);
     if (!requireRoleDoc || roleData || roleReadDenied) {
       return { user: getCurrentLojaAuthUserSync(), roleData, roleRef };
     }
@@ -2107,7 +2207,7 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
   if (silent) return null;
 
   const authAccountExists = await getLojinhaAuthAccountExists(email);
-  const shouldLogin = (roleData && (!roleEmail || roleEmail === email)) || authAccountExists === true;
+  const shouldLogin = (roleData && (!roleEmail || roleEmail === email)) || authAccountExists === true || hasCachedLojinhaRole(role);
   if (!allowCreateAuth && !shouldLogin) return null;
 
   const mode = shouldLogin ? 'entrar' : 'criar';
@@ -2119,6 +2219,7 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
     const credential = await signInWithEmailAndPassword(lojaAuth, email, password);
     authUser = credential.user;
     lojaLastAuthUser = authUser;
+    markLojinhaAuthEmailExists(email);
   } catch (signInErr) {
     const code = String(signInErr?.code || '');
     if (shouldLogin || !allowCreateAuth) {
@@ -2138,6 +2239,7 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
         authUser = credential.user;
         lojaLastAuthUser = authUser;
         lojinhaAuthEmailExistsCache.set(email, true);
+        markLojinhaAuthEmailExists(email);
       } catch (createErr) {
         const createCode = String(createErr?.code || '');
         if (createCode === 'auth/email-already-in-use') {
@@ -2489,6 +2591,11 @@ async function submitSellerVerification(event) {
       createdAt: serverTimestamp(),
       createdAtMs: Date.now()
     }, { merge: true });
+    await ensureInactiveSellerProfileForBuyer(lojinhaAuthResult.user, {
+      verificationStatus: 'pending',
+      verificacaoStatus: 'pendente',
+      statusVerificacao: 'pendente'
+    });
     sellerVerification = payload;
     localToast('success', 'Verificação enviada. Aguarde aprovação para vender.');
     closeVerificationModal();
@@ -2938,7 +3045,7 @@ function renderSellerProfileCard() {
   const seller = lojaStatus?.vendedor;
   if (!els.sellerProfileCard) return;
   if (!seller) { els.sellerProfileCard.innerHTML = '<p class="text-sm font-bold text-red-700">Perfil de vendedor não encontrado.</p>'; return; }
-  const photo = seller.foto || ghubProfile?.foto || '';
+  const photo = getUsableProfilePhoto(seller.foto, seller.sellerPhoto, ghubProfile?.foto);
   const finances = getSellerFinancialsForDisplay(seller, sellerOrders);
   const withdrawAvailable = isSupportAdmin ? finances.saldoTotalDisponivelAdmin : finances.saldoAtual;
   const canWithdraw = isSupportAdmin ? withdrawAvailable > 0 : withdrawAvailable >= SELLER_WITHDRAW_MIN;
@@ -3328,10 +3435,10 @@ async function handleSellerProductSubmit(event) {
       sellerAuthEmail: normalizeEmail(getCurrentLojaAuthEmailSync() || seller.authEmail || seller.email || ghubProfile.email || ''),
       sellerGhubUid: String(currentUser?.uid || ghubProfile?.uid || ''),
       sellerName: seller.nome || seller.nick || ghubProfile.nick || 'Vendedor',
-      sellerPhoto: seller.foto || ghubProfile.foto || '',
+      sellerPhoto: getUsableProfilePhoto(seller.foto, ghubProfile.foto),
       vendedorId: ghubProfile.gameId,
       vendedorNome: seller.nome || seller.nick || ghubProfile.nick || 'Vendedor',
-      vendedorFoto: seller.foto || ghubProfile.foto || '',
+      vendedorFoto: getUsableProfilePhoto(seller.foto, ghubProfile.foto),
 
       titulo: title,
       descricao: description,
@@ -3528,12 +3635,24 @@ async function updateOrderStatus(orderId, action) {
       return;
     }
 
-    const data = await callLojinhaApi('/api/lojinha_seller_order_action', {
+    const apiPayload = {
       orderId,
       action,
       deliveryInfo: deliveryInfoText,
       motivo
-    }, { forceRefresh: true });
+    };
+
+    let data;
+    try {
+      data = await callLojinhaApi('/api/lojinha_seller_order_action', apiPayload, { forceRefresh: true });
+    } catch (apiErr) {
+      const apiCode = String(apiErr?.message || '');
+      if (apiCode !== 'loja-auth-invalid' && apiCode !== 'loja-auth-required') throw apiErr;
+      await resetLojinhaAuthSession();
+      const relogin = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, allowCreateAuth: false, silent: false });
+      if (!relogin?.user) throw apiErr;
+      data = await callLojinhaApi('/api/lojinha_seller_order_action', apiPayload, { forceRefresh: true });
+    }
 
     const nowMs = Date.now();
     const localPatch = data.order || {
@@ -4714,7 +4833,7 @@ function buildSellerPayloadFromVerification(id, verification = {}, status = 'ina
     playerEmail: normalizeEmail(verification.email || verification.playerEmail || authEmail),
     nome: String(verification.nick || verification.nome || verification.nomeCompleto || '').trim().slice(0, 80),
     nick: String(verification.nick || verification.nome || verification.nomeCompleto || '').trim().slice(0, 80),
-    foto: String(verification.foto || '').trim().slice(0, 1000),
+    foto: String(verification.foto || '').trim(),
     tipo: 'externo',
     status: active ? 'ativo' : 'inativo',
     ativo: active,

@@ -18,6 +18,13 @@ function cleanText(value, max = 200) {
   return String(value || '').trim().slice(0, max);
 }
 
+function cleanImage(value, max = 850000) {
+  const src = String(value || '').trim();
+  if (!src) return '';
+  if (/^data:image\//i.test(src)) return src.slice(0, max);
+  return src.slice(0, 2000);
+}
+
 function isApprovedVerification(data = {}) {
   const status = String(
     data.status ||
@@ -114,7 +121,7 @@ module.exports = async (req, res) => {
         playerEmail: normalizeEmail(body.email || verification.email || existing?.playerEmail || authEmail),
         nome: cleanText(body.nick || verification.nick || existing?.nome || existing?.nick || '', 80),
         nick: cleanText(body.nick || verification.nick || existing?.nick || existing?.nome || '', 80),
-        foto: cleanText(body.foto || verification.foto || existing?.foto || '', 1000),
+        foto: cleanImage(body.foto || verification.foto || existing?.foto || ''),
         tipo: existing?.tipo || 'externo',
         status: 'ativo',
         ativo: true,
