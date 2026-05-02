@@ -35,22 +35,47 @@ function getDeliveredAtMs(order = {}) {
     || timestampToMs(order.updatedAt);
 }
 
-function isSellerActive(data = {}) {
+function isSellerActive(data = {}, verification = null) {
   const status = String(data.status || '').toLowerCase();
+  const verificationStatus = String(
+    data.verificacaoStatus ||
+    data.verificationStatus ||
+    data.statusVerificacao ||
+    verification?.status ||
+    ''
+  ).toLowerCase();
+
+  const approved = data.verificado === true
+    || data.aprovado === true
+    || data.approved === true
+    || verification?.aprovado === true
+    || verification?.approved === true
+    || verificationStatus === 'aprovado'
+    || verificationStatus === 'approved';
+
   return data.ativo !== false
-    && data.verificado === true
+    && approved
     && data.revogado !== true
     && data.bloqueado !== true
+    && data.excluido !== true
+    && data.excluida !== true
     && status !== 'inativo'
     && status !== 'revogado'
-    && status !== 'bloqueado';
+    && status !== 'bloqueado'
+    && status !== 'excluido';
 }
 
 function isOrderPending(order = {}) {
   const status = String(order.status || '').toLowerCase();
+  const paymentStatus = String(order.pagamento?.status || order.paymentStatus || '').toLowerCase();
   return order.finalizado !== true
     && order.reembolsoSolicitado !== true
-    && ['pendente', 'pending', 'pago', 'aprovado', 'approved', 'aguardando_entrega'].includes(status);
+    && !['entregue', 'reembolso_solicitado', 'reembolsado', 'cancelado', 'cancelled', 'canceled'].includes(status)
+    && (
+      !status ||
+      ['pendente', 'pending', 'pago', 'aprovado', 'approved', 'aguardando_entrega'].includes(status) ||
+      ['aprovado', 'approved', 'paid'].includes(paymentStatus)
+    );
 }
 
 function sanitizeText(value, max = 1000) {
@@ -70,14 +95,16 @@ async function calculateAndSaveSellerFinancials(lojaDb, sellerId) {
   let totalBrutoEntregue = 0;
   let totalVendasEntregues = 0;
 
+  // Usa somente sellerId para evitar índice composto obrigatório no Firestore.
+  // O filtro por status fica na API, que roda com Admin SDK.
   const ordersSnap = await lojaDb.collection('pedidos')
     .where('sellerId', '==', String(sellerId))
-    .where('status', '==', 'entregue')
     .limit(1000)
     .get();
 
   ordersSnap.docs.forEach((doc) => {
     const order = doc.data() || {};
+    if (String(order.status || '').toLowerCase() !== 'entregue') return;
     const gross = Number(order.total || order.precoUnitario || 0);
     if (!Number.isFinite(gross) || gross <= 0) return;
     const net = roundMoney(gross * (1 - SELLER_FEE_RATE));
@@ -170,9 +197,12 @@ module.exports = async (req, res) => {
       if (!sellerId) throw new Error('seller-not-authorized');
 
       const sellerRef = lojaDb.collection('vendedor').doc(sellerId);
+      const verificationRef = lojaDb.collection('verificacao').doc(sellerId);
       const sellerSnap = await tx.get(sellerRef);
+      const verificationSnap = await tx.get(verificationRef);
       if (!sellerSnap.exists) throw new Error('seller-inactive');
       const seller = sellerSnap.data() || {};
+      const verification = verificationSnap.exists ? (verificationSnap.data() || {}) : null;
       const sellerAuthUid = String(seller.authUid || seller.lojinhaUid || seller.lojaAuthUid || '').trim();
       const orderSellerAuthUid = String(order.sellerAuthUid || order.sellerLojinhaUid || '').trim();
       const sellerEmail = String(seller.authEmail || seller.email || seller.playerEmail || '').trim().toLowerCase();
@@ -184,7 +214,7 @@ module.exports = async (req, res) => {
       if (!authMatchesSeller && !authMatchesOrder && !emailMatchesSeller) {
         throw new Error('seller-not-authorized');
       }
-      if (!isSellerActive(seller)) throw new Error('seller-inactive');
+      if (!isSellerActive(seller, verification)) throw new Error('seller-inactive');
       if (!isOrderPending(order)) throw new Error('order-not-pending');
 
       const nowMs = Date.now();
@@ -253,7 +283,16 @@ module.exports = async (req, res) => {
       }
     });
 
-    const finances = await calculateAndSaveSellerFinancials(lojaDb, sellerId);
+    let finances = null;
+    let financeWarning = '';
+    try {
+      finances = await calculateAndSaveSellerFinancials(lojaDb, sellerId);
+    } catch (financeErr) {
+      // Não desfaz a entrega/reembolso por falha posterior no cálculo.
+      // A API /api/lojinha_recalcular_saldo_vendedor pode recalcular depois.
+      financeWarning = financeErr?.message || 'finance-recalc-failed';
+      console.error('[LOJINHA_SELLER_ORDER_ACTION][FINANCE]', financeWarning, financeErr);
+    }
 
     return json(res, 200, {
       ok: true,
@@ -262,6 +301,7 @@ module.exports = async (req, res) => {
       action,
       order: orderPatch,
       finances,
+      financeWarning,
     });
   } catch (err) {
     console.error('[LOJINHA_SELLER_ORDER_ACTION]', err?.message || err);

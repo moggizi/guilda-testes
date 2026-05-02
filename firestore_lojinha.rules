@@ -31,17 +31,26 @@ service cloud.firestore {
         && get(buyerPath(gameId)).data.ativo != false;
     }
 
+    function isSellerApproved(gameId) {
+      return get(sellerPath(gameId)).data.verificado == true
+        || get(sellerPath(gameId)).data.aprovado == true
+        || get(sellerPath(gameId)).data.verificacaoStatus == "aprovado"
+        || get(sellerPath(gameId)).data.verificationStatus == "approved"
+        || get(sellerPath(gameId)).data.statusVerificacao == "aprovado";
+    }
+
     function isSeller(gameId) {
       return signedIn()
         && exists(sellerPath(gameId))
         && get(sellerPath(gameId)).data.authUid == uid()
         && get(sellerPath(gameId)).data.ativo != false
-        && get(sellerPath(gameId)).data.verificado == true
+        && isSellerApproved(gameId)
         && get(sellerPath(gameId)).data.revogado != true
         && get(sellerPath(gameId)).data.bloqueado != true
         && get(sellerPath(gameId)).data.status != "inativo"
         && get(sellerPath(gameId)).data.status != "revogado"
-        && get(sellerPath(gameId)).data.status != "bloqueado";
+        && get(sellerPath(gameId)).data.status != "bloqueado"
+        && get(sellerPath(gameId)).data.status != "excluido";
     }
 
     function ownsGameId(gameId) {

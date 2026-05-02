@@ -34,15 +34,32 @@ function getDeliveredAtMs(order = {}) {
     || timestampToMs(order.updatedAt);
 }
 
-function isSellerActive(data = {}) {
+function isSellerActive(data = {}, verification = null) {
   const status = String(data.status || '').toLowerCase();
-  return data.ativo === true
-    && data.verificado === true
+  const verificationStatus = String(
+    data.verificacaoStatus ||
+    data.verificationStatus ||
+    data.statusVerificacao ||
+    verification?.status ||
+    ''
+  ).toLowerCase();
+  const approved = data.verificado === true
+    || data.aprovado === true
+    || data.approved === true
+    || verification?.aprovado === true
+    || verification?.approved === true
+    || verificationStatus === 'aprovado'
+    || verificationStatus === 'approved';
+  return data.ativo !== false
+    && approved
     && data.revogado !== true
     && data.bloqueado !== true
+    && data.excluido !== true
+    && data.excluida !== true
     && status !== 'inativo'
     && status !== 'revogado'
-    && status !== 'bloqueado';
+    && status !== 'bloqueado'
+    && status !== 'excluido';
 }
 
 async function calculateAndSaveSellerFinancials(lojaDb, sellerId) {
@@ -59,14 +76,15 @@ async function calculateAndSaveSellerFinancials(lojaDb, sellerId) {
   let totalBrutoEntregue = 0;
   let totalVendasEntregues = 0;
 
+  // Usa somente sellerId para evitar índice composto obrigatório no Firestore.
   const ordersSnap = await lojaDb.collection('pedidos')
     .where('sellerId', '==', String(sellerId))
-    .where('status', '==', 'entregue')
     .limit(1000)
     .get();
 
   ordersSnap.docs.forEach((doc) => {
     const order = doc.data() || {};
+    if (String(order.status || '').toLowerCase() !== 'entregue') return;
     const gross = Number(order.total || order.precoUnitario || 0);
     if (!Number.isFinite(gross) || gross <= 0) return;
     const net = roundMoney(gross * (1 - SELLER_FEE_RATE));
@@ -142,12 +160,18 @@ module.exports = async (req, res) => {
     }
     if (!sellerId) throw new Error('seller-not-found');
 
-    const sellerSnap = await lojaDb.collection('vendedor').doc(sellerId).get();
+    const [sellerSnap, verificationSnap] = await Promise.all([
+      lojaDb.collection('vendedor').doc(sellerId).get(),
+      lojaDb.collection('verificacao').doc(sellerId).get().catch(() => null),
+    ]);
     if (!sellerSnap.exists) throw new Error('seller-not-found');
     const seller = sellerSnap.data() || {};
-    const sellerAuthUid = String(seller.authUid || seller.lojinhaUid || '');
-    if (sellerAuthUid !== lojaAuth.authUid) throw new Error('seller-not-authorized');
-    if (!isSellerActive(seller)) throw new Error('seller-inactive');
+    const verification = verificationSnap?.exists ? (verificationSnap.data() || {}) : null;
+    const sellerAuthUid = String(seller.authUid || seller.lojinhaUid || seller.lojaAuthUid || '');
+    const sellerEmail = String(seller.authEmail || seller.email || seller.playerEmail || '').trim().toLowerCase();
+    const authEmail = String(lojaAuth.authEmail || '').trim().toLowerCase();
+    if (sellerAuthUid !== lojaAuth.authUid && (!authEmail || !sellerEmail || authEmail !== sellerEmail)) throw new Error('seller-not-authorized');
+    if (!isSellerActive(seller, verification)) throw new Error('seller-inactive');
 
     const finances = await calculateAndSaveSellerFinancials(lojaDb, sellerId);
     return json(res, 200, { ok: true, sellerId, finances });

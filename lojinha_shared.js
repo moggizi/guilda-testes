@@ -3395,7 +3395,9 @@ async function updateOrderStatus(orderId, action) {
   }
 
   try {
-    const sellerAuth = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: true, createRoleDoc: false, silent: false });
+    // A API valida o vendedor real pelo token + documento vendedor/pedido.
+    // Aqui precisamos só garantir sessão Auth da Lojinha; exigir leitura do doc vendedor no front pode bloquear por rules/cache.
+    const sellerAuth = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, silent: false });
     if (!sellerAuth?.user) {
       localToast('error', 'Entre novamente na conta da Lojinha para alterar o pedido.');
       return;
@@ -3463,6 +3465,10 @@ async function updateOrderStatus(orderId, action) {
       'seller-inactive': 'Seu vendedor está inativo ou não aprovado.',
       'order-not-pending': 'Esse pedido não está mais pendente e não pode ser alterado.',
       'invalid-action': 'Ação inválida para o pedido.',
+      'loja-auth-required': 'Entre novamente na conta da Lojinha.',
+      'loja-auth-invalid': 'Sessão da Lojinha expirada. Entre novamente.',
+      'finance-recalc-failed': 'Pedido atualizado, mas o saldo precisa ser recalculado pelo painel.',
+      'internal-error': 'Erro interno na API ao atualizar o pedido.',
       'auth-required': 'Entre novamente na conta da Lojinha.',
     };
     localToast('error', map[String(err?.message || '')] || 'Não foi possível atualizar o pedido.');
