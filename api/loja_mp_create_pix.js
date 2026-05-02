@@ -7,7 +7,7 @@ const {
   json,
   cors,
   getLojaDb,
-  getBuyerFromLocalProfile,
+  getBuyerFromAuthenticatedRequest,
   ensureBuyerProfile,
   normalizeProductDoc,
   getBaseUrl,
@@ -52,12 +52,12 @@ module.exports = async (req, res) => {
   try {
     const lojaDb = getLojaDb();
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const buyer = getBuyerFromLocalProfile(body);
+    const buyer = await getBuyerFromAuthenticatedRequest(req, body);
     const productId = String(body.productId || '').trim();
 
     if (!productId) return json(res, 400, { ok: false, error: 'product-id-required' });
 
-    const rl = await uidRateLimit(lojaDb, buyer.uid || buyer.gameId, { windowMs: 60_000, maxRequests: 8 });
+    const rl = await uidRateLimit(lojaDb, buyer.authUid || buyer.uid || buyer.gameId, { windowMs: 60_000, maxRequests: 8 });
     if (!rl.ok) {
       const waitSec = Math.max(1, Math.ceil((rl.retryAfterMs || 0) / 1000));
       res.setHeader('Retry-After', String(waitSec));
@@ -151,7 +151,7 @@ module.exports = async (req, res) => {
 
     const hadPriceChangedPix = stalePayments.some((p) => roundMoney(p.amount) !== amount);
     if (!hadPriceChangedPix) {
-      const cd = await creationCooldown(lojaDb, buyer.uid || buyer.gameId, 2 * 60 * 1000);
+      const cd = await creationCooldown(lojaDb, buyer.authUid || buyer.uid || buyer.gameId, 2 * 60 * 1000);
       if (!cd.ok) {
         const waitSec = Math.max(1, Math.ceil((cd.retryAfterMs || 0) / 1000));
         return json(res, 429, { ok: false, error: `Aguarde ${waitSec}s para gerar outro Pix.` });
@@ -179,7 +179,10 @@ module.exports = async (req, res) => {
       productSnapshot: product,
       buyerId: buyer.gameId,
       buyerUid: buyer.uid || '',
-      buyerEmail: buyer.email || '',
+      buyerAuthUid: buyer.authUid || '',
+      buyerLojinhaUid: buyer.lojinhaUid || buyer.authUid || '',
+      buyerAuthEmail: buyer.authEmail || buyer.email || '',
+      buyerEmail: buyer.email || buyer.authEmail || '',
       buyerName: buyer.nick || '',
       buyerPhoto: buyer.foto || '',
       sellerId: product.sellerId || 'ghub',
@@ -218,7 +221,8 @@ module.exports = async (req, res) => {
           product_id: product.id,
           buyer_id: buyer.gameId,
           seller_id: product.sellerId || 'ghub',
-          buyer_email: buyer.email || '',
+          buyer_email: buyer.email || buyer.authEmail || '',
+          buyer_auth_uid: buyer.authUid || '',
         },
       };
       if (notification_url) paymentPayload.notification_url = notification_url;
@@ -281,7 +285,7 @@ module.exports = async (req, res) => {
       updatedAtMs: Date.now(),
     }, { merge: true });
 
-    await markCreated(lojaDb, buyer.uid || buyer.gameId);
+    await markCreated(lojaDb, buyer.authUid || buyer.uid || buyer.gameId);
 
     return json(res, 200, {
       ok: true,
@@ -301,7 +305,7 @@ module.exports = async (req, res) => {
     });
   } catch (err) {
     console.error('[LOJA_MP_CREATE_PIX]', err?.message || err, err?.details || '');
-    const status = err.message === 'buyer-profile-local-required' ? 400 : 500;
+    const status = ['buyer-profile-local-required', 'loja-auth-required', 'loja-auth-invalid', 'buyer-auth-email-mismatch'].includes(err.message) ? 401 : 500;
     return json(res, status, { ok: false, error: err.message || 'internal-error' });
   }
 };

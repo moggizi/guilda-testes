@@ -6,7 +6,8 @@ const {
   json,
   cors,
   getLojaDb,
-  getBuyerFromLocalProfile,
+  verifyLojaAuthFromRequest,
+  readOptionalBuyerFromLocalProfile,
   getMercadoPagoPayment,
   approveCheckoutPayment,
   mapPaymentStatus,
@@ -27,7 +28,8 @@ module.exports = async (req, res) => {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-    const buyer = getBuyerFromLocalProfile(body);
+    const lojaAuth = await verifyLojaAuthFromRequest(req);
+    const buyer = readOptionalBuyerFromLocalProfile(body);
     const checkoutId = String(req.query?.checkoutId || body.checkoutId || '').trim();
 
     if (!checkoutId) return json(res, 400, { ok: false, error: 'checkout-id-required' });
@@ -39,7 +41,10 @@ module.exports = async (req, res) => {
     if (!checkoutSnap.exists) return json(res, 404, { ok: false, error: 'checkout-not-found' });
 
     const checkout = checkoutSnap.data() || {};
-    if (String(checkout.buyerId || '') !== String(buyer.gameId)) {
+    const belongsByAuth = checkout.buyerAuthUid && String(checkout.buyerAuthUid) === String(lojaAuth.authUid);
+    const belongsByBuyerId = buyer?.gameId && String(checkout.buyerId || '') === String(buyer.gameId);
+    const belongsByEmail = lojaAuth.authEmail && checkout.buyerEmail && String(checkout.buyerEmail).toLowerCase() === String(lojaAuth.authEmail).toLowerCase();
+    if (!belongsByAuth && !belongsByBuyerId && !belongsByEmail) {
       return json(res, 403, { ok: false, error: 'checkout-owner-mismatch' });
     }
 
@@ -89,7 +94,7 @@ module.exports = async (req, res) => {
     });
   } catch (err) {
     console.error('[LOJA_MP_STATUS]', err?.message || err);
-    const status = err.message === 'buyer-profile-local-required' ? 400 : 500;
+    const status = ['buyer-profile-local-required', 'loja-auth-required', 'loja-auth-invalid'].includes(err.message) ? 401 : 500;
     return json(res, status, { ok: false, error: err.message || 'internal-error' });
   }
 };

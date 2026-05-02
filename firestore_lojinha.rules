@@ -1,0 +1,340 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admin/$(uid()));
+    }
+
+    function buyerPath(gameId) {
+      return /databases/$(database)/documents/comprador/$(gameId);
+    }
+
+    function sellerPath(gameId) {
+      return /databases/$(database)/documents/vendedor/$(gameId);
+    }
+
+    function isBuyer(gameId) {
+      return signedIn()
+        && exists(buyerPath(gameId))
+        && get(buyerPath(gameId)).data.authUid == uid()
+        && get(buyerPath(gameId)).data.ativo != false;
+    }
+
+    function isSeller(gameId) {
+      return signedIn()
+        && exists(sellerPath(gameId))
+        && get(sellerPath(gameId)).data.authUid == uid()
+        && get(sellerPath(gameId)).data.ativo == true
+        && get(sellerPath(gameId)).data.verificado == true
+        && get(sellerPath(gameId)).data.revogado != true
+        && get(sellerPath(gameId)).data.bloqueado != true
+        && get(sellerPath(gameId)).data.status != "inativo"
+        && get(sellerPath(gameId)).data.status != "revogado"
+        && get(sellerPath(gameId)).data.status != "bloqueado";
+    }
+
+    function isBuyerOf(data) {
+      return signedIn()
+        && (
+          data.buyerAuthUid == uid()
+          || isBuyer(data.buyerId)
+        );
+    }
+
+    function isSellerOf(data) {
+      return signedIn()
+        && (
+          data.sellerAuthUid == uid()
+          || isSeller(data.sellerId)
+        );
+    }
+
+    function isParticipant(data) {
+      return isBuyerOf(data) || isSellerOf(data);
+    }
+
+    function isOrderPending(data) {
+      return data.finalizado != true
+        && data.reembolsoSolicitado != true
+        && data.status in ["pendente", "pending", "pago", "aprovado", "approved", "aguardando_entrega"];
+    }
+
+    function productOwner() {
+      return signedIn()
+        && (
+          resource.data.sellerAuthUid == uid()
+          || isSeller(resource.data.sellerId)
+        );
+    }
+
+    function productOwnerCreate() {
+      return signedIn()
+        && request.resource.data.sellerAuthUid == uid()
+        && isSeller(request.resource.data.sellerId);
+    }
+
+    function safeProductCreate() {
+      return productOwnerCreate()
+        && request.resource.data.preco is number
+        && request.resource.data.preco >= 0
+        && request.resource.data.preco <= 10000
+        && request.resource.data.titulo is string
+        && request.resource.data.titulo.size() >= 3
+        && request.resource.data.titulo.size() <= 80;
+    }
+
+    function safeProductUpdate() {
+      return productOwner()
+        && request.resource.data.sellerId == resource.data.sellerId
+        && request.resource.data.sellerAuthUid == resource.data.sellerAuthUid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "titulo",
+          "descricao",
+          "preco",
+          "moeda",
+          "imagem",
+          "imagens",
+          "categoriaId",
+          "categoriaNome",
+          "tipoProduto",
+          "entregaTipo",
+          "estoqueAtivo",
+          "estoqueQuantidade",
+          "ativo",
+          "destaque",
+          "rankScore",
+          "rankScoreUpdatedAtMs",
+          "sellerTotalVendas",
+          "totalVendas",
+          "totalVendasEntregues",
+          "updatedAt",
+          "updatedAtMs"
+        ])
+        && request.resource.data.preco is number
+        && request.resource.data.preco >= 0
+        && request.resource.data.preco <= 10000;
+    }
+
+    function buyerOrderUpdate() {
+      return isBuyerOf(resource.data)
+        && resource.data.status != "entregue"
+        && resource.data.status != "reembolsado"
+        && resource.data.status != "cancelado"
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "buyerInfo",
+          "buyerInfoUpdatedAtMs",
+          "reembolsoSolicitado",
+          "reembolsoStatus",
+          "reembolsoMotivo",
+          "reembolsoSolicitadoEm",
+          "reembolsoSolicitadoEmMs",
+          "updatedAt",
+          "updatedAtMs"
+        ]);
+    }
+
+    function sellerOrderUpdate() {
+      return isSellerOf(resource.data)
+        && isOrderPending(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "finalizado",
+          "deliveryInfo",
+          "deliveryInfoUpdatedAtMs",
+          "entregueEmMs",
+          "entrega",
+          "reembolsoSolicitado",
+          "reembolsoStatus",
+          "reembolsoMotivo",
+          "reembolsoSolicitadoPor",
+          "reembolsoSolicitadoPorNome",
+          "reembolsoSolicitadoEm",
+          "reembolsoSolicitadoEmMs",
+          "statusAntesReembolso",
+          "finalizadoAntesReembolso",
+          "pagamentoStatusAntesReembolso",
+          "entregaStatusAntesReembolso",
+          "pagamento",
+          "updatedAt",
+          "updatedAtMs"
+        ])
+        && request.resource.data.status in ["entregue", "reembolso_solicitado"];
+    }
+
+    function safeChatWrite() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        "mensagens",
+        "lastMessageAtMs",
+        "updatedAt",
+        "updatedAtMs",
+        "status"
+      ]);
+    }
+
+    match /admin/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /produtos/{id} {
+      allow read: if true;
+      allow create: if isAdmin() || safeProductCreate();
+      allow update: if isAdmin() || safeProductUpdate();
+      allow delete: if isAdmin();
+    }
+
+    match /categorias/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /comprador/{gameId} {
+      allow read: if isAdmin() || isBuyer(gameId);
+      allow create: if signedIn()
+        && request.resource.data.authUid == uid()
+        && request.resource.data.gameId == gameId;
+      allow update: if isAdmin()
+        || (
+          isBuyer(gameId)
+          && request.resource.data.authUid == resource.data.authUid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "nick",
+            "foto",
+            "email",
+            "playerEmail",
+            "authEmail",
+            "updatedAt",
+            "updatedAtMs"
+          ])
+        );
+      allow delete: if isAdmin();
+    }
+
+    match /vendedor/{gameId} {
+      allow read: if isAdmin() || isSeller(gameId);
+      allow create: if isAdmin();
+      allow update: if isAdmin()
+        || (
+          isSeller(gameId)
+          && request.resource.data.authUid == resource.data.authUid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "nome",
+            "nick",
+            "foto",
+            "bio",
+            "whatsapp",
+            "totalProdutos",
+            "updatedAt",
+            "updatedAtMs"
+          ])
+        );
+      allow delete: if isAdmin();
+    }
+
+    match /verificacao/{gameId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.authUid == uid());
+      allow create: if signedIn()
+        && request.resource.data.authUid == uid()
+        && request.resource.data.gameId == gameId
+        && request.resource.data.status == "pendente"
+        && !("rgFrenteBase64" in request.resource.data)
+        && !("rgVersoBase64" in request.resource.data);
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && resource.data.authUid == uid()
+          && resource.data.status in ["pendente", "recusado"]
+          && request.resource.data.status == "pendente"
+          && !("rgFrenteBase64" in request.resource.data)
+          && !("rgVersoBase64" in request.resource.data)
+        );
+      allow delete: if isAdmin();
+    }
+
+    match /verificacaoArquivos/{gameId} {
+      allow read: if isAdmin();
+      allow create, update: if signedIn()
+        && request.resource.data.authUid == uid()
+        && request.resource.data.gameId == gameId;
+      allow delete: if isAdmin();
+    }
+
+    match /pedidos/{id} {
+      allow read: if isAdmin() || isParticipant(resource.data);
+      allow create: if isAdmin();
+      allow update: if isAdmin() || buyerOrderUpdate() || sellerOrderUpdate();
+      allow delete: if isAdmin();
+    }
+
+    match /pagamentosLoja/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /rate_new_pix_loja/{id} {
+      allow read, write: if false;
+    }
+
+    match /rate_http_pix_loja/{id} {
+      allow read, write: if false;
+    }
+
+    match /chatsTemporarios/{id} {
+      allow read: if isAdmin() || isParticipant(resource.data);
+      allow create: if signedIn()
+        && (
+          request.resource.data.buyerAuthUid == uid()
+          || request.resource.data.sellerAuthUid == uid()
+          || isBuyer(request.resource.data.buyerId)
+          || isSeller(request.resource.data.sellerId)
+        );
+      allow update: if isAdmin()
+        || (isParticipant(resource.data) && safeChatWrite());
+      allow delete: if isAdmin();
+    }
+
+    match /denunciasProdutos/{id} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.reporterAuthUid == uid());
+      allow create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /avaliacoesVendedores/{id} {
+      allow read: if true;
+      allow create: if signedIn()
+        && (
+          request.resource.data.buyerAuthUid == uid()
+          || isBuyer(request.resource.data.buyerId)
+        );
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /saques/{id} {
+      allow read: if isAdmin() || isSellerOf(resource.data);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /logs/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

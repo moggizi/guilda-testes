@@ -242,6 +242,7 @@ let editingProductId = '';
 let selectedProductImageBase64 = '';
 let activeDraftChat = null;
 let activePaymentPoll = null;
+let activePixProductId = '';
 let lojaPageMode = 'store';
 
 const PRODUCTS_FETCH_LIMIT = 120;
@@ -1036,37 +1037,30 @@ function getSellerFinancialsForDisplay(sellerData = {}, fallbackOrders = []) {
 
 async function syncSellerFinancialsToFirebase() {
   if (!lojaStatus?.vendedor || !ghubProfile?.gameId) return calculateSellerFinancials(sellerOrders, lojaStatus?.vendedor || {});
-  const finances = calculateSellerFinancials(sellerOrders, lojaStatus.vendedor);
-  const payload = {
-    saldoAtual: finances.saldoAtual,
-    saldoPendente: finances.saldoPendente,
-    saldoEmSaque: finances.saldoEmSaque,
-    totalSacado: finances.totalSacado,
-    totalVendas: finances.totalVendasEntregues,
-    totalVendasEntregues: finances.totalVendasEntregues,
-    financeiro: {
-      saldoAtual: finances.saldoAtual,
-      saldoPendente: finances.saldoPendente,
-      saldoEmSaque: finances.saldoEmSaque,
-      totalSacado: finances.totalSacado,
-      totalBrutoEntregue: finances.totalBrutoEntregue,
-      totalLiquidoEntregue: finances.totalLiquidoEntregue,
-      totalVendasEntregues: finances.totalVendasEntregues,
-      taxaPercentual: SELLER_FEE_PERCENT,
-      saqueMinimo: SELLER_WITHDRAW_MIN,
-      liberacaoDias: SELLER_RELEASE_DAYS,
-      atualizadoEmMs: Date.now()
-    },
-    updatedAt: serverTimestamp()
-  };
   try {
-    await setDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId), payload, { merge: true });
-    lojaCacheRemove('sellerStats', 'global');
-    lojaStatus.vendedor = { ...lojaStatus.vendedor, ...payload };
+    const data = await callLojinhaApi('/api/lojinha_recalcular_saldo_vendedor', { sellerId: String(ghubProfile.gameId || '') });
+    const finances = data.finances || data.financeiro || null;
+    if (finances) {
+      const payload = {
+        saldoAtual: finances.saldoAtual,
+        saldoPendente: finances.saldoPendente,
+        saldoEmSaque: finances.saldoEmSaque,
+        saquePendente: finances.saldoEmSaque,
+        totalSacado: finances.totalSacado,
+        totalVendas: finances.totalVendasEntregues,
+        totalVendasEntregues: finances.totalVendasEntregues,
+        financeiro: finances
+      };
+      lojaStatus.vendedor = { ...lojaStatus.vendedor, ...payload };
+      lojaCacheRemove('storeStatus', getCurrentUserCacheKey());
+      lojaCacheRemove('sellerStats', 'global');
+      renderSellerProfile();
+      return { ...calculateSellerFinancials(sellerOrders, lojaStatus.vendedor), ...finances };
+    }
   } catch (err) {
-    console.warn('Não foi possível salvar saldos do vendedor:', err);
+    console.warn('Não foi possível recalcular saldo pela API:', err?.message || err);
   }
-  return finances;
+  return getSellerFinancialsForDisplay(lojaStatus.vendedor, sellerOrders);
 }
 
 
@@ -2333,14 +2327,25 @@ async function submitSellerVerification(event) {
       papelSolicitado: getVerificationPaperText(),
       experienciaVendas,
       linksVendas,
-      rgFrenteBase64: verificationRgFrontBase64,
-      rgVersoBase64: verificationRgBackBase64,
       status: 'pendente',
       createdAt: serverTimestamp(),
       createdAtMs: Date.now(),
       updatedAt: serverTimestamp()
     };
     await setDoc(doc(lojaDb, VERIFICATION_COLLECTION, String(ghubProfile.gameId)), payload, { merge: true });
+    await setDoc(doc(lojaDb, 'verificacaoArquivos', String(ghubProfile.gameId)), {
+      id: ghubProfile.gameId,
+      gameId: ghubProfile.gameId,
+      authUid: lojinhaAuthResult.user.uid || '',
+      lojinhaUid: lojinhaAuthResult.user.uid || '',
+      authEmail: normalizeEmail(lojinhaAuthResult.user.email || ''),
+      rgFrenteBase64: verificationRgFrontBase64,
+      rgVersoBase64: verificationRgBackBase64,
+      updatedAt: serverTimestamp(),
+      updatedAtMs: Date.now(),
+      createdAt: serverTimestamp(),
+      createdAtMs: Date.now()
+    }, { merge: true });
     sellerVerification = payload;
     localToast('success', 'Verificação enviada. Aguarde aprovação para vender.');
     closeVerificationModal();
@@ -2491,41 +2496,94 @@ function getLocalBuyerPayloadForPix() {
   };
 }
 
+
+async function getLojinhaAuthToken(forceRefresh = false) {
+  await lojaAuthReady;
+  const user = lojaAuth.currentUser;
+  if (!user) return '';
+  try {
+    return await user.getIdToken(!!forceRefresh);
+  } catch (_) {
+    return '';
+  }
+}
+
+async function getLojinhaAuthHeaders({ forceRefresh = false } = {}) {
+  const token = await getLojinhaAuthToken(forceRefresh);
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
+}
+
+async function callLojinhaApi(path, payload = {}, { forceRefresh = false } = {}) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: await getLojinhaAuthHeaders({ forceRefresh }),
+    body: JSON.stringify(payload || {})
+  });
+  const raw = await response.text().catch(() => '');
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = {}; }
+  if (!response.ok || data.ok === false) {
+    const err = new Error(data.error || data.message || `http-${response.status}`);
+    err.status = response.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
 async function createOrder(productId) {
   let product = products.find((item) => String(item.id) === String(productId));
   if (!currentUser) { localToast('error', 'Entre na GuildaHub para comprar.'); return; }
   if (!ghubProfile?.gameId) { localToast('error', 'Conclua seu perfil da GuildaHub antes de comprar.'); return; }
 
-  const buyerProfile = await ensureBuyerProfile({ silent: false });
-  if (!buyerProfile) return;
-
-  try {
-    product = await refreshProductFromFirestore(productId);
-  } catch (err) {
-    console.warn('Falha ao atualizar produto antes do Pix:', err);
-    if (!product) { localToast('error', 'Produto não encontrado ou indisponível.'); return; }
-  }
-
-  if (product.ativo === false) { localToast('error', 'Esse produto está indisponível.'); return; }
-  if (!product.disponivel) { localToast('error', 'Esse produto está esgotado.'); return; }
-  if (String(product.sellerId || '') && String(product.sellerId) === String(ghubProfile.gameId)) { localToast('error', 'Você não pode comprar seu próprio produto.'); return; }
+  const cleanProductId = String(productId || '').trim();
+  if (!cleanProductId) return;
+  if (activePixProductId === cleanProductId) return;
+  activePixProductId = cleanProductId;
 
   const btn = els.productModalBody?.querySelector('[data-buy-product]');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i> Gerando Pix...';
+  const setBuyButton = (loading, label = 'Comprar agora') => {
+    if (!btn) return;
+    btn.disabled = !!loading;
+    btn.innerHTML = loading
+      ? `<i data-lucide="loader-2" class="inline w-4 h-4 animate-spin mr-2"></i>${escapeHtml(label)}`
+      : label;
     initIcons();
-  }
+  };
 
   try {
+    setBuyButton(true, 'Validando conta...');
+    const buyerProfile = await ensureBuyerProfile({ silent: false });
+    if (!buyerProfile) return;
+
+    const lojaAuthToken = await getLojinhaAuthToken(true);
+    const lojaAuthUser = lojaAuth.currentUser;
+    if (!lojaAuthToken || !lojaAuthUser?.uid) {
+      localToast('error', 'Confirme sua conta da Lojinha antes de gerar o Pix.');
+      return;
+    }
+
+    try {
+      product = await refreshProductFromFirestore(cleanProductId);
+    } catch (err) {
+      console.warn('Falha ao atualizar produto antes do Pix:', err);
+      if (!product) { localToast('error', 'Produto não encontrado ou indisponível.'); return; }
+    }
+
+    if (product.ativo === false) { localToast('error', 'Esse produto está indisponível.'); return; }
+    if (!product.disponivel) { localToast('error', 'Esse produto está esgotado.'); return; }
+    if (String(product.sellerId || '') && String(product.sellerId) === String(ghubProfile.gameId)) { localToast('error', 'Você não pode comprar seu próprio produto.'); return; }
+
+    setBuyButton(true, 'Gerando Pix...');
     const buyer = getLocalBuyerPayloadForPix();
-    if (!buyer?.gameId) throw new Error('buyer-profile-local-required');
+    if (!buyer?.gameId || !buyer?.authUid) throw new Error('buyer-profile-local-required');
 
     const response = await fetch('/api/loja_mp_create_pix', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: await getLojinhaAuthHeaders({ forceRefresh: false }),
       body: JSON.stringify({ productId: product.id, buyer })
     });
 
@@ -2546,8 +2604,9 @@ async function createOrder(productId) {
   } catch (err) {
     console.error(err);
     const messageMap = {
-      'buyer-profile-local-required': 'Não foi possível identificar seu perfil local da GuildaHub.',
-      'buyer-auth-required': 'Entre novamente na GuildaHub para comprar.',
+      'buyer-profile-local-required': 'Não foi possível identificar seu perfil da GuildaHub/Lojinha.',
+      'buyer-auth-required': 'Entre novamente na conta da Lojinha para comprar.',
+      'buyer-auth-mismatch': 'A conta da Lojinha não bate com o perfil comprador.',
       'buyer-profile-not-found': 'Não foi possível localizar seu perfil da GuildaHub.',
       'product-not-found': 'Produto não encontrado.',
       'product-inactive': 'Esse produto está indisponível.',
@@ -2557,8 +2616,7 @@ async function createOrder(productId) {
       'mercado-pago-error': 'Não foi possível gerar o Pix no Mercado Pago.',
       'api-not-found': 'A API de pagamento não foi encontrada nessa URL de teste. Use uma URL que tenha a pasta /api publicada.',
       'api-server-error': 'A API de pagamento respondeu erro interno. Veja os Runtime Logs da Vercel.',
-      'ghub-auth-env-missing': 'A API não encontrou o Firebase principal da GuildaHub. Confira GHUB_FIREBASE_SERVICE_ACCOUNT na Vercel.',
-      'ghub-auth-invalid': 'Sua sessão não foi validada pela API. Entre novamente na GuildaHub.'
+      'LOJA_FIREBASE_SERVICE_ACCOUNT ausente. Configure o JSON do Firebase da loja na Vercel.': 'A API não encontrou a ENV LOJA_FIREBASE_SERVICE_ACCOUNT_JSON na Vercel.'
     };
     const rawMessage = String(err?.message || '').trim();
     const backendMessage = rawMessage.startsWith('Mercado Pago recusou:') || rawMessage === 'invalid-app-base-url'
@@ -2566,10 +2624,8 @@ async function createOrder(productId) {
       : '';
     localToast('error', messageMap[rawMessage] || backendMessage || rawMessage || 'Não foi possível gerar o pagamento Pix.');
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = 'Comprar agora';
-    }
+    activePixProductId = '';
+    setBuyButton(false, 'Comprar agora');
   }
 }
 
@@ -2666,7 +2722,7 @@ async function checkPixPaymentStatus(checkoutId, manual = false) {
 
     const response = await fetch('/api/loja_mp_status', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await getLojinhaAuthHeaders({ forceRefresh: false }),
       body: JSON.stringify({ checkoutId: cleanCheckoutId, buyer })
     });
     const rawResponse = await response.text().catch(() => '');
@@ -3261,104 +3317,103 @@ async function updateOrderStatus(orderId, action) {
   const order = sellerOrders.find((item) => String(item.id) === String(orderId));
   if (!order) return;
   if (String(order.sellerId) !== String(ghubProfile?.gameId || '')) { localToast('error', 'Esse pedido não pertence ao seu vendedor.'); return; }
-  const currentStatus = String(order.status || '').toLowerCase();
-  if (currentStatus === 'reembolso_solicitado' || order.reembolsoSolicitado === true) { localToast('error', 'Esse pedido já tem reembolso solicitado e aguarda o suporte.'); return; }
-  if (isFinalOrderStatus(order.status) || order.finalizado === true) { localToast('error', 'Esse pedido já foi finalizado e não pode ser alterado.'); return; }
 
+  const currentStatus = String(order.status || '').toLowerCase();
+  const lockedStatus = ['reembolso_solicitado', 'reembolsado', 'entregue', 'cancelado'].includes(currentStatus) || order.reembolsoSolicitado === true || order.finalizado === true;
+  if (lockedStatus) {
+    localToast('error', 'Esse pedido já foi finalizado ou está em análise de reembolso.');
+    return;
+  }
+
+  let motivo = '';
   if (action === 'reembolso_solicitado') {
-    const motivo = await openCustomTextModal({
+    const typed = await openCustomTextModal({
       title: 'Solicitar reembolso',
-      message: `Essa ação não finaliza o pedido. Ela envia uma solicitação para o painel do suporte analisar e marcar como reembolsado. Pedido: ${orderId}`,
+      message: `Essa ação bloqueia a entrega e envia o pedido para o suporte analisar. Pedido: ${orderId}`,
       placeholder: 'Explique o motivo do reembolso para o suporte.',
       confirmLabel: 'Solicitar reembolso',
       cancelLabel: 'Cancelar',
       textarea: true,
       danger: true
     });
-    if (motivo === null) return;
+    if (typed === null) return;
+    motivo = String(typed || '').trim();
+  }
 
-    const nowMs = Date.now();
-    try {
-      await setDoc(doc(lojaDb, 'pedidos', orderId), {
-        status: 'reembolso_solicitado',
-        finalizado: false,
-        reembolsoSolicitado: true,
-        reembolsoStatus: 'pendente',
-        statusAntesReembolso: currentStatus || 'pago',
-        finalizadoAntesReembolso: order.finalizado === true,
-        pagamentoStatusAntesReembolso: String(order?.pagamento?.status || '').trim(),
-        entregaStatusAntesReembolso: String(order?.entrega?.status || '').trim(),
-        reembolsoMotivo: String(motivo || '').trim() || 'Solicitado pelo vendedor.',
-        reembolsoSolicitadoPor: ghubProfile?.gameId || currentUser?.uid || '',
-        reembolsoSolicitadoPorNome: lojaStatus?.vendedor?.nome || lojaStatus?.vendedor?.nick || ghubProfile?.nick || '',
-        reembolsoSolicitadoEm: serverTimestamp(),
-        reembolsoSolicitadoEmMs: nowMs,
-        pagamento: { ...(order?.pagamento || {}), status: 'reembolso_solicitado' },
-        entrega: { ...(order?.entrega || {}), status: 'reembolso_solicitado' },
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      const localPatch = {
-        status: 'reembolso_solicitado',
-        finalizado: false,
-        reembolsoSolicitado: true,
-        reembolsoStatus: 'pendente',
-        reembolsoMotivo: String(motivo || '').trim() || 'Solicitado pelo vendedor.',
-        reembolsoSolicitadoEmMs: nowMs,
-        pagamento: { ...(order?.pagamento || {}), status: 'reembolso_solicitado' },
-        entrega: { ...(order?.entrega || {}), status: 'reembolso_solicitado' },
-        updatedAtMs: nowMs
-      };
-      applySellerOrderLocalPatch(orderId, localPatch);
-      applyBuyerOrderLocalPatch(orderId, localPatch);
-      if (isSupportAdmin) {
-        supportRefundRequests = [{ id: orderId, ...order, ...localPatch }, ...supportRefundRequests.filter((item) => String(item.id) !== String(orderId))].slice(0, 20);
-        renderSupportRefundRequests();
-      }
-      lojaCacheRemove('sellerOrders', `${ghubProfile?.gameId}:page:1`);
-      lojaCacheRemove('buyerOrders', `${order.buyerId || ''}:page:1`);
-      localToast('success', 'Solicitação de reembolso enviada para o suporte.');
-    } catch (err) {
-      console.error(err);
-      localToast('error', 'Não foi possível solicitar o reembolso.');
-    }
+  const deliveryInfoText = String(document.querySelector(`[data-delivery-info-for="${CSS.escape(String(orderId))}"]`)?.value || '').trim();
+  if (action === 'entregue' && categoryRequiresSellerDeliveryInfo(order.categoriaId) && !deliveryInfoText) {
+    localToast('error', 'Preencha as informações de entrega antes de marcar como entregue.');
+    document.querySelector(`[data-delivery-info-for="${CSS.escape(String(orderId))}"]`)?.focus();
     return;
   }
 
-  const nowMs = Date.now();
-  const deliveryInfoText = String(document.querySelector(`[data-delivery-info-for="${CSS.escape(String(orderId))}"]`)?.value || '').trim();
-  if (action === 'entregue' && categoryRequiresSellerDeliveryInfo(order.categoriaId) && !deliveryInfoText) { localToast('error', 'Preencha as informações de entrega antes de marcar como entregue.'); document.querySelector(`[data-delivery-info-for="${CSS.escape(String(orderId))}"]`)?.focus(); return; }
-  const updates = { status: action, finalizado: true, updatedAt: serverTimestamp() };
-  if (action === 'entregue') {
-    updates.entregueEmMs = nowMs;
-    updates.deliveryInfo = deliveryInfoText || order.deliveryInfo || '';
-    updates.deliveryInfoUpdatedAtMs = deliveryInfoText ? nowMs : (order.deliveryInfoUpdatedAtMs || null);
-    updates.entrega = { ...(order?.entrega || {}), status: 'entregue', informacoes: deliveryInfoText || order.entrega?.informacoes || '', entregueEm: serverTimestamp(), entregueEmMs: nowMs };
-  }
-  if (action === 'reembolsado') {
-    updates.reembolsadoEmMs = nowMs;
-    updates.reembolsoSolicitado = false;
-    updates.reembolsoStatus = 'reembolsado';
-    updates.pagamento = { ...(order?.pagamento || {}), status: 'reembolsado', reembolsadoEm: serverTimestamp(), reembolsadoEmMs: nowMs };
-    updates.entrega = { ...(order?.entrega || {}), status: 'reembolso_emitido' };
-  }
   try {
-    await setDoc(doc(lojaDb, 'pedidos', orderId), updates, { merge: true });
-    if (action === 'entregue' && order.produtoId) {
-      await recalcProductDeliveredSales(order.produtoId);
-    }
-    if (order.sellerId) {
-      await recalcSellerFinancialsById(order.sellerId);
-      if (String(order.sellerId) === String(ghubProfile?.gameId || '')) await loadStoreStatus(true);
-    }
-    const localPatch = { ...updates, updatedAtMs: nowMs };
+    const data = await callLojinhaApi('/api/lojinha_seller_order_action', {
+      orderId,
+      action,
+      deliveryInfo: deliveryInfoText,
+      motivo
+    }, { forceRefresh: true });
+
+    const nowMs = Date.now();
+    const localPatch = data.order || {
+      status: action,
+      finalizado: action === 'entregue',
+      updatedAtMs: nowMs,
+      ...(action === 'entregue' ? {
+        entregueEmMs: nowMs,
+        deliveryInfo: deliveryInfoText || order.deliveryInfo || '',
+        entrega: { ...(order?.entrega || {}), status: 'entregue', informacoes: deliveryInfoText || order.entrega?.informacoes || '', entregueEmMs: nowMs }
+      } : {
+        reembolsoSolicitado: true,
+        reembolsoStatus: 'pendente',
+        reembolsoMotivo: motivo || 'Solicitado pelo vendedor.',
+        reembolsoSolicitadoEmMs: nowMs,
+        pagamento: { ...(order?.pagamento || {}), status: 'reembolso_solicitado' },
+        entrega: { ...(order?.entrega || {}), status: 'reembolso_solicitado' }
+      })
+    };
+
     applySellerOrderLocalPatch(orderId, localPatch);
     applyBuyerOrderLocalPatch(orderId, localPatch);
+
+    if (data.finances && String(order.sellerId) === String(ghubProfile?.gameId || '')) {
+      lojaStatus.vendedor = {
+        ...(lojaStatus.vendedor || {}),
+        saldoAtual: data.finances.saldoAtual,
+        saldoPendente: data.finances.saldoPendente,
+        saldoEmSaque: data.finances.saldoEmSaque,
+        saquePendente: data.finances.saldoEmSaque,
+        totalSacado: data.finances.totalSacado,
+        totalVendas: data.finances.totalVendasEntregues,
+        totalVendasEntregues: data.finances.totalVendasEntregues,
+        financeiro: data.finances
+      };
+      renderSellerProfile();
+    }
+
+    if (isSupportAdmin && action === 'reembolso_solicitado') {
+      supportRefundRequests = [{ id: orderId, ...order, ...localPatch }, ...supportRefundRequests.filter((item) => String(item.id) !== String(orderId))].slice(0, 20);
+      renderSupportRefundRequests();
+    }
+
     lojaCacheRemove('sellerOrders', `${ghubProfile?.gameId}:page:1`);
     lojaCacheRemove('buyerOrders', `${order.buyerId || ''}:page:1`);
-    localToast('success', action === 'reembolsado' ? 'Pedido marcado como reembolsado.' : 'Pedido marcado como entregue.');
+    lojaCacheRemove('storeStatus', getCurrentUserCacheKey());
+    localToast('success', action === 'reembolso_solicitado' ? 'Solicitação de reembolso enviada para o suporte.' : 'Pedido marcado como entregue.');
     await Promise.all([loadProducts(true), loadSellerProducts(false)]);
-  } catch (err) { console.error(err); localToast('error', 'Não foi possível atualizar o pedido.'); }
+  } catch (err) {
+    console.error(err);
+    const map = {
+      'order-not-found': 'Pedido não encontrado.',
+      'seller-not-authorized': 'Você não tem permissão para alterar esse pedido.',
+      'seller-inactive': 'Seu vendedor está inativo ou não aprovado.',
+      'order-not-pending': 'Esse pedido não está mais pendente e não pode ser alterado.',
+      'invalid-action': 'Ação inválida para o pedido.',
+      'auth-required': 'Entre novamente na conta da Lojinha.',
+    };
+    localToast('error', map[String(err?.message || '')] || 'Não foi possível atualizar o pedido.');
+  }
 }
 
 async function requestSellerWithdraw() {
@@ -4320,7 +4375,19 @@ async function loadSupportPanelData(options = {}) {
 async function loadSupportVerifications() {
   try {
     const snap = await getDocs(collection(lojaDb, VERIFICATION_COLLECTION));
-    supportVerifications = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a,b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
+    const base = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // As fotos/documentos ficam separados para o vendedor conseguir ler o status sem ler RG.
+    const withFiles = await Promise.all(base.map(async (item) => {
+      try {
+        const fileSnap = await getDoc(doc(lojaDb, 'verificacaoArquivos', String(item.gameId || item.id || '')));
+        return fileSnap.exists() ? { ...item, ...(fileSnap.data() || {}) } : item;
+      } catch (_) {
+        return item;
+      }
+    }));
+
+    supportVerifications = withFiles.sort((a,b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
   } catch (err) {
     console.error(err);
     supportVerifications = [];
@@ -4799,42 +4866,28 @@ async function recalcSellerFinancialsById(sellerId) {
   const cleanSellerId = String(sellerId || '').trim();
   if (!cleanSellerId) return null;
   try {
-    const [sellerSnap, ordersSnap] = await Promise.all([
-      getDoc(doc(lojaDb, 'vendedor', cleanSellerId)),
-      getDocs(query(collection(lojaDb, 'pedidos'), where('sellerId', '==', cleanSellerId)))
-    ]);
-    const sellerData = sellerSnap.exists() ? { id: sellerSnap.id, ...sellerSnap.data() } : {};
-    const orders = ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const finances = calculateSellerFinancials(orders, sellerData);
-    const payload = {
-      saldoAtual: finances.saldoAtual,
-      saldoPendente: finances.saldoPendente,
-      saldoEmSaque: finances.saldoEmSaque,
-      saquePendente: finances.saldoEmSaque,
-      totalSacado: finances.totalSacado,
-      totalVendas: finances.totalVendasEntregues,
-      totalVendasEntregues: finances.totalVendasEntregues,
-      financeiro: {
-        ...(sellerData.financeiro || {}),
+    const data = await callLojinhaApi('/api/lojinha_recalcular_saldo_vendedor', { sellerId: cleanSellerId });
+    const finances = data.finances || data.financeiro || null;
+    if (finances && String(cleanSellerId) === String(ghubProfile?.gameId || '')) {
+      lojaStatus.vendedor = {
+        ...(lojaStatus.vendedor || {}),
         saldoAtual: finances.saldoAtual,
         saldoPendente: finances.saldoPendente,
         saldoEmSaque: finances.saldoEmSaque,
+        saquePendente: finances.saldoEmSaque,
         totalSacado: finances.totalSacado,
-        totalBrutoEntregue: finances.totalBrutoEntregue,
-        totalLiquidoEntregue: finances.totalLiquidoEntregue,
+        totalVendas: finances.totalVendasEntregues,
         totalVendasEntregues: finances.totalVendasEntregues,
-        taxaPercentual: SELLER_FEE_PERCENT,
-        saqueMinimo: SELLER_WITHDRAW_MIN,
-        liberacaoDias: SELLER_RELEASE_DAYS,
-        atualizadoEmMs: Date.now()
-      },
-      updatedAt: serverTimestamp()
-    };
-    await setDoc(doc(lojaDb, 'vendedor', cleanSellerId), payload, { merge: true });
+        financeiro: finances
+      };
+      renderSellerProfile();
+    }
     lojaCacheRemove('sellerStats', 'global');
-    await refreshSellerProductsRankScores(cleanSellerId, finances.totalVendasEntregues);
     return finances;
-  } catch (err) { console.warn('Não foi possível recalcular saldo do vendedor:', err); return null; }
+  } catch (err) {
+    console.warn('Não foi possível recalcular saldo do vendedor pela API:', err?.message || err);
+    return null;
+  }
 }
 
 async function refundOrderFromSupport(orderId) {

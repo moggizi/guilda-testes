@@ -207,9 +207,59 @@ async function queryMainUsersByField(mainDb, field, value) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-async function verifyBuyerFromRequest(req) {
+
+function getBearerToken(req) {
   const authz = String(req.headers?.authorization || req.headers?.Authorization || '').trim();
-  const idToken = authz.toLowerCase().startsWith('bearer ') ? authz.slice(7).trim() : '';
+  return authz.toLowerCase().startsWith('bearer ') ? authz.slice(7).trim() : '';
+}
+
+async function verifyLojaAuthFromRequest(req) {
+  const idToken = getBearerToken(req);
+  if (!idToken) throw new Error('loja-auth-required');
+
+  try {
+    const decoded = await getLojaAdmin().auth().verifyIdToken(idToken);
+    const authUid = String(decoded?.uid || '').trim();
+    if (!authUid) throw new Error('loja-auth-invalid');
+    return {
+      authUid,
+      lojinhaUid: authUid,
+      authEmail: normalizeEmail(decoded?.email || ''),
+      emailVerified: decoded?.email_verified === true,
+    };
+  } catch (err) {
+    console.error('[LOJA_AUTH] Token da Auth da Lojinha inválido.', err?.code || err?.message || err);
+    throw new Error('loja-auth-invalid');
+  }
+}
+
+function readOptionalBuyerFromLocalProfile(body = {}) {
+  try {
+    return getBuyerFromLocalProfile(body);
+  } catch (_) {
+    return null;
+  }
+}
+
+async function getBuyerFromAuthenticatedRequest(req, body = {}) {
+  const lojaAuth = await verifyLojaAuthFromRequest(req);
+  const buyer = getBuyerFromLocalProfile(body);
+
+  if (buyer.email && lojaAuth.authEmail && !sameEmail(buyer.email, lojaAuth.authEmail)) {
+    throw new Error('buyer-auth-email-mismatch');
+  }
+
+  return {
+    ...buyer,
+    authUid: lojaAuth.authUid,
+    lojinhaUid: lojaAuth.lojinhaUid,
+    authEmail: lojaAuth.authEmail || buyer.email || '',
+    email: buyer.email || lojaAuth.authEmail || '',
+  };
+}
+
+async function verifyBuyerFromRequest(req) {
+  const idToken = getBearerToken(req);
   if (!idToken) throw new Error('buyer-auth-required');
 
   if (!hasAnyEnv([
@@ -297,18 +347,29 @@ function getBuyerFromLocalProfile(body = {}) {
 }
 
 async function ensureBuyerProfile(lojaDb, buyer) {
-  await lojaDb.collection('comprador').doc(String(buyer.gameId)).set({
+  const nowMs = Date.now();
+  const ref = lojaDb.collection('comprador').doc(String(buyer.gameId));
+  const snap = await ref.get();
+  const payload = {
     id: buyer.gameId,
     gameId: buyer.gameId,
     uid: buyer.uid || '',
-    email: buyer.email || '',
-    playerEmail: buyer.email || '',
+    authUid: buyer.authUid || buyer.lojinhaUid || '',
+    lojinhaUid: buyer.lojinhaUid || buyer.authUid || '',
+    authEmail: buyer.authEmail || buyer.email || '',
+    email: buyer.email || buyer.authEmail || '',
+    playerEmail: buyer.email || buyer.authEmail || '',
     nick: buyer.nick || '',
     foto: buyer.foto || '',
     ativo: true,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    createdAtMs: Date.now(),
-  }, { merge: true });
+    updatedAtMs: nowMs,
+  };
+  if (!snap.exists) {
+    payload.createdAt = admin.firestore.FieldValue.serverTimestamp();
+    payload.createdAtMs = nowMs;
+  }
+  await ref.set(payload, { merge: true });
 }
 
 function getBaseUrl(req) {
@@ -541,12 +602,17 @@ async function approveCheckoutPayment(checkoutId, mercadoPagoPayment = null) {
       id: orderId,
       buyerId: checkout.buyerId,
       buyerUid: checkout.buyerUid || '',
+      buyerAuthUid: checkout.buyerAuthUid || checkout.lojinhaUid || '',
+      buyerLojinhaUid: checkout.buyerLojinhaUid || checkout.buyerAuthUid || checkout.lojinhaUid || '',
+      buyerAuthEmail: checkout.buyerAuthEmail || checkout.buyerEmail || '',
       buyerEmail: checkout.buyerEmail || '',
       buyerName: checkout.buyerName || '',
       buyerNick: checkout.buyerName || '',
       buyerPhoto: checkout.buyerPhoto || '',
 
       sellerId: product.sellerId || checkout.sellerId || 'ghub',
+      sellerAuthUid: product.sellerAuthUid || checkout.sellerAuthUid || '',
+      sellerGhubUid: product.sellerGhubUid || checkout.sellerGhubUid || '',
       sellerName: product.sellerName || checkout.sellerName || 'GuildaHub',
       sellerPhoto: product.sellerPhoto || checkout.sellerPhoto || '',
 
@@ -637,6 +703,9 @@ module.exports = {
   getEnv,
   getLojaDb,
   verifyBuyerFromRequest,
+  verifyLojaAuthFromRequest,
+  getBuyerFromAuthenticatedRequest,
+  readOptionalBuyerFromLocalProfile,
   getBuyerFromLocalProfile,
   ensureBuyerProfile,
   normalizeProductDoc,
