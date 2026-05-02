@@ -44,6 +44,18 @@ service cloud.firestore {
         && get(sellerPath(gameId)).data.status != "bloqueado";
     }
 
+    function ownsGameId(gameId) {
+      return signedIn()
+        && (
+          isBuyer(gameId)
+          || isSeller(gameId)
+          || (
+            exists(/databases/$(database)/documents/verificacao/$(gameId))
+            && get(/databases/$(database)/documents/verificacao/$(gameId)).data.authUid == uid()
+          )
+        );
+    }
+
     function isBuyerOf(data) {
       return signedIn()
         && (
@@ -222,7 +234,9 @@ service cloud.firestore {
     }
 
     match /vendedor/{gameId} {
-      allow read: if isAdmin() || isSeller(gameId);
+      // Permite ao próprio usuário consultar se tem vendedor, sem liberar outros vendedores.
+      // Isso evita erro quando o vendedor ainda não existe ou foi removido.
+      allow read: if isAdmin() || ownsGameId(gameId);
       allow create: if isAdmin();
       allow update: if isAdmin()
         || (
@@ -244,7 +258,12 @@ service cloud.firestore {
 
     match /verificacao/{gameId} {
       allow read: if isAdmin()
-        || (signedIn() && resource.data.authUid == uid());
+        || isBuyer(gameId)
+        || (
+          signedIn()
+          && exists(/databases/$(database)/documents/verificacao/$(gameId))
+          && get(/databases/$(database)/documents/verificacao/$(gameId)).data.authUid == uid()
+        );
       allow create: if signedIn()
         && request.resource.data.authUid == uid()
         && request.resource.data.gameId == gameId

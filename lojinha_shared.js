@@ -1271,9 +1271,14 @@ async function loadStoreStatus(force = false) {
     return;
   }
 
+  await lojaAuthReady.catch(() => {});
+  const expectedEmail = getLojinhaAccountEmail();
+  const authUser = lojaAuth.currentUser;
+  const hasMatchingLojaAuth = !!authUser?.uid && isSameLojinhaAuthEmail(expectedEmail);
+
   const cacheKey = getCurrentUserCacheKey();
   const cached = !force ? lojaCacheGet('storeStatus', LOJA_CACHE_TTL.STORE_STATUS, cacheKey) : null;
-  if (cached) {
+  if (cached && hasMatchingLojaAuth) {
     lojaStatus = {
       comprador: cached.comprador || null,
       vendedor: isSellerApprovedForPanel(cached.vendedor || null, null) ? cached.vendedor : null
@@ -1284,38 +1289,52 @@ async function loadStoreStatus(force = false) {
     return;
   }
 
+  // Sem sessão real da Auth da Lojinha, não tente ler docs protegidos por rules.
+  // Isso evita toast falso para comprador que só está navegando a vitrine.
+  if (!hasMatchingLojaAuth) {
+    lojaStatus = { comprador: null, vendedor: null };
+    renderSellerTop();
+    renderSupportTop();
+    return;
+  }
+
   loadingStatus = true;
   renderSellerTop();
 
   try {
-    const [buyerSnap, sellerSnap] = await Promise.all([
-      getDoc(doc(lojaDb, 'comprador', ghubProfile.gameId)),
-      getDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId))
-    ]);
+    const buyerResult = await getDoc(doc(lojaDb, 'comprador', ghubProfile.gameId)).catch((err) => {
+      console.warn('Comprador indisponível:', err?.code || err?.message || err);
+      return null;
+    });
 
-    const rawSeller = sellerSnap.exists() ? { id: sellerSnap.id, ...sellerSnap.data() } : null;
+    const sellerResult = await getDoc(doc(lojaDb, 'vendedor', ghubProfile.gameId)).catch((err) => {
+      console.warn('Vendedor indisponível ou inexistente:', err?.code || err?.message || err);
+      return null;
+    });
+
+    const rawSeller = sellerResult?.exists?.() ? { id: sellerResult.id, ...sellerResult.data() } : null;
     let approvedSeller = null;
 
     if (rawSeller) {
       if (isSellerApprovedForPanel(rawSeller, null)) {
         approvedSeller = rawSeller;
       } else {
-        const verificationSnap = await getDoc(doc(lojaDb, VERIFICATION_COLLECTION, String(ghubProfile.gameId)));
-        const verificationData = verificationSnap.exists() ? { id: verificationSnap.id, ...verificationSnap.data() } : null;
+        const verificationSnap = await getDoc(doc(lojaDb, VERIFICATION_COLLECTION, String(ghubProfile.gameId))).catch(() => null);
+        const verificationData = verificationSnap?.exists?.() ? { id: verificationSnap.id, ...verificationSnap.data() } : null;
         sellerVerification = verificationData;
         approvedSeller = isSellerApprovedForPanel(rawSeller, verificationData) ? rawSeller : null;
       }
     }
 
     lojaStatus = {
-      comprador: buyerSnap.exists() ? { id: buyerSnap.id, ...buyerSnap.data() } : null,
+      comprador: buyerResult?.exists?.() ? { id: buyerResult.id, ...buyerResult.data() } : null,
       vendedor: approvedSeller
     };
     lojaCacheSet('storeStatus', lojaStatus, cacheKey);
   } catch (err) {
-    console.warn('Status da loja indisponível:', err);
+    console.warn('Status da Lojinha indisponível:', err?.code || err?.message || err);
     lojaStatus = { comprador: null, vendedor: null };
-    localToast('error', 'Não foi possível verificar seu cadastro na loja. Confira as regras do Firebase da loja.');
+    // Não exibe toast aqui: a falta de auth/role é normal para quem ainda só está navegando.
   } finally {
     loadingStatus = false;
     renderSellerTop();
@@ -2378,8 +2397,11 @@ async function createOrUpdateSellerProfile() {
 
   try {
     const sellerRef = doc(lojaDb, 'vendedor', payload.gameId);
-    const sellerSnap = await getDoc(sellerRef);
-    const existing = sellerSnap.exists() ? sellerSnap.data() : null;
+    const sellerSnap = await getDoc(sellerRef).catch((err) => {
+      console.warn('Vendedor ainda não legível/ativo:', err?.code || err?.message || err);
+      return null;
+    });
+    const existing = sellerSnap?.exists?.() ? sellerSnap.data() : null;
     const verification = sellerVerification || await loadSellerVerification();
     const verificationStatus = getVerificationStatusLabel(verification?.status);
 
@@ -2432,7 +2454,7 @@ async function createOrUpdateSellerProfile() {
     return lojaStatus.vendedor;
   } catch (err) {
     console.error(err);
-    localToast('error', 'Não foi possível criar o vendedor. Confira se as regras do Firebase da loja permitem escrita.');
+    localToast('error', 'Não foi possível ativar o painel do vendedor. Se sua verificação já foi aprovada, peça ao suporte para reativar/criar o vendedor.');
     return null;
   } finally {
     renderSellerTop();
@@ -3068,21 +3090,45 @@ function renderSellerOrders() {
 async function openSellerPanel() {
   setMobileCollapsibleState(els.sellerForm, els.toggleSellerFormBtn, false, 'Fechar cadastro de produto', 'Abrir/editar cadastro de produto');
   setMobileCollapsibleState(els.sellerProductsCard, els.toggleSellerProductsBtn, false, 'Fechar meus produtos', 'Abrir/editar meus produtos');
-  if (!lojaStatus?.vendedor) {
-    const seller = await createOrUpdateSellerProfile();
-    if (!seller) return;
+
+  if (!currentUser) {
+    localToast('error', 'Entre na GuildaHub para acessar o painel do vendedor.');
+    return;
+  }
+  if (!ghubProfile?.gameId) {
+    localToast('error', 'Conclua seu perfil da GuildaHub antes de vender.');
+    return;
   }
 
+  const authResult = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, silent: false });
+  if (!authResult?.user) return;
+
+  const verification = await loadSellerVerification();
+  const verificationStatus = getVerificationStatusLabel(verification?.status);
+
   await loadStoreStatus(true);
+
   if (!lojaStatus?.vendedor) {
-    openVerificationModal(sellerVerification);
-    return;
+    if (verificationStatus === 'aprovado') {
+      const seller = await createOrUpdateSellerProfile();
+      if (!seller) {
+        openVerificationModal(verification);
+        return;
+      }
+    } else {
+      if (verificationStatus === 'pendente') localToast('info', 'Sua verificação de vendedor ainda está em análise.');
+      else if (verificationStatus === 'recusado') localToast('error', 'Sua solicitação de vendedor foi recusada.');
+      openVerificationModal(verification || null);
+      return;
+    }
   }
-  const freshSeller = await assertCurrentSellerFreshApproved();
+
+  const freshSeller = await assertCurrentSellerFreshApproved({ showToastMessage: false });
   if (!freshSeller) {
-    openVerificationModal(sellerVerification);
+    openVerificationModal(sellerVerification || verification || null);
     return;
   }
+
   openSellerModal();
   renderSellerProfileCard();
   await reloadSellerPanelData();
@@ -3100,6 +3146,7 @@ async function reloadSellerPanelData(force = false) {
 
   try {
     await Promise.all([loadSellerProducts(force), loadSellerOrders({ reset: true, force }), loadSellerChats(force)]);
+    await syncSellerFinancialsToFirebase();
     renderSellerOrders();
     renderSellerSupportChats();
     markSellerOrdersSeenIfOpen();

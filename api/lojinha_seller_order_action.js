@@ -1,75 +1,203 @@
 // api/lojinha_seller_order_action.js
-// Vendedor altera somente pedido pendente para entregue ou reembolso_solicitado.
-// Saldo é recalculado via Admin SDK usando LOJA_FIREBASE_SERVICE_ACCOUNT_JSON.
+// Ação segura do vendedor em pedido: marcar como entregue ou solicitar reembolso.
+// Usa Admin SDK do Firebase da Lojinha via LOJA_FIREBASE_SERVICE_ACCOUNT_JSON.
 
 const {
   admin,
   json,
   cors,
   getLojaDb,
-  verifyLojaAuth,
-  isSellerActive,
-  isPendingOrderStatus,
-  isLockedOrder,
-  recalcSellerFinancials,
-  recalcProductDeliveredSales,
-} = require('./_lojinha_admin_shared');
+  verifyLojaAuthFromRequest,
+} = require('./_loja_mp_shared');
+
+const SELLER_FEE_RATE = 0.06;
+const SELLER_FEE_PERCENT = 6;
+const SELLER_RELEASE_DAYS = 3;
+
+function roundMoney(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function timestampToMs(value) {
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value?.toDate === 'function') return value.toDate().getTime();
+  if (typeof value?.seconds === 'number') return value.seconds * 1000;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getDeliveredAtMs(order = {}) {
+  return Number(order.entregueEmMs || order.entrega?.entregueEmMs || 0)
+    || timestampToMs(order.entrega?.entregueEm)
+    || timestampToMs(order.entregueEm)
+    || timestampToMs(order.updatedAt);
+}
+
+function isSellerActive(data = {}) {
+  const status = String(data.status || '').toLowerCase();
+  return data.ativo === true
+    && data.verificado === true
+    && data.revogado !== true
+    && data.bloqueado !== true
+    && status !== 'inativo'
+    && status !== 'revogado'
+    && status !== 'bloqueado';
+}
+
+function isOrderPending(order = {}) {
+  const status = String(order.status || '').toLowerCase();
+  return order.finalizado !== true
+    && order.reembolsoSolicitado !== true
+    && ['pendente', 'pending', 'pago', 'aprovado', 'approved', 'aguardando_entrega'].includes(status);
+}
+
+function sanitizeText(value, max = 1000) {
+  return String(value || '').trim().slice(0, max);
+}
+
+async function calculateAndSaveSellerFinancials(lojaDb, sellerId) {
+  const sellerRef = lojaDb.collection('vendedor').doc(String(sellerId));
+  const sellerSnap = await sellerRef.get();
+  const sellerData = sellerSnap.exists ? sellerSnap.data() || {} : {};
+
+  const now = Date.now();
+  const releaseMs = SELLER_RELEASE_DAYS * 24 * 60 * 60 * 1000;
+  let saldoBrutoLiberado = 0;
+  let saldoBrutoPendente = 0;
+  let totalLiquidoEntregue = 0;
+  let totalBrutoEntregue = 0;
+  let totalVendasEntregues = 0;
+
+  const ordersSnap = await lojaDb.collection('pedidos')
+    .where('sellerId', '==', String(sellerId))
+    .where('status', '==', 'entregue')
+    .limit(1000)
+    .get();
+
+  ordersSnap.docs.forEach((doc) => {
+    const order = doc.data() || {};
+    const gross = Number(order.total || order.precoUnitario || 0);
+    if (!Number.isFinite(gross) || gross <= 0) return;
+    const net = roundMoney(gross * (1 - SELLER_FEE_RATE));
+    const deliveredAt = getDeliveredAtMs(order);
+    totalVendasEntregues += 1;
+    totalBrutoEntregue = roundMoney(totalBrutoEntregue + gross);
+    totalLiquidoEntregue = roundMoney(totalLiquidoEntregue + net);
+    if (deliveredAt && now - deliveredAt >= releaseMs) saldoBrutoLiberado = roundMoney(saldoBrutoLiberado + net);
+    else saldoBrutoPendente = roundMoney(saldoBrutoPendente + net);
+  });
+
+  const financeiro = sellerData.financeiro || {};
+  const saldoEmSaque = Number(sellerData.saldoEmSaque ?? sellerData.saquePendente ?? financeiro.saldoEmSaque ?? 0) || 0;
+  const totalSacado = Number(sellerData.totalSacado ?? financeiro.totalSacado ?? 0) || 0;
+  const reservadoOuSacado = Math.max(0, saldoEmSaque) + Math.max(0, totalSacado);
+  const saldoAtual = Math.max(0, roundMoney(saldoBrutoLiberado - reservadoOuSacado));
+  const reservaQuePassouDoLiberado = Math.max(0, roundMoney(reservadoOuSacado - saldoBrutoLiberado));
+  const saldoPendente = Math.max(0, roundMoney(saldoBrutoPendente - reservaQuePassouDoLiberado));
+
+  const finances = {
+    saldo: saldoAtual,
+    saldoAtual,
+    saldoPendente,
+    saldoEmSaque: Math.max(0, saldoEmSaque),
+    totalSacado: Math.max(0, totalSacado),
+    saldoTotalDisponivelAdmin: roundMoney(saldoAtual + saldoPendente),
+    totalLiquidoEntregue,
+    totalBrutoEntregue,
+    totalVendasEntregues,
+    taxaPercentual: SELLER_FEE_PERCENT,
+    saqueMinimo: 20,
+    liberacaoDias: SELLER_RELEASE_DAYS,
+    atualizadoEmMs: now,
+  };
+
+  await sellerRef.set({
+    saldoAtual: finances.saldoAtual,
+    saldoPendente: finances.saldoPendente,
+    saldoEmSaque: finances.saldoEmSaque,
+    saquePendente: finances.saldoEmSaque,
+    totalSacado: finances.totalSacado,
+    totalVendas: finances.totalVendasEntregues,
+    totalVendasEntregues: finances.totalVendasEntregues,
+    financeiro: finances,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAtMs: now,
+  }, { merge: true });
+
+  return finances;
+}
 
 module.exports = async (req, res) => {
   cors(res);
-  if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
-  if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method-not-allowed' });
+
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204;
+    return res.end();
+  }
+
+  if (req.method !== 'POST') {
+    return json(res, 405, { ok: false, error: 'method-not-allowed' });
+  }
 
   try {
-    const authUser = await verifyLojaAuth(req);
+    const lojaAuth = await verifyLojaAuthFromRequest(req);
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
     const orderId = String(body.orderId || '').trim();
     const action = String(body.action || '').trim().toLowerCase();
-    const deliveryInfo = String(body.deliveryInfo || '').trim();
-    const motivo = String(body.motivo || '').trim();
+    const deliveryInfo = sanitizeText(body.deliveryInfo || '', 1500);
+    const motivo = sanitizeText(body.motivo || '', 1000);
 
-    if (!orderId) return json(res, 400, { ok: false, error: 'order-required' });
-    if (!['entregue', 'reembolso_solicitado'].includes(action)) return json(res, 400, { ok: false, error: 'invalid-action' });
+    if (!orderId) return json(res, 400, { ok: false, error: 'order-id-required' });
+    if (!['entregue', 'reembolso_solicitado'].includes(action)) {
+      return json(res, 400, { ok: false, error: 'invalid-action' });
+    }
 
-    const db = getLojaDb();
-    const orderRef = db.collection('pedidos').doc(orderId);
+    const lojaDb = getLojaDb();
+    const FieldValue = admin.firestore.FieldValue;
+    const orderRef = lojaDb.collection('pedidos').doc(orderId);
     let sellerId = '';
-    let productId = '';
     let orderPatch = null;
+    let productId = '';
 
-    await db.runTransaction(async (tx) => {
+    await lojaDb.runTransaction(async (tx) => {
       const orderSnap = await tx.get(orderRef);
       if (!orderSnap.exists) throw new Error('order-not-found');
       const order = orderSnap.data() || {};
       sellerId = String(order.sellerId || '').trim();
-      productId = String(order.produtoId || '').trim();
-      if (!sellerId) throw new Error('seller-not-found');
+      productId = String(order.produtoId || order.productId || '').trim();
+      if (!sellerId) throw new Error('seller-not-authorized');
 
-      const sellerRef = db.collection('vendedor').doc(sellerId);
+      const sellerRef = lojaDb.collection('vendedor').doc(sellerId);
       const sellerSnap = await tx.get(sellerRef);
-      if (!sellerSnap.exists) throw new Error('seller-not-found');
+      if (!sellerSnap.exists) throw new Error('seller-inactive');
       const seller = sellerSnap.data() || {};
-      if (String(seller.authUid || seller.lojinhaUid || '') !== String(authUser.uid)) throw new Error('seller-not-authorized');
-      if (!isSellerActive(seller)) throw new Error('seller-inactive');
+      const sellerAuthUid = String(seller.authUid || seller.lojinhaUid || '');
+      const orderSellerAuthUid = String(order.sellerAuthUid || '');
 
-      if (isLockedOrder(order) || !isPendingOrderStatus(order.status)) throw new Error('order-not-pending');
+      if (sellerAuthUid !== lojaAuth.authUid && orderSellerAuthUid !== lojaAuth.authUid) {
+        throw new Error('seller-not-authorized');
+      }
+      if (!isSellerActive(seller)) throw new Error('seller-inactive');
+      if (!isOrderPending(order)) throw new Error('order-not-pending');
 
       const nowMs = Date.now();
       if (action === 'entregue') {
         orderPatch = {
           status: 'entregue',
           finalizado: true,
-          entregueEmMs: nowMs,
           deliveryInfo: deliveryInfo || order.deliveryInfo || '',
-          deliveryInfoUpdatedAtMs: deliveryInfo ? nowMs : (order.deliveryInfoUpdatedAtMs || null),
+          deliveryInfoUpdatedAtMs: nowMs,
+          entregueEmMs: nowMs,
           entrega: {
             ...(order.entrega || {}),
             status: 'entregue',
-            informacoes: deliveryInfo || order?.entrega?.informacoes || '',
-            entregueEm: admin.firestore.FieldValue.serverTimestamp(),
+            informacoes: deliveryInfo || order.entrega?.informacoes || '',
+            entregueEm: FieldValue.serverTimestamp(),
             entregueEmMs: nowMs,
           },
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
           updatedAtMs: nowMs,
         };
       } else {
@@ -78,38 +206,60 @@ module.exports = async (req, res) => {
           finalizado: false,
           reembolsoSolicitado: true,
           reembolsoStatus: 'pendente',
-          statusAntesReembolso: String(order.status || 'pendente'),
-          finalizadoAntesReembolso: order.finalizado === true,
-          pagamentoStatusAntesReembolso: String(order?.pagamento?.status || '').trim(),
-          entregaStatusAntesReembolso: String(order?.entrega?.status || '').trim(),
           reembolsoMotivo: motivo || 'Solicitado pelo vendedor.',
           reembolsoSolicitadoPor: sellerId,
-          reembolsoSolicitadoPorNome: seller.nome || seller.nick || seller.sellerName || 'Vendedor',
-          reembolsoSolicitadoEm: admin.firestore.FieldValue.serverTimestamp(),
+          reembolsoSolicitadoPorNome: seller.nome || seller.nick || order.sellerName || 'Vendedor',
+          reembolsoSolicitadoEm: FieldValue.serverTimestamp(),
           reembolsoSolicitadoEmMs: nowMs,
+          statusAntesReembolso: order.status || 'pendente',
+          finalizadoAntesReembolso: order.finalizado === true,
+          pagamentoStatusAntesReembolso: order.pagamento?.status || '',
+          entregaStatusAntesReembolso: order.entrega?.status || '',
           pagamento: { ...(order.pagamento || {}), status: 'reembolso_solicitado' },
           entrega: { ...(order.entrega || {}), status: 'reembolso_solicitado' },
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
           updatedAtMs: nowMs,
         };
       }
 
       tx.set(orderRef, orderPatch, { merge: true });
+
+      if (action === 'entregue' && productId) {
+        const productRef = lojaDb.collection('produtos').doc(productId);
+        tx.set(productRef, {
+          totalVendas: FieldValue.increment(1),
+          totalVendasEntregues: FieldValue.increment(1),
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedAtMs: nowMs,
+        }, { merge: true });
+      }
     });
 
-    if (action === 'entregue' && productId) await recalcProductDeliveredSales(db, productId).catch(() => null);
-    const finances = await recalcSellerFinancials(db, sellerId);
+    const finances = await calculateAndSaveSellerFinancials(lojaDb, sellerId);
 
-    return json(res, 200, { ok: true, orderId, action, order: { id: orderId, ...orderPatch }, finances });
+    return json(res, 200, {
+      ok: true,
+      orderId,
+      sellerId,
+      action,
+      order: orderPatch,
+      finances,
+    });
   } catch (err) {
+    console.error('[LOJINHA_SELLER_ORDER_ACTION]', err?.message || err);
     const code = String(err?.message || 'internal-error');
-    const status = code === 'auth-required' || code === 'auth-invalid' ? 401
-      : ['order-required', 'invalid-action'].includes(code) ? 400
-      : ['seller-not-authorized'].includes(code) ? 403
-      : ['order-not-found', 'seller-not-found'].includes(code) ? 404
-      : ['seller-inactive', 'order-not-pending'].includes(code) ? 409
-      : 500;
-    console.error('[LOJINHA_SELLER_ORDER_ACTION]', code, err?.stack || '');
+    const status = {
+      'loja-auth-required': 401,
+      'loja-auth-invalid': 401,
+      'order-id-required': 400,
+      'invalid-action': 400,
+      'order-not-found': 404,
+      'seller-not-authorized': 403,
+      'seller-inactive': 403,
+      'order-not-pending': 409,
+    }[code] || 500;
     return json(res, status, { ok: false, error: code });
   }
 };
+
+module.exports.calculateAndSaveSellerFinancials = calculateAndSaveSellerFinancials;
