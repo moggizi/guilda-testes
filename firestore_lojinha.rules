@@ -53,6 +53,57 @@ service cloud.firestore {
         && get(sellerPath(gameId)).data.status != "excluido";
     }
 
+    function safeInactiveSellerCreate(gameId) {
+      return signedIn()
+        && request.resource.data.authUid == uid()
+        && request.resource.data.gameId == gameId
+        && request.resource.data.ativo == false
+        && request.resource.data.status == "inativo"
+        && request.resource.data.verificado == false
+        && request.resource.data.aprovado == false;
+    }
+
+    function safeInactiveSellerUpdate(gameId) {
+      return signedIn()
+        && resource.data.authUid == uid()
+        && resource.data.ativo == false
+        && request.resource.data.authUid == resource.data.authUid
+        && request.resource.data.gameId == resource.data.gameId
+        && request.resource.data.ativo == false
+        && request.resource.data.status == "inativo"
+        && request.resource.data.verificado == false
+        && request.resource.data.aprovado == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "id",
+          "gameId",
+          "uid",
+          "ghubUid",
+          "authUid",
+          "lojinhaUid",
+          "authEmail",
+          "email",
+          "playerEmail",
+          "nome",
+          "nick",
+          "foto",
+          "tipo",
+          "status",
+          "ativo",
+          "verificado",
+          "aprovado",
+          "verificationStatus",
+          "verificacaoStatus",
+          "statusVerificacao",
+          "totalProdutos",
+          "totalVendas",
+          "totalVendasEntregues",
+          "updatedAt",
+          "updatedAtMs",
+          "createdAt",
+          "createdAtMs"
+        ]);
+    }
+
     function ownsGameId(gameId) {
       return signedIn()
         && (
@@ -134,6 +185,8 @@ service cloud.firestore {
           "estoqueQuantidade",
           "ativo",
           "destaque",
+          "sellerAuthEmail",
+          "sellerLojinhaUid",
           "rankScore",
           "rankScoreUpdatedAtMs",
           "sellerTotalVendas",
@@ -257,11 +310,13 @@ service cloud.firestore {
     }
 
     match /vendedor/{gameId} {
-      // Permite ao próprio usuário consultar se tem vendedor, sem liberar outros vendedores.
-      // Isso evita erro quando o vendedor ainda não existe ou foi removido.
-      allow read: if isAdmin() || ownsGameId(gameId);
-      allow create: if isAdmin();
+      // O próprio dono pode ler seu documento, inclusive quando ainda está inativo.
+      allow read: if isAdmin()
+        || ownsGameId(gameId)
+        || (signedIn() && resource.data.authUid == uid());
+      allow create: if isAdmin() || safeInactiveSellerCreate(gameId);
       allow update: if isAdmin()
+        || safeInactiveSellerUpdate(gameId)
         || (
           isSeller(gameId)
           && request.resource.data.authUid == resource.data.authUid

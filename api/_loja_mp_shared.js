@@ -346,6 +346,67 @@ function getBuyerFromLocalProfile(body = {}) {
   };
 }
 
+async function ensureInactiveSellerProfileForBuyer(lojaDb, buyer) {
+  const sellerId = String(buyer.gameId || '').trim();
+  if (!sellerId) return null;
+  const nowMs = Date.now();
+  const ref = lojaDb.collection('vendedor').doc(sellerId);
+  const snap = await ref.get().catch(() => null);
+  const existing = snap?.exists ? (snap.data() || {}) : null;
+  const existingStatus = String(existing?.status || '').toLowerCase();
+  const alreadyApproved = existing?.ativo !== false && (
+    existing?.verificado === true
+    || existing?.aprovado === true
+    || String(existing?.verificacaoStatus || '').toLowerCase() === 'aprovado'
+    || String(existing?.verificationStatus || '').toLowerCase() === 'approved'
+    || String(existing?.statusVerificacao || '').toLowerCase() === 'aprovado'
+  );
+  const blocked = existing?.revogado === true
+    || existing?.bloqueado === true
+    || existing?.excluido === true
+    || existingStatus === 'revogado'
+    || existingStatus === 'bloqueado'
+    || existingStatus === 'excluido';
+  if (alreadyApproved || blocked) return existing;
+
+  const authUid = buyer.authUid || buyer.lojinhaUid || existing?.authUid || existing?.lojinhaUid || '';
+  const authEmail = normalizeEmail(buyer.authEmail || buyer.email || existing?.authEmail || existing?.email || '');
+  const payload = {
+    ...(existing || {}),
+    id: sellerId,
+    gameId: sellerId,
+    uid: buyer.uid || existing?.uid || '',
+    ghubUid: buyer.uid || existing?.ghubUid || existing?.uid || '',
+    authUid,
+    lojinhaUid: authUid,
+    authEmail,
+    email: normalizeEmail(buyer.email || existing?.email || authEmail),
+    playerEmail: normalizeEmail(buyer.email || existing?.playerEmail || authEmail),
+    nome: buyer.nick || existing?.nome || existing?.nick || '',
+    nick: buyer.nick || existing?.nick || existing?.nome || '',
+    foto: buyer.foto || existing?.foto || '',
+    tipo: existing?.tipo || 'externo',
+    status: 'inativo',
+    ativo: false,
+    verificado: false,
+    aprovado: false,
+    verificacaoStatus: existing?.verificacaoStatus || 'nao_enviada',
+    verificationStatus: existing?.verificationStatus || 'not_submitted',
+    statusVerificacao: existing?.statusVerificacao || 'nao_enviada',
+    totalProdutos: Number(existing?.totalProdutos || 0),
+    totalVendas: Number(existing?.totalVendas || 0),
+    totalVendasEntregues: Number(existing?.totalVendasEntregues || existing?.totalVendas || 0),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAtMs: nowMs,
+  };
+  if (!snap?.exists) {
+    payload.createdAt = admin.firestore.FieldValue.serverTimestamp();
+    payload.createdAtMs = nowMs;
+  }
+  await ref.set(payload, { merge: true });
+  return payload;
+}
+
 async function ensureBuyerProfile(lojaDb, buyer) {
   const nowMs = Date.now();
   const ref = lojaDb.collection('comprador').doc(String(buyer.gameId));
@@ -370,6 +431,7 @@ async function ensureBuyerProfile(lojaDb, buyer) {
     payload.createdAtMs = nowMs;
   }
   await ref.set(payload, { merge: true });
+  await ensureInactiveSellerProfileForBuyer(lojaDb, buyer);
 }
 
 function getBaseUrl(req) {
@@ -612,6 +674,9 @@ async function approveCheckoutPayment(checkoutId, mercadoPagoPayment = null) {
 
       sellerId: product.sellerId || checkout.sellerId || 'ghub',
       sellerAuthUid: product.sellerAuthUid || checkout.sellerAuthUid || '',
+      sellerLojinhaUid: product.sellerLojinhaUid || product.sellerAuthUid || checkout.sellerLojinhaUid || checkout.sellerAuthUid || '',
+      sellerAuthEmail: product.sellerAuthEmail || checkout.sellerAuthEmail || '',
+      sellerEmail: product.sellerAuthEmail || checkout.sellerAuthEmail || '',
       sellerGhubUid: product.sellerGhubUid || checkout.sellerGhubUid || '',
       sellerName: product.sellerName || checkout.sellerName || 'GuildaHub',
       sellerPhoto: product.sellerPhoto || checkout.sellerPhoto || '',
@@ -708,6 +773,7 @@ module.exports = {
   readOptionalBuyerFromLocalProfile,
   getBuyerFromLocalProfile,
   ensureBuyerProfile,
+  ensureInactiveSellerProfileForBuyer,
   normalizeProductDoc,
   getBaseUrl,
   getMpAccessToken,

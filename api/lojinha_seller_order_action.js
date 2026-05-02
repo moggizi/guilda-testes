@@ -205,24 +205,30 @@ module.exports = async (req, res) => {
       const verification = verificationSnap.exists ? (verificationSnap.data() || {}) : null;
       const sellerAuthUid = String(seller.authUid || seller.lojinhaUid || seller.lojaAuthUid || '').trim();
       const orderSellerAuthUid = String(order.sellerAuthUid || order.sellerLojinhaUid || '').trim();
+      const verificationAuthUid = String(verification?.authUid || verification?.lojinhaUid || verification?.lojaAuthUid || '').trim();
       const sellerEmail = String(seller.authEmail || seller.email || seller.playerEmail || '').trim().toLowerCase();
+      const verificationEmail = String(verification?.authEmail || verification?.email || verification?.playerEmail || '').trim().toLowerCase();
+      const orderSellerEmail = String(order.sellerAuthEmail || order.sellerEmail || '').trim().toLowerCase();
       const authEmail = String(lojaAuth.authEmail || '').trim().toLowerCase();
       const authMatchesSeller = !!sellerAuthUid && sellerAuthUid === lojaAuth.authUid;
       const authMatchesOrder = !!orderSellerAuthUid && orderSellerAuthUid === lojaAuth.authUid;
+      const authMatchesVerification = !!verificationAuthUid && verificationAuthUid === lojaAuth.authUid;
       const emailMatchesSeller = !!authEmail && !!sellerEmail && authEmail === sellerEmail;
+      const emailMatchesVerification = !!authEmail && !!verificationEmail && authEmail === verificationEmail;
+      const emailMatchesOrder = !!authEmail && !!orderSellerEmail && authEmail === orderSellerEmail;
 
-      if (!authMatchesSeller && !authMatchesOrder && !emailMatchesSeller) {
+      if (!authMatchesSeller && !authMatchesOrder && !authMatchesVerification && !emailMatchesSeller && !emailMatchesVerification && !emailMatchesOrder) {
         throw new Error('seller-not-authorized');
       }
       if (!isSellerActive(seller, verification)) throw new Error('seller-inactive');
       if (!isOrderPending(order)) throw new Error('order-not-pending');
 
       const nowMs = Date.now();
-      if (!sellerAuthUid && emailMatchesSeller) {
+      if (!sellerAuthUid && (emailMatchesSeller || emailMatchesVerification || authMatchesVerification || emailMatchesOrder)) {
         tx.set(sellerRef, {
           authUid: lojaAuth.authUid,
           lojinhaUid: lojaAuth.authUid,
-          authEmail: lojaAuth.authEmail || seller.authEmail || seller.email || '',
+          authEmail: lojaAuth.authEmail || seller.authEmail || seller.email || verification?.authEmail || verification?.email || '',
           updatedAt: FieldValue.serverTimestamp(),
           updatedAtMs: nowMs,
         }, { merge: true });

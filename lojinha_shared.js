@@ -8,6 +8,7 @@ import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   signOut as signOutFirebase
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
@@ -1079,7 +1080,7 @@ async function syncSellerFinancialsToFirebase() {
       lojaStatus.vendedor = { ...lojaStatus.vendedor, ...payload };
       lojaCacheRemove('storeStatus', getCurrentUserCacheKey());
       lojaCacheRemove('sellerStats', 'global');
-      renderSellerProfile();
+      renderSellerProfileCard();
       return { ...calculateSellerFinancials(sellerOrders, lojaStatus.vendedor), ...finances };
     }
   } catch (err) {
@@ -1938,6 +1939,74 @@ async function signOutDifferentLojinhaEmail(expectedEmail) {
   }
 }
 
+const lojinhaAuthEmailExistsCache = new Map();
+async function getLojinhaAuthAccountExists(email) {
+  const clean = normalizeEmail(email);
+  if (!clean) return null;
+  if (lojinhaAuthEmailExistsCache.has(clean)) return lojinhaAuthEmailExistsCache.get(clean);
+  try {
+    await lojaPersistenceReady.catch(() => null);
+    const methods = await fetchSignInMethodsForEmail(lojaAuth, clean);
+    const exists = Array.isArray(methods) && methods.length > 0;
+    lojinhaAuthEmailExistsCache.set(clean, exists);
+    return exists;
+  } catch (err) {
+    console.warn('Não foi possível verificar se o email já existe na Auth da Lojinha:', err?.code || err?.message || err);
+    return null;
+  }
+}
+
+function buildInactiveSellerProfilePayload(authUser = null, existing = {}) {
+  const payload = getProfilePayload();
+  const authUid = String(authUser?.uid || existing?.authUid || existing?.lojinhaUid || getCurrentLojaAuthUidSync() || '');
+  const authEmail = normalizeEmail(authUser?.email || existing?.authEmail || payload.email || getCurrentLojaAuthEmailSync() || '');
+  return {
+    ...existing,
+    id: payload.gameId,
+    gameId: payload.gameId,
+    uid: payload.uid,
+    ghubUid: payload.uid,
+    authUid,
+    lojinhaUid: authUid,
+    authEmail,
+    email: payload.email || authEmail,
+    playerEmail: payload.email || authEmail,
+    nome: payload.nick || existing?.nome || existing?.nick || '',
+    nick: payload.nick || existing?.nick || existing?.nome || '',
+    foto: payload.foto || existing?.foto || '',
+    tipo: existing?.tipo || 'externo',
+    status: 'inativo',
+    ativo: false,
+    verificado: false,
+    aprovado: false,
+    verificationStatus: existing?.verificationStatus || existing?.verificacaoStatus || 'not_submitted',
+    verificacaoStatus: existing?.verificacaoStatus || existing?.statusVerificacao || 'nao_enviada',
+    statusVerificacao: existing?.statusVerificacao || existing?.verificacaoStatus || 'nao_enviada',
+    totalProdutos: Number(existing?.totalProdutos || 0),
+    totalVendas: Number(existing?.totalVendas || 0),
+    totalVendasEntregues: Number(existing?.totalVendasEntregues || existing?.totalVendas || 0),
+    updatedAt: serverTimestamp(),
+    updatedAtMs: Date.now(),
+    ...(existing?.createdAt ? {} : { createdAt: serverTimestamp(), createdAtMs: Date.now() })
+  };
+}
+
+async function ensureInactiveSellerProfileForBuyer(authUser = null) {
+  if (!currentUser || !ghubProfile?.gameId) return null;
+  const sellerRef = doc(lojaDb, 'vendedor', String(ghubProfile.gameId));
+  try {
+    const sellerSnap = await getDoc(sellerRef).catch(() => null);
+    const existing = sellerSnap?.exists?.() ? { id: sellerSnap.id, ...sellerSnap.data() } : null;
+    if (existing && (isSellerRecordBlocked(existing) || isSellerApprovedForPanel(existing, null))) return existing;
+    const payload = buildInactiveSellerProfilePayload(authUser || getCurrentLojaAuthUserSync(), existing || {});
+    await setDoc(sellerRef, payload, { merge: true });
+    return { id: ghubProfile.gameId, ...payload };
+  } catch (err) {
+    console.warn('Não foi possível preparar vendedor inativo junto com o comprador:', err?.code || err?.message || err);
+    return null;
+  }
+}
+
 function openLojinhaPasswordModal({ role = 'comprador', email = '', mode = 'criar' } = {}) {
   return new Promise((resolve) => {
     const existing = document.getElementById('lojinha-auth-modal');
@@ -1998,7 +2067,7 @@ function openLojinhaPasswordModal({ role = 'comprador', email = '', mode = 'cria
   });
 }
 
-async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = false, createRoleDoc = false, silent = false } = {}) {
+async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = false, createRoleDoc = false, allowCreateAuth = true, silent = false } = {}) {
   if (!currentUser || !ghubProfile?.gameId) {
     if (!silent) localToast('error', 'Entre na GuildaHub antes de usar a Lojinha.');
     return null;
@@ -2015,69 +2084,96 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
 
   const roleCollection = getRoleCollectionName(role);
   const roleRef = doc(lojaDb, roleCollection, String(ghubProfile.gameId));
-  const roleSnap = await getDoc(roleRef).catch(() => null);
-  const roleData = roleSnap?.exists() ? roleSnap.data() : null;
-  const roleEmail = normalizeEmail(roleData?.email || roleData?.playerEmail || roleData?.authEmail || '');
+  let roleSnap = null;
+  let roleData = null;
+  let roleEmail = '';
+  let roleReadDenied = false;
 
-  if (isSameLojinhaAuthEmail(email) && (!requireRoleDoc || (roleData && roleEmail === email))) {
-    return { user: getCurrentLojaAuthUserSync(), roleData, roleRef };
+  try {
+    roleSnap = await getDoc(roleRef);
+    roleData = roleSnap?.exists?.() ? roleSnap.data() : null;
+    roleEmail = normalizeEmail(roleData?.email || roleData?.playerEmail || roleData?.authEmail || '');
+  } catch (err) {
+    roleReadDenied = String(err?.code || '').toLowerCase() === 'permission-denied';
+    if (!roleReadDenied) console.warn('Não foi possível ler perfil da Lojinha:', err?.code || err?.message || err);
   }
 
-  if (!silent) {
-    const mode = roleData && roleEmail === email ? 'entrar' : 'criar';
-    const password = await openLojinhaPasswordModal({ role, email, mode });
-    if (!password) return null;
+  if (isSameLojinhaAuthEmail(email)) {
+    if (!requireRoleDoc || roleData || roleReadDenied) {
+      return { user: getCurrentLojaAuthUserSync(), roleData, roleRef };
+    }
+  }
 
-    let authUser = null;
-    try {
-      const credential = await signInWithEmailAndPassword(lojaAuth, email, password);
-      authUser = credential.user;
-      lojaLastAuthUser = authUser;
-    } catch (signInErr) {
-      const code = String(signInErr?.code || '');
+  if (silent) return null;
+
+  const authAccountExists = await getLojinhaAuthAccountExists(email);
+  const shouldLogin = (roleData && (!roleEmail || roleEmail === email)) || authAccountExists === true;
+  if (!allowCreateAuth && !shouldLogin) return null;
+
+  const mode = shouldLogin ? 'entrar' : 'criar';
+  const password = await openLojinhaPasswordModal({ role, email, mode });
+  if (!password) return null;
+
+  let authUser = null;
+  try {
+    const credential = await signInWithEmailAndPassword(lojaAuth, email, password);
+    authUser = credential.user;
+    lojaLastAuthUser = authUser;
+  } catch (signInErr) {
+    const code = String(signInErr?.code || '');
+    if (shouldLogin || !allowCreateAuth) {
       if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
-        if (roleData && roleEmail === email && code !== 'auth/user-not-found') {
-          localToast('error', 'Senha incorreta para a conta da Lojinha.');
-          return null;
-        }
-        try {
-          const credential = await createUserWithEmailAndPassword(lojaAuth, email, password);
-          authUser = credential.user;
-          lojaLastAuthUser = authUser;
-        } catch (createErr) {
-          const createCode = String(createErr?.code || '');
-          if (createCode === 'auth/email-already-in-use') {
-            localToast('error', 'Esse email já tem conta na Lojinha. Digite a senha correta.');
-          } else if (createCode === 'auth/operation-not-allowed') {
-            localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
-          } else if (createCode === 'auth/weak-password') {
-            localToast('error', 'Use uma senha com pelo menos 6 caracteres.');
-          } else {
-            localToast('error', createErr?.message || 'Não foi possível criar a conta da Lojinha.');
-          }
-          return null;
-        }
+        localToast('error', 'Senha incorreta ou conta da Lojinha não encontrada para esse email.');
       } else if (code === 'auth/operation-not-allowed') {
         localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
-        return null;
       } else {
         localToast('error', signInErr?.message || 'Não foi possível entrar na conta da Lojinha.');
-        return null;
       }
+      return null;
     }
 
-    if (!authUser) return null;
-  } else {
-    return null;
+    if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
+      try {
+        const credential = await createUserWithEmailAndPassword(lojaAuth, email, password);
+        authUser = credential.user;
+        lojaLastAuthUser = authUser;
+        lojinhaAuthEmailExistsCache.set(email, true);
+      } catch (createErr) {
+        const createCode = String(createErr?.code || '');
+        if (createCode === 'auth/email-already-in-use') {
+          localToast('error', 'Esse email já tem conta na Lojinha. Digite a senha correta.');
+          lojinhaAuthEmailExistsCache.set(email, true);
+        } else if (createCode === 'auth/operation-not-allowed') {
+          localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
+        } else if (createCode === 'auth/weak-password') {
+          localToast('error', 'Use uma senha com pelo menos 6 caracteres.');
+        } else {
+          localToast('error', createErr?.message || 'Não foi possível criar a conta da Lojinha.');
+        }
+        return null;
+      }
+    } else if (code === 'auth/operation-not-allowed') {
+      localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
+      return null;
+    } else {
+      localToast('error', signInErr?.message || 'Não foi possível entrar na conta da Lojinha.');
+      return null;
+    }
   }
 
-  const authUser = getCurrentLojaAuthUserSync();
-  if (!authUser || normalizeEmail(authUser.email || '') !== email) return null;
+  if (!authUser) return null;
+  if (normalizeEmail(authUser.email || '') !== email) return null;
+
+  try {
+    roleSnap = await getDoc(roleRef);
+    roleData = roleSnap?.exists?.() ? roleSnap.data() : null;
+  } catch (_) {}
 
   if (createRoleDoc && roleCollection === 'comprador') {
-    const payload = buildBuyerProfilePayload(authUser, roleData);
+    const payload = buildBuyerProfilePayload(authUser, roleData || {});
     await setDoc(roleRef, payload, { merge: true });
-    lojaStatus.comprador = { id: ghubProfile.gameId, ...roleData, ...payload };
+    lojaStatus.comprador = { id: ghubProfile.gameId, ...(roleData || {}), ...payload };
+    await ensureInactiveSellerProfileForBuyer(authUser);
     lojaCacheRemove('storeStatus', getCurrentUserCacheKey());
   }
 
@@ -2124,6 +2220,7 @@ async function ensureBuyerProfile({ silent = false } = {}) {
   const buyerSnap = await getDoc(doc(lojaDb, 'comprador', String(ghubProfile.gameId))).catch(() => null);
   const buyerData = buyerSnap?.exists() ? { id: buyerSnap.id, ...buyerSnap.data() } : null;
   lojaStatus.comprador = buyerData || lojaStatus.comprador;
+  await ensureInactiveSellerProfileForBuyer(authResult.user);
 
   if (!silent) localToast('success', buyerData ? 'Perfil de comprador confirmado.' : 'Conta de comprador criada.');
   return lojaStatus.comprador;
@@ -3228,6 +3325,7 @@ async function handleSellerProductSubmit(event) {
     const basePayload = {
       sellerId: ghubProfile.gameId,
       sellerAuthUid: String(getCurrentLojaAuthUidSync() || seller.authUid || seller.lojinhaUid || ''),
+      sellerAuthEmail: normalizeEmail(getCurrentLojaAuthEmailSync() || seller.authEmail || seller.email || ghubProfile.email || ''),
       sellerGhubUid: String(currentUser?.uid || ghubProfile?.uid || ''),
       sellerName: seller.nome || seller.nick || ghubProfile.nick || 'Vendedor',
       sellerPhoto: seller.foto || ghubProfile.foto || '',
@@ -3471,7 +3569,7 @@ async function updateOrderStatus(orderId, action) {
         totalVendasEntregues: data.finances.totalVendasEntregues,
         financeiro: data.finances
       };
-      renderSellerProfile();
+      renderSellerProfileCard();
     }
 
     if (isSupportAdmin && action === 'reembolso_solicitado') {
@@ -3638,14 +3736,45 @@ async function deleteOwnSellerAccount() {
   }
 }
 
-function openBuyerModal() {
+async function openBuyerModal() {
   if (!currentUser) { localToast('error', 'Entre na GuildaHub para ver suas compras.'); return; }
   if (!mountLojaPanelInline(els.buyerModal, 'compras')) {
     els.buyerModal?.classList.remove('hidden');
     els.buyerModal?.classList.add('flex');
   }
   initIcons();
-  loadBuyerOrders({ reset: true }).then(() => {
+
+  const email = getLojinhaAccountEmail();
+  await lojaAuthReady.catch(() => null);
+  if (!isSameLojinhaAuthEmail(email)) {
+    const authExists = await getLojinhaAuthAccountExists(email);
+    if (authExists === true) {
+      const authResult = await ensureLojinhaAuthUser({ role: 'comprador', requireRoleDoc: false, createRoleDoc: false, allowCreateAuth: false, silent: false });
+      if (!authResult?.user) {
+        buyerOrders = [];
+        resetBuyerOrdersPagination();
+        renderBuyerOrders();
+        return;
+      }
+    } else {
+      buyerOrders = [];
+      resetBuyerOrdersPagination();
+      renderBuyerOrders();
+      return;
+    }
+  }
+
+  await loadStoreStatus(true).catch(() => null);
+  if (!lojaStatus?.comprador) {
+    buyerOrders = [];
+    resetBuyerOrdersPagination();
+    renderBuyerOrders();
+    markBuyerOrdersSeenIfOpen();
+    updateNotificationBadges();
+    return;
+  }
+
+  loadBuyerOrders({ reset: true, force: true }).then(() => {
     markBuyerOrdersSeenIfOpen();
     updateNotificationBadges();
   });
@@ -4234,6 +4363,12 @@ async function escalateActiveChatToSupport
 async function loadBuyerOrders(options = {}) {
   const { reset = false, page = null, force = false, silent = false } = options || {};
   if (!currentUser || !ghubProfile?.gameId) { buyerOrders = []; resetBuyerOrdersPagination(); renderBuyerOrders(); return; }
+  await lojaAuthReady.catch(() => null);
+  if (!isSameLojinhaAuthEmail(getLojinhaAccountEmail())) { buyerOrders = []; resetBuyerOrdersPagination(); renderBuyerOrders(); return; }
+  if (!lojaStatus?.comprador) {
+    await loadStoreStatus(true).catch(() => null);
+    if (!lojaStatus?.comprador) { buyerOrders = []; resetBuyerOrdersPagination(); renderBuyerOrders(); return; }
+  }
   if (buyerOrdersLoading) return;
   buyerOrdersLoading = true;
   if (reset) resetBuyerOrdersPagination();
@@ -4547,7 +4682,12 @@ async function deleteSellerVerification(id) {
   if (!id || !isSupportAdmin) return;
   if (!window.confirm("Excluir essa solicitação de vendedor?")) return;
   try {
+    const verification = supportVerifications.find((item) => String(item.id || item.gameId || '') === String(id));
+    if (getVerificationStatusLabel(verification?.status) !== 'aprovado') {
+      await applySellerStatusFromVerification(id, 'recusado', verification || null).catch(() => null);
+    }
     await deleteDoc(doc(lojaDb, VERIFICATION_COLLECTION, id));
+    lojaCacheRemove('supportPanel', 'global');
     localToast("success", "Solicitação excluída.");
     await loadSupportVerifications();
   } catch (err) {
@@ -4556,16 +4696,92 @@ async function deleteSellerVerification(id) {
   }
 }
 
+function buildSellerPayloadFromVerification(id, verification = {}, status = 'inativo') {
+  const cleanId = String(id || verification.gameId || verification.id || '').replace(/\D+/g, '').trim();
+  const nowMs = Date.now();
+  const authUid = String(verification.authUid || verification.lojinhaUid || verification.lojaAuthUid || '').trim();
+  const authEmail = normalizeEmail(verification.authEmail || verification.email || verification.playerEmail || '');
+  const active = String(status || '').toLowerCase() === 'ativo';
+  return {
+    id: cleanId,
+    gameId: cleanId,
+    uid: String(verification.uid || verification.ghubUid || '').trim(),
+    ghubUid: String(verification.ghubUid || verification.uid || '').trim(),
+    authUid,
+    lojinhaUid: authUid,
+    authEmail,
+    email: normalizeEmail(verification.email || verification.playerEmail || authEmail),
+    playerEmail: normalizeEmail(verification.email || verification.playerEmail || authEmail),
+    nome: String(verification.nick || verification.nome || verification.nomeCompleto || '').trim().slice(0, 80),
+    nick: String(verification.nick || verification.nome || verification.nomeCompleto || '').trim().slice(0, 80),
+    foto: String(verification.foto || '').trim().slice(0, 1000),
+    tipo: 'externo',
+    status: active ? 'ativo' : 'inativo',
+    ativo: active,
+    verificado: active,
+    aprovado: active,
+    verificacaoStatus: active ? 'aprovado' : 'recusado',
+    verificationStatus: active ? 'approved' : 'rejected',
+    statusVerificacao: active ? 'aprovado' : 'recusado',
+    verificationId: cleanId,
+    updatedAt: serverTimestamp(),
+    updatedAtMs: nowMs,
+    createdAtMs: verification.createdAtMs || nowMs
+  };
+}
+
+async function applySellerStatusFromVerification(id, status, verificationOverride = null) {
+  const cleanId = String(id || '').replace(/\D+/g, '').trim();
+  if (!cleanId || !isSupportAdmin) return;
+  const verification = verificationOverride
+    || supportVerifications.find((item) => String(item.id || item.gameId || '') === cleanId)
+    || null;
+  const verificationData = verification || await getDoc(doc(lojaDb, VERIFICATION_COLLECTION, cleanId)).then((snap) => snap.exists() ? { id: snap.id, ...snap.data() } : null).catch(() => null);
+  if (!verificationData) return;
+
+  const sellerRef = doc(lojaDb, 'vendedor', cleanId);
+  if (status === 'aprovado') {
+    const activePayload = buildSellerPayloadFromVerification(cleanId, verificationData, 'ativo');
+    await setDoc(sellerRef, activePayload, { merge: true });
+    lojaCacheRemove('storeStatus', cleanId);
+    lojaCacheRemove('sellerProducts', cleanId);
+    lojaCacheRemove('sellerOrders', `${cleanId}:page:1`);
+    return;
+  }
+
+  if (status === 'recusado') {
+    const inactivePayload = buildSellerPayloadFromVerification(cleanId, verificationData, 'inativo');
+    await setDoc(sellerRef, inactivePayload, { merge: true });
+    lojaCacheRemove('storeStatus', cleanId);
+  }
+}
+
 async function updateVerificationStatus(id, status) {
   if (!id || !isSupportAdmin) return;
-  const patch = { status, updatedAt: serverTimestamp(), analisadoEmMs: Date.now(), analisadoPor: ghubProfile?.gameId || currentUser?.uid || '' };
+  const nowMs = Date.now();
+  const patch = {
+    status,
+    aprovado: status === 'aprovado',
+    approved: status === 'aprovado',
+    verificationStatus: status === 'aprovado' ? 'approved' : 'rejected',
+    verificacaoStatus: status,
+    statusVerificacao: status,
+    updatedAt: serverTimestamp(),
+    updatedAtMs: nowMs,
+    analisadoEmMs: nowMs,
+    analisadoPor: ghubProfile?.gameId || currentUser?.uid || ''
+  };
   if (status === 'recusado') {
     const reason = window.prompt('Motivo da recusa:', 'Dados insuficientes ou imagem inválida.');
     patch.motivoRecusa = reason || 'Verificação recusada.';
   }
   try {
+    const currentVerification = supportVerifications.find((item) => String(item.id || item.gameId || '') === String(id)) || null;
+    const mergedVerification = { ...(currentVerification || {}), ...patch, id, gameId: currentVerification?.gameId || id };
     await setDoc(doc(lojaDb, VERIFICATION_COLLECTION, id), patch, { merge: true });
-    localToast('success', status === 'aprovado' ? 'Verificação aprovada.' : 'Verificação recusada.');
+    await applySellerStatusFromVerification(id, status, mergedVerification);
+    lojaCacheRemove('supportPanel', 'global');
+    localToast('success', status === 'aprovado' ? 'Verificação aprovada e vendedor ativado.' : 'Verificação recusada e vendedor mantido inativo.');
     await loadSupportVerifications();
   } catch (err) {
     console.error(err);
@@ -4998,7 +5214,7 @@ async function recalcSellerFinancialsById(sellerId) {
         totalVendasEntregues: finances.totalVendasEntregues,
         financeiro: finances
       };
-      renderSellerProfile();
+      renderSellerProfileCard();
     }
     lojaCacheRemove('sellerStats', 'global');
     return finances;
