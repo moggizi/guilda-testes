@@ -1,7 +1,15 @@
 // lojinha_core.js — núcleo compartilhado da Lojinha
 
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  onAuthStateChanged,
+  getAuth,
+  setPersistence,
+  browserLocalPersistence,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as signOutFirebase
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore,
   collection,
@@ -37,6 +45,10 @@ const lojaFirebaseConfig = {
 
 const lojaApp = getApps().find((app) => app.name === 'loja-ghub') || initializeApp(lojaFirebaseConfig, 'loja-ghub');
 const lojaDb = getFirestore(lojaApp);
+const lojaAuth = getAuth(lojaApp);
+const lojaAuthReady = setPersistence(lojaAuth, browserLocalPersistence).catch((err) => {
+  console.warn('Não foi possível ativar persistência local da Auth da lojinha:', err);
+});
 
 const qs = (id) => document.getElementById(id);
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
@@ -142,6 +154,8 @@ const els = {
   verificationPaperText: qs('verification-paper-text'),
   verificationFullName: qs('verification-full-name'),
   verificationBirthDate: qs('verification-birth-date'),
+  verificationSalesExperience: qs('verification-sales-experience'),
+  verificationSalesLinks: qs('verification-sales-links'),
   verificationRgFront: qs('verification-rg-front'),
   verificationRgBack: qs('verification-rg-back'),
   verificationFrontStatus: qs('verification-front-status'),
@@ -1859,50 +1873,221 @@ async function reportProduct(productId) {
   }
 }
 
-function closeProductModal() {
-  els.productModal?.classList.add('hidden');
-  els.productModal?.classList.remove('flex');
+
+
+function getLojinhaAccountEmail() {
+  return normalizeEmail(currentUser?.email || ghubProfile?.email || ghubProfile?.playerEmail || '');
 }
 
-async function ensureBuyerProfile({ silent = false } = {}) {
-  if (!currentUser) {
-    if (!silent) localToast('error', 'Entre na GuildaHub para criar seu perfil de comprador.');
+function getRoleCollectionName(role = 'comprador') {
+  return String(role || '').toLowerCase() === 'vendedor' ? 'vendedor' : 'comprador';
+}
+
+function getRoleLabel(role = 'comprador') {
+  return getRoleCollectionName(role) === 'vendedor' ? 'vendedor' : 'comprador';
+}
+
+function isSameLojinhaAuthEmail(email) {
+  const currentEmail = normalizeEmail(lojaAuth.currentUser?.email || '');
+  return !!email && !!currentEmail && currentEmail === email;
+}
+
+async function signOutDifferentLojinhaEmail(expectedEmail) {
+  await lojaAuthReady;
+  const currentEmail = normalizeEmail(lojaAuth.currentUser?.email || '');
+  if (currentEmail && expectedEmail && currentEmail !== expectedEmail) {
+    try { await signOutFirebase(lojaAuth); } catch (_) {}
+  }
+}
+
+function openLojinhaPasswordModal({ role = 'comprador', email = '', mode = 'criar' } = {}) {
+  return new Promise((resolve) => {
+    const existing = document.getElementById('lojinha-auth-modal');
+    if (existing) existing.remove();
+
+    const roleLabel = getRoleLabel(role);
+    const title = mode === 'entrar' ? 'Confirmar acesso da Lojinha' : `Criar conta de ${roleLabel} na Lojinha`;
+    const message = mode === 'entrar'
+      ? `Digite a senha da conta ${email} para acessar a Lojinha.`
+      : `Vamos criar uma conta real na Lojinha usando ${email}. Digite uma senha para essa conta.`;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'lojinha-auth-modal';
+    wrap.className = 'fixed inset-0 z-[160] flex items-end justify-center p-0 sm:items-center sm:p-4';
+    wrap.innerHTML = `
+      <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-lojinha-auth-cancel></div>
+      <div class="relative z-10 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-white p-5 shadow-2xl">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h3 class="text-lg font-black text-gray-900">${escapeHtml(title)}</h3>
+            <p class="mt-2 text-sm font-semibold leading-relaxed text-gray-600">${escapeHtml(message)}</p>
+          </div>
+          <button type="button" data-lojinha-auth-cancel class="shrink-0 rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><i data-lucide="x" class="h-5 w-5"></i></button>
+        </div>
+        <div class="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-xs font-bold text-emerald-800">
+          Essa senha é da conta da Lojinha. Depois ela fica salva no navegador e não será pedida toda hora.
+        </div>
+        <label for="lojinha-auth-password" class="mt-4 block text-xs font-black uppercase tracking-wider text-gray-400">Senha da Lojinha</label>
+        <input id="lojinha-auth-password" type="password" minlength="6" autocomplete="current-password" placeholder="Digite a senha" class="mt-1.5 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-50">
+        <p id="lojinha-auth-error" class="mt-2 hidden text-xs font-bold text-red-600"></p>
+        <div class="mt-5 grid grid-cols-2 gap-2">
+          <button type="button" data-lojinha-auth-cancel class="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-black text-gray-700 hover:bg-gray-50">Cancelar</button>
+          <button type="button" data-lojinha-auth-confirm class="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">Continuar</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(wrap);
+    initIcons();
+
+    const input = wrap.querySelector('#lojinha-auth-password');
+    const error = wrap.querySelector('#lojinha-auth-error');
+    const cleanup = (value) => { wrap.remove(); resolve(value); };
+
+    wrap.querySelectorAll('[data-lojinha-auth-cancel]').forEach((el) => el.addEventListener('click', () => cleanup(null)));
+    wrap.querySelector('[data-lojinha-auth-confirm]')?.addEventListener('click', () => {
+      const value = String(input?.value || '');
+      if (value.length < 6) {
+        if (error) { error.textContent = 'A senha precisa ter pelo menos 6 caracteres.'; error.classList.remove('hidden'); }
+        input?.focus();
+        return;
+      }
+      cleanup(value);
+    });
+    input?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') wrap.querySelector('[data-lojinha-auth-confirm]')?.click();
+    });
+    setTimeout(() => input?.focus(), 50);
+  });
+}
+
+async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = false, createRoleDoc = false, silent = false } = {}) {
+  if (!currentUser || !ghubProfile?.gameId) {
+    if (!silent) localToast('error', 'Entre na GuildaHub antes de usar a Lojinha.');
     return null;
   }
 
-  let payload;
-  try {
-    payload = getProfilePayload();
-  } catch (_) {
-    if (!silent) localToast('error', 'Conclua seu perfil da GuildaHub antes de usar a loja.');
+  const email = getLojinhaAccountEmail();
+  if (!email) {
+    if (!silent) localToast('error', 'Seu perfil precisa ter email para criar conta na Lojinha.');
     return null;
   }
 
-  const buyerRef = doc(lojaDb, 'comprador', payload.gameId);
-  const buyerSnap = await getDoc(buyerRef);
-  const existing = buyerSnap.exists() ? buyerSnap.data() : null;
+  await lojaAuthReady;
+  await signOutDifferentLojinhaEmail(email);
 
-  const buyerPayload = {
+  const roleCollection = getRoleCollectionName(role);
+  const roleRef = doc(lojaDb, roleCollection, String(ghubProfile.gameId));
+  const roleSnap = await getDoc(roleRef).catch(() => null);
+  const roleData = roleSnap?.exists() ? roleSnap.data() : null;
+  const roleEmail = normalizeEmail(roleData?.email || roleData?.playerEmail || roleData?.authEmail || '');
+
+  if (isSameLojinhaAuthEmail(email) && (!requireRoleDoc || (roleData && roleEmail === email))) {
+    return { user: lojaAuth.currentUser, roleData, roleRef };
+  }
+
+  if (!silent) {
+    const mode = roleData && roleEmail === email ? 'entrar' : 'criar';
+    const password = await openLojinhaPasswordModal({ role, email, mode });
+    if (!password) return null;
+
+    let authUser = null;
+    try {
+      const credential = await signInWithEmailAndPassword(lojaAuth, email, password);
+      authUser = credential.user;
+    } catch (signInErr) {
+      const code = String(signInErr?.code || '');
+      if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
+        if (roleData && roleEmail === email && code !== 'auth/user-not-found') {
+          localToast('error', 'Senha incorreta para a conta da Lojinha.');
+          return null;
+        }
+        try {
+          const credential = await createUserWithEmailAndPassword(lojaAuth, email, password);
+          authUser = credential.user;
+        } catch (createErr) {
+          const createCode = String(createErr?.code || '');
+          if (createCode === 'auth/email-already-in-use') {
+            localToast('error', 'Esse email já tem conta na Lojinha. Digite a senha correta.');
+          } else if (createCode === 'auth/operation-not-allowed') {
+            localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
+          } else if (createCode === 'auth/weak-password') {
+            localToast('error', 'Use uma senha com pelo menos 6 caracteres.');
+          } else {
+            localToast('error', createErr?.message || 'Não foi possível criar a conta da Lojinha.');
+          }
+          return null;
+        }
+      } else if (code === 'auth/operation-not-allowed') {
+        localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
+        return null;
+      } else {
+        localToast('error', signInErr?.message || 'Não foi possível entrar na conta da Lojinha.');
+        return null;
+      }
+    }
+
+    if (!authUser) return null;
+  } else {
+    return null;
+  }
+
+  const authUser = lojaAuth.currentUser;
+  if (!authUser || normalizeEmail(authUser.email || '') !== email) return null;
+
+  if (createRoleDoc && roleCollection === 'comprador') {
+    const payload = buildBuyerProfilePayload(authUser, roleData);
+    await setDoc(roleRef, payload, { merge: true });
+    lojaStatus.comprador = { id: ghubProfile.gameId, ...roleData, ...payload };
+    lojaCacheRemove('storeStatus', getCurrentUserCacheKey());
+  }
+
+  return { user: authUser, roleData, roleRef };
+}
+
+function buildBuyerProfilePayload(authUser, existing = {}) {
+  const payload = getProfilePayload();
+  return {
     ...existing,
     id: payload.gameId,
     gameId: payload.gameId,
     uid: payload.uid,
+    ghubUid: payload.uid,
+    authUid: authUser?.uid || existing?.authUid || '',
+    lojinhaUid: authUser?.uid || existing?.lojinhaUid || '',
+    authEmail: normalizeEmail(authUser?.email || payload.email || existing?.authEmail || ''),
     email: payload.email,
     playerEmail: payload.email,
     nick: payload.nick,
     foto: payload.foto,
     ativo: true,
     updatedAt: serverTimestamp(),
-    ...(existing?.createdAt ? {} : { createdAt: serverTimestamp() })
+    updatedAtMs: Date.now(),
+    ...(existing?.createdAt ? {} : { createdAt: serverTimestamp(), createdAtMs: Date.now() })
   };
-
-  await setDoc(buyerRef, buyerPayload, { merge: true });
-  lojaStatus.comprador = { id: payload.gameId, ...buyerPayload };
-
-  if (!silent) localToast('success', buyerSnap.exists() ? 'Perfil de comprador atualizado.' : 'Perfil de comprador criado.');
-  return lojaStatus.comprador;
 }
 
+function closeProductModal() {
+  els.productModal?.classList.add('hidden');
+  els.productModal?.classList.remove('flex');
+}
+
+async function ensureBuyerProfile({ silent = false } = {}) {
+  const authResult = await ensureLojinhaAuthUser({
+    role: 'comprador',
+    requireRoleDoc: true,
+    createRoleDoc: true,
+    silent
+  });
+
+  if (!authResult) return null;
+
+  const buyerSnap = await getDoc(doc(lojaDb, 'comprador', String(ghubProfile.gameId))).catch(() => null);
+  const buyerData = buyerSnap?.exists() ? { id: buyerSnap.id, ...buyerSnap.data() } : null;
+  lojaStatus.comprador = buyerData || lojaStatus.comprador;
+
+  if (!silent) localToast('success', buyerData ? 'Perfil de comprador confirmado.' : 'Conta de comprador criada.');
+  return lojaStatus.comprador;
+}
 
 async function loadSellerVerification() {
   if (!currentUser || !ghubProfile?.gameId) return null;
@@ -2030,9 +2215,11 @@ function openVerificationModal(data = null) {
   if (els.verificationPaperText) els.verificationPaperText.textContent = paper;
   if (els.verificationFullName) els.verificationFullName.value = verification?.nomeCompleto || '';
   if (els.verificationBirthDate) els.verificationBirthDate.value = verification?.dataNascimento || '';
+  if (els.verificationSalesExperience) els.verificationSalesExperience.value = verification?.experienciaVendas || verification?.salesExperience || '';
+  if (els.verificationSalesLinks) els.verificationSalesLinks.value = verification?.linksVendas || verification?.salesLinks || '';
 
   const isLocked = status === 'pendente' || status === 'aprovado' || status === 'recusado';
-  [els.verificationFullName, els.verificationBirthDate, els.verificationRgFront, els.verificationRgBack, els.submitVerificationBtn].forEach((el) => {
+  [els.verificationFullName, els.verificationBirthDate, els.verificationSalesExperience, els.verificationSalesLinks, els.verificationRgFront, els.verificationRgBack, els.submitVerificationBtn].forEach((el) => {
     if (!el) return;
     el.disabled = isLocked;
     el.classList.toggle('opacity-60', isLocked);
@@ -2115,10 +2302,16 @@ async function submitSellerVerification(event) {
     return;
   }
 
+  const lojinhaAuthResult = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, silent: false });
+  if (!lojinhaAuthResult?.user) return;
+
   const nomeCompleto = String(els.verificationFullName?.value || '').trim();
   const dataNascimento = String(els.verificationBirthDate?.value || '').trim();
+  const experienciaVendas = String(els.verificationSalesExperience?.value || '').trim();
+  const linksVendas = String(els.verificationSalesLinks?.value || '').trim();
   if (!nomeCompleto) { localToast('error', 'Informe seu nome completo.'); els.verificationFullName?.focus(); return; }
   if (!dataNascimento) { localToast('error', 'Informe sua data de nascimento.'); els.verificationBirthDate?.focus(); return; }
+  if (experienciaVendas.length < 10) { localToast('error', 'Conte rapidamente se você já vende em outras plataformas, grupos ou redes.'); els.verificationSalesExperience?.focus(); return; }
   if (!verificationRgFrontBase64) { localToast('error', 'Envie a foto da frente do RG com o papel solicitado.'); return; }
   if (!verificationRgBackBase64) { localToast('error', 'Envie a foto do verso do RG com o papel solicitado.'); return; }
 
@@ -2128,12 +2321,18 @@ async function submitSellerVerification(event) {
       id: ghubProfile.gameId,
       gameId: ghubProfile.gameId,
       uid: currentUser.uid || '',
+      ghubUid: currentUser.uid || '',
+      authUid: lojinhaAuthResult.user.uid || '',
+      lojinhaUid: lojinhaAuthResult.user.uid || '',
+      authEmail: normalizeEmail(lojinhaAuthResult.user.email || ''),
       email: normalizeEmail(currentUser.email || ghubProfile.email || ''),
       nick: ghubProfile.nick || '',
       foto: ghubProfile.foto || '',
       nomeCompleto,
       dataNascimento,
       papelSolicitado: getVerificationPaperText(),
+      experienciaVendas,
+      linksVendas,
       rgFrenteBase64: verificationRgFrontBase64,
       rgVersoBase64: verificationRgBackBase64,
       status: 'pendente',
@@ -2167,6 +2366,9 @@ async function createOrUpdateSellerProfile() {
     return null;
   }
 
+  const lojinhaAuthResult = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, silent: false });
+  if (!lojinhaAuthResult?.user) return null;
+
   setButtonLoading(els.topSellerBtn, true, getSellerReadyHtml());
 
   try {
@@ -2196,6 +2398,10 @@ async function createOrUpdateSellerProfile() {
       id: payload.gameId,
       gameId: payload.gameId,
       uid: payload.uid,
+      ghubUid: payload.uid,
+      authUid: lojinhaAuthResult.user.uid || existing?.authUid || '',
+      lojinhaUid: lojinhaAuthResult.user.uid || existing?.lojinhaUid || '',
+      authEmail: normalizeEmail(lojinhaAuthResult.user.email || payload.email || existing?.authEmail || ''),
       email: payload.email,
       playerEmail: payload.email,
       nome: payload.nick || existing?.nome || '',
@@ -2275,6 +2481,10 @@ function getLocalBuyerPayloadForPix() {
     gameId: String(ghubProfile.gameId || ''),
     id: String(ghubProfile.gameId || ''),
     uid: String(currentUser?.uid || ghubProfile.uid || ''),
+    ghubUid: String(currentUser?.uid || ghubProfile.uid || ''),
+    authUid: String(lojaAuth.currentUser?.uid || ''),
+    lojinhaUid: String(lojaAuth.currentUser?.uid || ''),
+    authEmail: normalizeEmail(lojaAuth.currentUser?.email || ''),
     email: normalizeEmail(currentUser?.email || ghubProfile.email || ghubProfile.playerEmail || ''),
     nick: String(ghubProfile.nick || ghubProfile.nome || ghubProfile.name || '').trim(),
     foto: ghubProfile.foto || ghubProfile.photo || ''
@@ -2285,6 +2495,9 @@ async function createOrder(productId) {
   let product = products.find((item) => String(item.id) === String(productId));
   if (!currentUser) { localToast('error', 'Entre na GuildaHub para comprar.'); return; }
   if (!ghubProfile?.gameId) { localToast('error', 'Conclua seu perfil da GuildaHub antes de comprar.'); return; }
+
+  const buyerProfile = await ensureBuyerProfile({ silent: false });
+  if (!buyerProfile) return;
 
   try {
     product = await refreshProductFromFirestore(productId);
@@ -2855,6 +3068,8 @@ async function handleSellerProductSubmit(event) {
 
   const freshSeller = await assertCurrentSellerFreshApproved();
   if (!freshSeller) return;
+  const sellerAuth = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: true, createRoleDoc: false, silent: false });
+  if (!sellerAuth?.user) return;
 
   const title = String(els.sellerTitle?.value || '').trim();
   const price = Number(els.sellerPrice?.value || 0);
@@ -2890,6 +3105,8 @@ async function handleSellerProductSubmit(event) {
     const seller = freshSeller || lojaStatus.vendedor;
     const basePayload = {
       sellerId: ghubProfile.gameId,
+      sellerAuthUid: String(lojaAuth.currentUser?.uid || seller.authUid || seller.lojinhaUid || ''),
+      sellerGhubUid: String(currentUser?.uid || ghubProfile?.uid || ''),
       sellerName: seller.nome || seller.nick || ghubProfile.nick || 'Vendedor',
       sellerPhoto: seller.foto || ghubProfile.foto || '',
       vendedorId: ghubProfile.gameId,
@@ -3162,6 +3379,8 @@ async function requestSellerWithdraw() {
   try {
     await addDoc(collection(lojaDb, WITHDRAW_COLLECTION), {
       sellerId: ghubProfile.gameId,
+      sellerAuthUid: String(lojaAuth.currentUser?.uid || seller.authUid || seller.lojinhaUid || ''),
+      sellerGhubUid: String(currentUser?.uid || ghubProfile?.uid || ''),
       sellerName: lojaStatus.vendedor.nome || lojaStatus.vendedor.nick || ghubProfile.nick || '',
       sellerEmail: normalizeEmail(currentUser?.email || ghubProfile.email || ''),
       pix,
@@ -4122,8 +4341,11 @@ function renderSupportVerifications() {
     const canAct = status === 'pendente';
     const front = item.rgFrenteBase64 ? `<button type="button" data-view-image="${escapeHtml(item.rgFrenteBase64)}" class="overflow-hidden rounded-xl border border-gray-200 bg-white text-left"><img src="${escapeHtml(item.rgFrenteBase64)}" alt="RG frente" class="h-28 w-full object-cover"><p class="px-2 py-1 text-center text-[10px] font-black text-gray-600">RG frente</p></button>` : '<div class="rounded-xl border border-dashed border-gray-200 bg-white p-3 text-center text-xs font-bold text-gray-400">Sem RG frente</div>';
     const back = item.rgVersoBase64 ? `<button type="button" data-view-image="${escapeHtml(item.rgVersoBase64)}" class="overflow-hidden rounded-xl border border-gray-200 bg-white text-left"><img src="${escapeHtml(item.rgVersoBase64)}" alt="RG verso" class="h-28 w-full object-cover"><p class="px-2 py-1 text-center text-[10px] font-black text-gray-600">RG verso</p></button>` : '<div class="rounded-xl border border-dashed border-gray-200 bg-white p-3 text-center text-xs font-bold text-gray-400">Sem RG verso</div>';
+    const salesInfo = item.experienciaVendas || item.salesExperience || '';
+    const salesLinks = item.linksVendas || item.salesLinks || '';
     return `<div class="rounded-2xl border border-gray-100 bg-gray-50 p-3">
       <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-black text-sm text-gray-900 truncate">${escapeHtml(item.nomeCompleto || item.nick || 'Solicitação')}</p><p class="mt-1 text-xs font-bold text-gray-400">ID: ${escapeHtml(item.id || item.gameId || '-')}</p><p class="mt-1 text-xs font-semibold text-gray-500 truncate">${escapeHtml(item.email || '')}</p><p class="mt-1 text-xs font-semibold text-gray-500">Nascimento: ${escapeHtml(item.dataNascimento || '-')}</p></div><span class="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-gray-600 ring-1 ring-gray-200">${escapeHtml(status.toUpperCase())}</span></div>
+      ${(salesInfo || salesLinks) ? `<div class="mt-3 rounded-xl border border-white bg-white p-3 text-xs font-semibold leading-relaxed text-gray-600">${salesInfo ? `<p><b class="text-gray-800">Experiência:</b> ${escapeHtml(salesInfo)}</p>` : ''}${salesLinks ? `<p class="mt-2 break-words"><b class="text-gray-800">Links/provas:</b> ${escapeHtml(salesLinks)}</p>` : ''}</div>` : ''}
       <div class="mt-3 grid grid-cols-2 gap-2">${front}${back}</div>
       <div class="mt-3 grid grid-cols-2 gap-2">${canAct ? `<button type="button" data-approve-verification="${escapeHtml(item.id)}" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Aprovar</button><button type="button" data-reject-verification="${escapeHtml(item.id)}" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100">Recusar</button>` : ''}<button type="button" data-delete-verification="${escapeHtml(item.id)}" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-600 hover:bg-gray-50">Excluir solicitação</button><button type="button" data-support-chat-seller="${escapeHtml(item.gameId || item.id || '')}" data-support-chat-seller-name="${escapeHtml(item.nick || item.nomeCompleto || '')}" class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Chat com vendedor</button></div>
     </div>`;
@@ -5065,6 +5287,7 @@ async function handleAuthState(user) {
     const cachedProfile = lojaCacheGet('ghubProfile', LOJA_CACHE_TTL.PROFILE, profileCacheKey);
     ghubProfile = cachedProfile || await findGuildaHubProfile(currentUser);
     if (ghubProfile) lojaCacheSet('ghubProfile', ghubProfile, profileCacheKey);
+    await signOutDifferentLojinhaEmail(getLojinhaAccountEmail());
     applySidebarUser(ghubProfile);
     renderSellerTop();
     await loadStoreStatus();
