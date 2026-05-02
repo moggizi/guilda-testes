@@ -2024,34 +2024,40 @@ async function signOutDifferentLojinhaEmail(expectedEmail) {
 }
 
 const lojinhaAuthEmailExistsCache = new Map();
+function isRecoverableLojaAuthSignInError(code = '') {
+  const clean = String(code || '').toLowerCase();
+  return clean === 'auth/user-not-found'
+    || clean === 'auth/wrong-password'
+    || clean === 'auth/invalid-credential'
+    || clean === 'auth/invalid-login-credentials';
+}
+
 async function getLojinhaAuthAccountExists(email) {
   const clean = normalizeEmail(email);
   if (!clean) return null;
-  if (hasLojinhaAuthEmailMarker(clean)) {
-    lojinhaAuthEmailExistsCache.set(clean, true);
-    return true;
-  }
   if (lojinhaAuthEmailExistsCache.has(clean)) return lojinhaAuthEmailExistsCache.get(clean);
+
   try {
     await lojaPersistenceReady.catch(() => null);
     const methods = await fetchSignInMethodsForEmail(lojaAuth, clean);
-    let exists = Array.isArray(methods) && methods.length > 0;
-    if (!exists) {
-      const serverStatus = await fetchLojinhaAccountStatus(false);
-      exists = !!serverStatus?.authExists;
-    }
-    if (exists) markLojinhaAuthEmailExists(clean);
-    lojinhaAuthEmailExistsCache.set(clean, exists);
-    return exists;
-  } catch (err) {
-    console.warn('Não foi possível verificar se o email já existe na Auth da Lojinha:', err?.code || err?.message || err);
-    const serverStatus = await fetchLojinhaAccountStatus(false);
-    if (serverStatus?.authExists) {
+    const exists = Array.isArray(methods) && methods.length > 0;
+
+    if (exists) {
       markLojinhaAuthEmailExists(clean);
       lojinhaAuthEmailExistsCache.set(clean, true);
       return true;
     }
-    return hasLojinhaAuthEmailMarker(clean) ? true : null;
+
+    // Não trate cache/localStorage como prova de conta existente.
+    // Em teste limpo, o Firebase pode ter sido zerado e o navegador ainda manter marcador/cache antigo,
+    // o que fazia a tela abrir login em vez de criação de perfil.
+    lojinhaAuthEmailExistsCache.set(clean, false);
+    return false;
+  } catch (err) {
+    console.warn('Não foi possível verificar se o email já existe na Auth da Lojinha:', err?.code || err?.message || err);
+    // Falha de verificação não deve bloquear criação. Se a conta realmente existir,
+    // createUserWithEmailAndPassword retornará email-already-in-use e o usuário será orientado a entrar.
+    return null;
   }
 }
 
@@ -2207,7 +2213,7 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
   if (silent) return null;
 
   const authAccountExists = await getLojinhaAuthAccountExists(email);
-  const shouldLogin = (roleData && (!roleEmail || roleEmail === email)) || authAccountExists === true || hasCachedLojinhaRole(role);
+  const shouldLogin = (roleData && (!roleEmail || roleEmail === email)) || authAccountExists === true;
   if (!allowCreateAuth && !shouldLogin) return null;
 
   const mode = shouldLogin ? 'entrar' : 'criar';
@@ -2222,18 +2228,7 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
     markLojinhaAuthEmailExists(email);
   } catch (signInErr) {
     const code = String(signInErr?.code || '');
-    if (shouldLogin || !allowCreateAuth) {
-      if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
-        localToast('error', 'Senha incorreta ou conta da Lojinha não encontrada para esse email.');
-      } else if (code === 'auth/operation-not-allowed') {
-        localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
-      } else {
-        localToast('error', signInErr?.message || 'Não foi possível entrar na conta da Lojinha.');
-      }
-      return null;
-    }
-
-    if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
+    if (isRecoverableLojaAuthSignInError(code) && allowCreateAuth) {
       try {
         const credential = await createUserWithEmailAndPassword(lojaAuth, email, password);
         authUser = credential.user;
@@ -2243,8 +2238,9 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
       } catch (createErr) {
         const createCode = String(createErr?.code || '');
         if (createCode === 'auth/email-already-in-use') {
-          localToast('error', 'Esse email já tem conta na Lojinha. Digite a senha correta.');
+          localToast('error', 'Esse email já tem conta na Lojinha. Digite a senha correta para entrar.');
           lojinhaAuthEmailExistsCache.set(email, true);
+          markLojinhaAuthEmailExists(email);
         } else if (createCode === 'auth/operation-not-allowed') {
           localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
         } else if (createCode === 'auth/weak-password') {
@@ -2254,6 +2250,15 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
         }
         return null;
       }
+    } else if (shouldLogin || !allowCreateAuth) {
+      if (isRecoverableLojaAuthSignInError(code)) {
+        localToast('error', 'Senha incorreta ou conta da Lojinha não encontrada para esse email.');
+      } else if (code === 'auth/operation-not-allowed') {
+        localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
+      } else {
+        localToast('error', signInErr?.message || 'Não foi possível entrar na conta da Lojinha.');
+      }
+      return null;
     } else if (code === 'auth/operation-not-allowed') {
       localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
       return null;
