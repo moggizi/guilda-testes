@@ -1926,50 +1926,6 @@ function getRoleLabel(role = 'comprador') {
   return getRoleCollectionName(role) === 'vendedor' ? 'vendedor' : 'comprador';
 }
 
-function getLojinhaAuthMarkerKey(email = getLojinhaAccountEmail()) {
-  const cleanEmail = normalizeEmail(email);
-  const gameId = String(ghubProfile?.gameId || '').trim() || 'sem-id';
-  return `ghub_lojinha_auth_marker_v2:${gameId}:${cleanEmail || 'sem-email'}`;
-}
-
-function getLocalLojinhaAuthMarker(email = getLojinhaAccountEmail()) {
-  try {
-    const raw = localStorage.getItem(getLojinhaAuthMarkerKey(email));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function markLocalLojinhaAuthAccount(role = '', authUser = getCurrentLojaAuthUserSync()) {
-  try {
-    const email = normalizeEmail(authUser?.email || getLojinhaAccountEmail());
-    if (!email) return;
-    const roleCollection = getRoleCollectionName(role);
-    const previous = getLocalLojinhaAuthMarker(email) || {};
-    const roles = new Set(Array.isArray(previous.roles) ? previous.roles : []);
-    if (roleCollection) roles.add(roleCollection);
-    localStorage.setItem(getLojinhaAuthMarkerKey(email), JSON.stringify({
-      ...previous,
-      email,
-      gameId: String(ghubProfile?.gameId || previous.gameId || ''),
-      authUid: String(authUser?.uid || previous.authUid || ''),
-      roles: Array.from(roles),
-      hasAuth: true,
-      updatedAtMs: Date.now()
-    }));
-  } catch (_) {}
-}
-
-function localLojinhaAuthAccountKnown(role = '', email = getLojinhaAccountEmail()) {
-  const marker = getLocalLojinhaAuthMarker(email);
-  if (!marker?.hasAuth) return false;
-  const roleCollection = getRoleCollectionName(role);
-  return !roleCollection || !Array.isArray(marker.roles) || marker.roles.length === 0 || marker.roles.includes(roleCollection);
-}
-
 function isSameLojinhaAuthEmail(email) {
   const currentEmail = getCurrentLojaAuthEmailSync();
   return !!email && !!currentEmail && currentEmail === email;
@@ -2057,10 +2013,10 @@ function openLojinhaPasswordModal({ role = 'comprador', email = '', mode = 'cria
     if (existing) existing.remove();
 
     const roleLabel = getRoleLabel(role);
-    const title = mode === 'entrar' ? 'Entrar na Lojinha' : 'Criar perfil da Lojinha';
+    const title = mode === 'entrar' ? 'Confirmar acesso da Lojinha' : `Criar conta de ${roleLabel} na Lojinha`;
     const message = mode === 'entrar'
-      ? `Digite a senha do perfil da Lojinha vinculado a ${email}.`
-      : `Vamos criar um perfil da Lojinha usando ${email}. Esse mesmo acesso será usado para compras e vendas.`;
+      ? `Digite a senha da conta ${email} para acessar a Lojinha.`
+      : `Vamos criar uma conta real na Lojinha usando ${email}. Digite uma senha para essa conta.`;
 
     const wrap = document.createElement('div');
     wrap.id = 'lojinha-auth-modal';
@@ -2144,17 +2100,14 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
 
   if (isSameLojinhaAuthEmail(email)) {
     if (!requireRoleDoc || roleData || roleReadDenied) {
-      const authUser = getCurrentLojaAuthUserSync();
-      markLocalLojinhaAuthAccount(roleCollection, authUser);
-      return { user: authUser, roleData, roleRef };
+      return { user: getCurrentLojaAuthUserSync(), roleData, roleRef };
     }
   }
 
   if (silent) return null;
 
   const authAccountExists = await getLojinhaAuthAccountExists(email);
-  const knownLocalAccount = localLojinhaAuthAccountKnown(roleCollection, email);
-  const shouldLogin = (roleData && (!roleEmail || roleEmail === email)) || authAccountExists === true || knownLocalAccount === true;
+  const shouldLogin = (roleData && (!roleEmail || roleEmail === email)) || authAccountExists === true;
   if (!allowCreateAuth && !shouldLogin) return null;
 
   const mode = shouldLogin ? 'entrar' : 'criar';
@@ -2166,7 +2119,6 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
     const credential = await signInWithEmailAndPassword(lojaAuth, email, password);
     authUser = credential.user;
     lojaLastAuthUser = authUser;
-    markLocalLojinhaAuthAccount(roleCollection, authUser);
   } catch (signInErr) {
     const code = String(signInErr?.code || '');
     if (shouldLogin || !allowCreateAuth) {
@@ -2186,19 +2138,11 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
         authUser = credential.user;
         lojaLastAuthUser = authUser;
         lojinhaAuthEmailExistsCache.set(email, true);
-        markLocalLojinhaAuthAccount(roleCollection, authUser);
       } catch (createErr) {
         const createCode = String(createErr?.code || '');
         if (createCode === 'auth/email-already-in-use') {
+          localToast('error', 'Esse email já tem conta na Lojinha. Digite a senha correta.');
           lojinhaAuthEmailExistsCache.set(email, true);
-          try {
-            const credential = await signInWithEmailAndPassword(lojaAuth, email, password);
-            authUser = credential.user;
-            lojaLastAuthUser = authUser;
-            markLocalLojinhaAuthAccount(roleCollection, authUser);
-          } catch (_) {
-            localToast('error', 'Esse email já tem perfil na Lojinha. Digite a senha correta para entrar.');
-          }
         } else if (createCode === 'auth/operation-not-allowed') {
           localToast('error', 'Ative Email/senha no Firebase Auth do projeto da Lojinha.');
         } else if (createCode === 'auth/weak-password') {
@@ -2219,7 +2163,6 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
 
   if (!authUser) return null;
   if (normalizeEmail(authUser.email || '') !== email) return null;
-  markLocalLojinhaAuthAccount(roleCollection, authUser);
 
   try {
     roleSnap = await getDoc(roleRef);
@@ -2231,8 +2174,6 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
     await setDoc(roleRef, payload, { merge: true });
     lojaStatus.comprador = { id: ghubProfile.gameId, ...(roleData || {}), ...payload };
     await ensureInactiveSellerProfileForBuyer(authUser);
-    markLocalLojinhaAuthAccount('comprador', authUser);
-    markLocalLojinhaAuthAccount('vendedor', authUser);
     lojaCacheRemove('storeStatus', getCurrentUserCacheKey());
   }
 
@@ -2280,10 +2221,8 @@ async function ensureBuyerProfile({ silent = false } = {}) {
   const buyerData = buyerSnap?.exists() ? { id: buyerSnap.id, ...buyerSnap.data() } : null;
   lojaStatus.comprador = buyerData || lojaStatus.comprador;
   await ensureInactiveSellerProfileForBuyer(authResult.user);
-  markLocalLojinhaAuthAccount('comprador', authResult.user);
-  markLocalLojinhaAuthAccount('vendedor', authResult.user);
 
-  if (!silent) localToast('success', buyerData ? 'Perfil de comprador confirmado.' : 'Perfil da Lojinha criado.');
+  if (!silent) localToast('success', buyerData ? 'Perfil de comprador confirmado.' : 'Conta de comprador criada.');
   return lojaStatus.comprador;
 }
 
@@ -2502,8 +2441,6 @@ async function submitSellerVerification(event) {
 
   const lojinhaAuthResult = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, silent: false });
   if (!lojinhaAuthResult?.user) return;
-  await ensureInactiveSellerProfileForBuyer(lojinhaAuthResult.user);
-  markLocalLojinhaAuthAccount('vendedor', lojinhaAuthResult.user);
 
   const nomeCompleto = String(els.verificationFullName?.value || '').trim();
   const dataNascimento = String(els.verificationBirthDate?.value || '').trim();
@@ -2582,8 +2519,6 @@ async function createOrUpdateSellerProfile() {
   // porque as rules bloqueiam create/update sensível direto pelo front.
   const lojinhaAuthResult = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, silent: false });
   if (!lojinhaAuthResult?.user) return null;
-  await ensureInactiveSellerProfileForBuyer(lojinhaAuthResult.user);
-  markLocalLojinhaAuthAccount('vendedor', lojinhaAuthResult.user);
 
   setButtonLoading(els.topSellerBtn, true, getSellerReadyHtml());
 
@@ -3283,8 +3218,6 @@ async function openSellerPanel() {
 
   const authResult = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, silent: false });
   if (!authResult?.user) return;
-  await ensureInactiveSellerProfileForBuyer(authResult.user);
-  markLocalLojinhaAuthAccount('vendedor', authResult.user);
 
   const verification = await loadSellerVerification();
   const verificationStatus = getVerificationStatusLabel(verification?.status);
@@ -3815,8 +3748,7 @@ async function openBuyerModal() {
   await lojaAuthReady.catch(() => null);
   if (!isSameLojinhaAuthEmail(email)) {
     const authExists = await getLojinhaAuthAccountExists(email);
-    const knownLocalAccount = localLojinhaAuthAccountKnown('comprador', email) || localLojinhaAuthAccountKnown('vendedor', email);
-    if (authExists === true || knownLocalAccount === true) {
+    if (authExists === true) {
       const authResult = await ensureLojinhaAuthUser({ role: 'comprador', requireRoleDoc: false, createRoleDoc: false, allowCreateAuth: false, silent: false });
       if (!authResult?.user) {
         buyerOrders = [];
@@ -4808,11 +4740,8 @@ async function applySellerStatusFromVerification(id, status, verificationOverrid
   if (!verificationData) return;
 
   const sellerRef = doc(lojaDb, 'vendedor', cleanId);
-  const existingSellerSnap = await getDoc(sellerRef).catch(() => null);
-  const existingSeller = existingSellerSnap?.exists?.() ? { id: existingSellerSnap.id, ...existingSellerSnap.data() } : null;
-  const sellerSource = { ...(existingSeller || {}), ...(verificationData || {}) };
   if (status === 'aprovado') {
-    const activePayload = buildSellerPayloadFromVerification(cleanId, sellerSource, 'ativo');
+    const activePayload = buildSellerPayloadFromVerification(cleanId, verificationData, 'ativo');
     await setDoc(sellerRef, activePayload, { merge: true });
     lojaCacheRemove('storeStatus', cleanId);
     lojaCacheRemove('sellerProducts', cleanId);
@@ -4821,7 +4750,7 @@ async function applySellerStatusFromVerification(id, status, verificationOverrid
   }
 
   if (status === 'recusado') {
-    const inactivePayload = buildSellerPayloadFromVerification(cleanId, sellerSource, 'inativo');
+    const inactivePayload = buildSellerPayloadFromVerification(cleanId, verificationData, 'inativo');
     await setDoc(sellerRef, inactivePayload, { merge: true });
     lojaCacheRemove('storeStatus', cleanId);
   }
