@@ -3395,6 +3395,12 @@ async function updateOrderStatus(orderId, action) {
   }
 
   try {
+    const sellerAuth = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: true, createRoleDoc: false, silent: false });
+    if (!sellerAuth?.user) {
+      localToast('error', 'Entre novamente na conta da Lojinha para alterar o pedido.');
+      return;
+    }
+
     const data = await callLojinhaApi('/api/lojinha_seller_order_action', {
       orderId,
       action,
@@ -3909,15 +3915,42 @@ async function createOrGetChatForOrder(order, type = CHAT_TYPE_SELLER) {
   if (!order?.id) throw new Error('order-not-found');
   const id = getChatId(order.id, type);
   const ref = doc(lojaDb, CHAT_COLLECTION, id);
-  const snap = await getDoc(ref);
+  let snap = null;
+  try {
+    snap = await getDoc(ref);
+  } catch (err) {
+    // Quando o chat ainda não existe, rules muito restritas podem negar o get().
+    // Nesse caso, seguimos com rascunho e criamos o chat só ao enviar a primeira mensagem.
+    if (String(err?.code || '').toLowerCase() !== 'permission-denied') throw err;
+  }
   const now = Date.now();
   const expiresAtMs = now + (getChatDurationHours(type) * 60 * 60 * 1000);
-  if (snap.exists()) {
+  if (snap?.exists?.()) {
     const existing = { id: snap.id, ...snap.data() };
     if (isChatExpired(existing) && String(existing.status || '') === 'ativo') { await closeAndDeleteChat(existing, 'expirado'); existing.status = 'expirado'; }
     return existing;
   }
-  return buildDraftChat({ id, type, order, buyerId: order.buyerId || ghubProfile?.gameId || '', buyerUid: order.buyerUid || currentUser?.uid || '', buyerEmail: order.buyerEmail || normalizeEmail(currentUser?.email || ghubProfile?.email || ''), buyerName: order.buyerName || order.buyerNick || ghubProfile?.nick || '', sellerId: order.sellerId || '', sellerName: order.sellerName || '', subject: type === CHAT_TYPE_SUPPORT ? 'Chat com suporte' : 'Chat com vendedor', createdAtMs: now, expiresAtMs });
+  const currentLojaUid = String(lojaAuth.currentUser?.uid || '');
+  const currentIsBuyer = String(order.buyerId || '') === String(ghubProfile?.gameId || '');
+  const currentIsSeller = String(order.sellerId || '') === String(ghubProfile?.gameId || '');
+  return buildDraftChat({
+    id,
+    type,
+    order,
+    buyerId: order.buyerId || ghubProfile?.gameId || '',
+    buyerUid: order.buyerUid || currentUser?.uid || '',
+    buyerAuthUid: order.buyerAuthUid || order.buyerLojinhaUid || (currentIsBuyer ? currentLojaUid : ''),
+    buyerLojinhaUid: order.buyerLojinhaUid || order.buyerAuthUid || (currentIsBuyer ? currentLojaUid : ''),
+    buyerEmail: order.buyerEmail || normalizeEmail(currentUser?.email || ghubProfile?.email || ''),
+    buyerName: order.buyerName || order.buyerNick || ghubProfile?.nick || '',
+    sellerId: order.sellerId || '',
+    sellerAuthUid: order.sellerAuthUid || order.sellerLojinhaUid || (currentIsSeller ? currentLojaUid : ''),
+    sellerLojinhaUid: order.sellerLojinhaUid || order.sellerAuthUid || (currentIsSeller ? currentLojaUid : ''),
+    sellerName: order.sellerName || '',
+    subject: type === CHAT_TYPE_SUPPORT ? 'Chat com suporte' : 'Chat com vendedor',
+    createdAtMs: now,
+    expiresAtMs
+  });
 }
 
 
@@ -3927,7 +3960,7 @@ function getSystemChatText(type) {
     : 'Chat temporário preparado. Envie a primeira mensagem para abrir oficialmente o atendimento e combinar a entrega.';
 }
 
-function buildDraftChat({ id, type, order = {}, buyerId = '', buyerUid = '', buyerEmail = '', buyerName = '', sellerId = '', sellerName = '', subject = '', source = '', createdAtMs = Date.now(), expiresAtMs = Date.now() + (SUPPORT_CHAT_HOURS * 60 * 60 * 1000) }) {
+function buildDraftChat({ id, type, order = {}, buyerId = '', buyerUid = '', buyerAuthUid = '', buyerLojinhaUid = '', buyerEmail = '', buyerName = '', sellerId = '', sellerAuthUid = '', sellerLojinhaUid = '', sellerName = '', subject = '', source = '', createdAtMs = Date.now(), expiresAtMs = Date.now() + (SUPPORT_CHAT_HOURS * 60 * 60 * 1000) }) {
   return {
     __draft: true,
     id,
@@ -3937,9 +3970,13 @@ function buildDraftChat({ id, type, order = {}, buyerId = '', buyerUid = '', buy
     pedidoId: order.id || '',
     buyerId,
     buyerUid,
+    buyerAuthUid: buyerAuthUid || order.buyerAuthUid || order.buyerLojinhaUid || '',
+    buyerLojinhaUid: buyerLojinhaUid || buyerAuthUid || order.buyerLojinhaUid || order.buyerAuthUid || '',
     buyerEmail,
     buyerName,
     sellerId,
+    sellerAuthUid: sellerAuthUid || order.sellerAuthUid || order.sellerLojinhaUid || '',
+    sellerLojinhaUid: sellerLojinhaUid || sellerAuthUid || order.sellerLojinhaUid || order.sellerAuthUid || '',
     sellerName,
     assunto: subject,
     source,
@@ -4089,8 +4126,8 @@ async function submitProblem(event) {
   const ref = doc(lojaDb, CHAT_COLLECTION, activeProblemChatId);
   setButtonLoading(els.submitProblemBtn, true, activeDraftChat ? 'Enviar e abrir chat' : 'Enviar mensagem');
   try {
-    const snap = await getDoc(ref);
-    if (!snap.exists() && activeDraftChat) {
+    if (activeDraftChat) {
+      await ensureLojinhaAuthUser({ role: 'comprador', requireRoleDoc: false, createRoleDoc: false, silent: true }).catch(() => null);
       const createdChat = await createChatFromDraft(activeDraftChat, description);
       activeDraftChat = null;
       if (els.problemDescription) els.problemDescription.value = '';
@@ -4099,6 +4136,7 @@ async function submitProblem(event) {
       await Promise.all([loadBuyerOrders(), loadSellerChats().then(() => { renderSellerOrders(); renderSellerSupportChats(); }), isSupportAdmin ? loadSupportPanelData({ force: true }) : Promise.resolve()]);
       return;
     }
+    const snap = await getDoc(ref);
     if (!snap.exists()) throw new Error('chat-not-found');
     const chat = { id: snap.id, ...snap.data() };
     if (isChatExpired(chat) || isChatClosed(chat)) {

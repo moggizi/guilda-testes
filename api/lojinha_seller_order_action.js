@@ -37,7 +37,7 @@ function getDeliveredAtMs(order = {}) {
 
 function isSellerActive(data = {}) {
   const status = String(data.status || '').toLowerCase();
-  return data.ativo === true
+  return data.ativo !== false
     && data.verificado === true
     && data.revogado !== true
     && data.bloqueado !== true
@@ -173,20 +173,36 @@ module.exports = async (req, res) => {
       const sellerSnap = await tx.get(sellerRef);
       if (!sellerSnap.exists) throw new Error('seller-inactive');
       const seller = sellerSnap.data() || {};
-      const sellerAuthUid = String(seller.authUid || seller.lojinhaUid || '');
-      const orderSellerAuthUid = String(order.sellerAuthUid || '');
+      const sellerAuthUid = String(seller.authUid || seller.lojinhaUid || seller.lojaAuthUid || '').trim();
+      const orderSellerAuthUid = String(order.sellerAuthUid || order.sellerLojinhaUid || '').trim();
+      const sellerEmail = String(seller.authEmail || seller.email || seller.playerEmail || '').trim().toLowerCase();
+      const authEmail = String(lojaAuth.authEmail || '').trim().toLowerCase();
+      const authMatchesSeller = !!sellerAuthUid && sellerAuthUid === lojaAuth.authUid;
+      const authMatchesOrder = !!orderSellerAuthUid && orderSellerAuthUid === lojaAuth.authUid;
+      const emailMatchesSeller = !!authEmail && !!sellerEmail && authEmail === sellerEmail;
 
-      if (sellerAuthUid !== lojaAuth.authUid && orderSellerAuthUid !== lojaAuth.authUid) {
+      if (!authMatchesSeller && !authMatchesOrder && !emailMatchesSeller) {
         throw new Error('seller-not-authorized');
       }
       if (!isSellerActive(seller)) throw new Error('seller-inactive');
       if (!isOrderPending(order)) throw new Error('order-not-pending');
 
       const nowMs = Date.now();
+      if (!sellerAuthUid && emailMatchesSeller) {
+        tx.set(sellerRef, {
+          authUid: lojaAuth.authUid,
+          lojinhaUid: lojaAuth.authUid,
+          authEmail: lojaAuth.authEmail || seller.authEmail || seller.email || '',
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedAtMs: nowMs,
+        }, { merge: true });
+      }
       if (action === 'entregue') {
         orderPatch = {
           status: 'entregue',
           finalizado: true,
+          sellerAuthUid: order.sellerAuthUid || lojaAuth.authUid,
+          sellerLojinhaUid: order.sellerLojinhaUid || lojaAuth.authUid,
           deliveryInfo: deliveryInfo || order.deliveryInfo || '',
           deliveryInfoUpdatedAtMs: nowMs,
           entregueEmMs: nowMs,
@@ -204,6 +220,8 @@ module.exports = async (req, res) => {
         orderPatch = {
           status: 'reembolso_solicitado',
           finalizado: false,
+          sellerAuthUid: order.sellerAuthUid || lojaAuth.authUid,
+          sellerLojinhaUid: order.sellerLojinhaUid || lojaAuth.authUid,
           reembolsoSolicitado: true,
           reembolsoStatus: 'pendente',
           reembolsoMotivo: motivo || 'Solicitado pelo vendedor.',

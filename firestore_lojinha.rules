@@ -35,7 +35,7 @@ service cloud.firestore {
       return signedIn()
         && exists(sellerPath(gameId))
         && get(sellerPath(gameId)).data.authUid == uid()
-        && get(sellerPath(gameId)).data.ativo == true
+        && get(sellerPath(gameId)).data.ativo != false
         && get(sellerPath(gameId)).data.verificado == true
         && get(sellerPath(gameId)).data.revogado != true
         && get(sellerPath(gameId)).data.bloqueado != true
@@ -184,6 +184,20 @@ service cloud.firestore {
         && request.resource.data.status in ["entregue", "reembolso_solicitado"];
     }
 
+    function chatOrderUpdate() {
+      return isParticipant(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "chatVendedorAberto",
+          "chatVendedorId",
+          "chatVendedorStatus",
+          "suporteAberto",
+          "suporteChatId",
+          "suporteStatus",
+          "updatedAt",
+          "updatedAtMs"
+        ]);
+    }
+
     function safeChatWrite() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         "mensagens",
@@ -293,7 +307,7 @@ service cloud.firestore {
     match /pedidos/{id} {
       allow read: if isAdmin() || isParticipant(resource.data);
       allow create: if isAdmin();
-      allow update: if isAdmin() || buyerOrderUpdate() || sellerOrderUpdate();
+      allow update: if isAdmin() || buyerOrderUpdate() || sellerOrderUpdate() || chatOrderUpdate();
       allow delete: if isAdmin();
     }
 
