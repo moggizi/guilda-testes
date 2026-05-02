@@ -46,9 +46,34 @@ const lojaFirebaseConfig = {
 const lojaApp = getApps().find((app) => app.name === 'loja-ghub') || initializeApp(lojaFirebaseConfig, 'loja-ghub');
 const lojaDb = getFirestore(lojaApp);
 const lojaAuth = getAuth(lojaApp);
-const lojaAuthReady = setPersistence(lojaAuth, browserLocalPersistence).catch((err) => {
+let lojaLastAuthUser = null;
+let lojaAuthFirstStateResolved = false;
+let resolveLojaAuthFirstState = null;
+const lojaAuthFirstStateReady = new Promise((resolve) => { resolveLojaAuthFirstState = resolve; });
+onAuthStateChanged(lojaAuth, (user) => {
+  lojaLastAuthUser = user || null;
+  if (!lojaAuthFirstStateResolved) {
+    lojaAuthFirstStateResolved = true;
+    if (typeof resolveLojaAuthFirstState === 'function') resolveLojaAuthFirstState(lojaLastAuthUser);
+  }
+});
+const lojaPersistenceReady = setPersistence(lojaAuth, browserLocalPersistence).catch((err) => {
   console.warn('Não foi possível ativar persistência local da Auth da lojinha:', err);
 });
+const lojaAuthReady = Promise.all([lojaPersistenceReady, lojaAuthFirstStateReady]).then(() => lojaAuth.currentUser || lojaLastAuthUser || null);
+function getCurrentLojaAuthUserSync() {
+  return lojaAuth.currentUser || lojaLastAuthUser || null;
+}
+function getCurrentLojaAuthUidSync() {
+  return String(getCurrentLojaAuthUserSync()?.uid || '');
+}
+function getCurrentLojaAuthEmailSync() {
+  return normalizeEmail(getCurrentLojaAuthUserSync()?.email || '');
+}
+async function waitForCurrentLojaAuthUser() {
+  await lojaAuthReady.catch(() => null);
+  return getCurrentLojaAuthUserSync();
+}
 
 const qs = (id) => document.getElementById(id);
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
@@ -1901,15 +1926,15 @@ function getRoleLabel(role = 'comprador') {
 }
 
 function isSameLojinhaAuthEmail(email) {
-  const currentEmail = normalizeEmail(lojaAuth.currentUser?.email || '');
+  const currentEmail = getCurrentLojaAuthEmailSync();
   return !!email && !!currentEmail && currentEmail === email;
 }
 
 async function signOutDifferentLojinhaEmail(expectedEmail) {
   await lojaAuthReady;
-  const currentEmail = normalizeEmail(lojaAuth.currentUser?.email || '');
+  const currentEmail = getCurrentLojaAuthEmailSync();
   if (currentEmail && expectedEmail && currentEmail !== expectedEmail) {
-    try { await signOutFirebase(lojaAuth); } catch (_) {}
+    try { await signOutFirebase(lojaAuth); lojaLastAuthUser = null; } catch (_) {}
   }
 }
 
@@ -1995,7 +2020,7 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
   const roleEmail = normalizeEmail(roleData?.email || roleData?.playerEmail || roleData?.authEmail || '');
 
   if (isSameLojinhaAuthEmail(email) && (!requireRoleDoc || (roleData && roleEmail === email))) {
-    return { user: lojaAuth.currentUser, roleData, roleRef };
+    return { user: getCurrentLojaAuthUserSync(), roleData, roleRef };
   }
 
   if (!silent) {
@@ -2007,6 +2032,7 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
     try {
       const credential = await signInWithEmailAndPassword(lojaAuth, email, password);
       authUser = credential.user;
+      lojaLastAuthUser = authUser;
     } catch (signInErr) {
       const code = String(signInErr?.code || '');
       if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
@@ -2017,6 +2043,7 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
         try {
           const credential = await createUserWithEmailAndPassword(lojaAuth, email, password);
           authUser = credential.user;
+          lojaLastAuthUser = authUser;
         } catch (createErr) {
           const createCode = String(createErr?.code || '');
           if (createCode === 'auth/email-already-in-use') {
@@ -2044,7 +2071,7 @@ async function ensureLojinhaAuthUser({ role = 'comprador', requireRoleDoc = fals
     return null;
   }
 
-  const authUser = lojaAuth.currentUser;
+  const authUser = getCurrentLojaAuthUserSync();
   if (!authUser || normalizeEmail(authUser.email || '') !== email) return null;
 
   if (createRoleDoc && roleCollection === 'comprador') {
@@ -2501,9 +2528,9 @@ function getLocalBuyerPayloadForPix() {
     id: String(ghubProfile.gameId || ''),
     uid: String(currentUser?.uid || ghubProfile.uid || ''),
     ghubUid: String(currentUser?.uid || ghubProfile.uid || ''),
-    authUid: String(lojaAuth.currentUser?.uid || ''),
-    lojinhaUid: String(lojaAuth.currentUser?.uid || ''),
-    authEmail: normalizeEmail(lojaAuth.currentUser?.email || ''),
+    authUid: getCurrentLojaAuthUidSync(),
+    lojinhaUid: getCurrentLojaAuthUidSync(),
+    authEmail: getCurrentLojaAuthEmailSync(),
     email: normalizeEmail(currentUser?.email || ghubProfile.email || ghubProfile.playerEmail || ''),
     nick: String(ghubProfile.nick || ghubProfile.nome || ghubProfile.name || '').trim(),
     foto: ghubProfile.foto || ghubProfile.photo || ''
@@ -2513,7 +2540,7 @@ function getLocalBuyerPayloadForPix() {
 
 async function getLojinhaAuthToken(forceRefresh = false) {
   await lojaAuthReady;
-  const user = lojaAuth.currentUser;
+  const user = await waitForCurrentLojaAuthUser();
   if (!user) return '';
   try {
     return await user.getIdToken(!!forceRefresh);
@@ -2574,7 +2601,7 @@ async function createOrder(productId) {
     if (!buyerProfile) return;
 
     const lojaAuthToken = await getLojinhaAuthToken(true);
-    const lojaAuthUser = lojaAuth.currentUser;
+    const lojaAuthUser = getCurrentLojaAuthUserSync();
     if (!lojaAuthToken || !lojaAuthUser?.uid) {
       localToast('error', 'Confirme sua conta da Lojinha antes de gerar o Pix.');
       return;
@@ -2757,7 +2784,7 @@ async function checkPixPaymentStatus(checkoutId, manual = false) {
       }
       if (statusEl) statusEl.textContent = `Pagamento aprovado. Pedido criado: ${data.orderId || '-'}`;
       localToast('success', 'Pagamento aprovado. Pedido criado.');
-      await Promise.all([loadProducts(true), loadBuyerOrders({ reset: true })]);
+      loadBuyerOrders({ reset: true, force: true }).catch(() => null);
       setTimeout(() => closeProductModal(), 1000);
       return;
     }
@@ -2779,7 +2806,7 @@ async function checkPixPaymentStatus(checkoutId, manual = false) {
       }
       if (statusEl) statusEl.textContent = 'Pagamento aprovado, mas o valor do produto mudou antes da criação do pedido. Acione o suporte para analisar/reembolsar.';
       localToast('error', 'Pagamento aprovado com valor antigo. Acione o suporte.');
-      await loadProducts(true);
+      refreshProductFromFirestore(activePixProductId || '').catch(() => null);
       return;
     }
 
@@ -3200,7 +3227,7 @@ async function handleSellerProductSubmit(event) {
     const seller = freshSeller || lojaStatus.vendedor;
     const basePayload = {
       sellerId: ghubProfile.gameId,
-      sellerAuthUid: String(lojaAuth.currentUser?.uid || seller.authUid || seller.lojinhaUid || ''),
+      sellerAuthUid: String(getCurrentLojaAuthUidSync() || seller.authUid || seller.lojinhaUid || ''),
       sellerGhubUid: String(currentUser?.uid || ghubProfile?.uid || ''),
       sellerName: seller.nome || seller.nick || ghubProfile.nick || 'Vendedor',
       sellerPhoto: seller.foto || ghubProfile.foto || '',
@@ -3391,15 +3418,15 @@ async function updateOrderStatus(orderId, action) {
     // Aqui precisamos só garantir sessão Auth da Lojinha; exigir leitura do doc vendedor no front pode bloquear por rules/cache.
     const sellerAuth = await ensureLojinhaAuthUser({ role: 'vendedor', requireRoleDoc: false, createRoleDoc: false, silent: false });
     if (!sellerAuth?.user) {
-      localToast('error', 'Entre novamente na conta da Lojinha para alterar o pedido.');
+      localToast('error', 'Entre na conta da Lojinha para alterar o pedido.');
       return;
     }
 
-    // Se o painel abriu por cache mas a sessão da Auth da Lojinha não está ativa/igual ao vendedor,
-    // o token da API falha. Garante token novo antes de chamar a Vercel.
+    // O painel pode abrir por cache antes da Auth secundária terminar de hidratar.
+    // Aqui espera a hidratação e força token novo antes da API.
     const freshSellerToken = await getLojinhaAuthToken(true);
     if (!freshSellerToken) {
-      localToast('error', 'Sessão da Lojinha expirada. Entre novamente para alterar o pedido.');
+      localToast('error', 'Não foi possível confirmar sua sessão da Lojinha. Saia e entre novamente na Lojinha.');
       return;
     }
 
@@ -3456,7 +3483,7 @@ async function updateOrderStatus(orderId, action) {
     lojaCacheRemove('buyerOrders', `${order.buyerId || ''}:page:1`);
     lojaCacheRemove('storeStatus', getCurrentUserCacheKey());
     localToast('success', action === 'reembolso_solicitado' ? 'Solicitação de reembolso enviada para o suporte.' : 'Pedido marcado como entregue.');
-    await Promise.all([loadProducts(true), loadSellerProducts(false)]);
+    Promise.allSettled([loadSellerOrders({ reset: true, force: true, silent: true }), loadSellerProducts(false)]).then(() => null);
   } catch (err) {
     console.error(err);
     const map = {
@@ -3493,7 +3520,7 @@ async function requestSellerWithdraw() {
   try {
     await addDoc(collection(lojaDb, WITHDRAW_COLLECTION), {
       sellerId: ghubProfile.gameId,
-      sellerAuthUid: String(lojaAuth.currentUser?.uid || seller.authUid || seller.lojinhaUid || ''),
+      sellerAuthUid: String(getCurrentLojaAuthUidSync() || seller.authUid || seller.lojinhaUid || ''),
       sellerGhubUid: String(currentUser?.uid || ghubProfile?.uid || ''),
       sellerName: lojaStatus.vendedor.nome || lojaStatus.vendedor.nick || ghubProfile.nick || '',
       sellerEmail: normalizeEmail(currentUser?.email || ghubProfile.email || ''),
@@ -3936,7 +3963,7 @@ async function createOrGetChatForOrder(order, type = CHAT_TYPE_SELLER) {
     if (isChatExpired(existing) && String(existing.status || '') === 'ativo') { await closeAndDeleteChat(existing, 'expirado'); existing.status = 'expirado'; }
     return existing;
   }
-  const currentLojaUid = String(lojaAuth.currentUser?.uid || '');
+  const currentLojaUid = getCurrentLojaAuthUidSync();
   const currentIsBuyer = String(order.buyerId || '') === String(ghubProfile?.gameId || '');
   const currentIsSeller = String(order.sellerId || '') === String(ghubProfile?.gameId || '');
   return buildDraftChat({
