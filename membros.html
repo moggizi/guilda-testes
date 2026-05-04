@@ -505,7 +505,7 @@
     let currentGuildSlotsMeta = [];
     let canUseMultiGuildMembers = false;
 
-    const SETTINGS_SCREEN_CACHE_TTL_MS = 60 * 60 * 1000;
+    const SETTINGS_SCREEN_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
     function __isFreshCacheObject(cached, ttlMs = SETTINGS_SCREEN_CACHE_TTL_MS) {
       try {
@@ -532,9 +532,103 @@
       }
     }
 
+    function __writeSettingsScreenCache(data = {}) {
+      try {
+        const key = __settingsScreenCacheKey();
+        if (!key) return;
+        const previous = __readSettingsScreenCache() || {};
+        localStorage.setItem(key, JSON.stringify({ ...previous, ...(data || {}), guildId: getGuildContext()?.guildId || previous.guildId || '', ts: Date.now() }));
+      } catch (_) {}
+    }
+
+    function __readJsonStorage(key) {
+      try {
+        if (!key) return null;
+        const raw = localStorage.getItem(key);
+        return raw ? (JSON.parse(raw) || null) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
     function __readFreshSettingsScreenCache() {
       const cached = __readSettingsScreenCache();
       return __isFreshCacheObject(cached) ? cached : null;
+    }
+
+    function __readFreshDirectSettingsCache() {
+      const gid = getGuildContext()?.guildId;
+      if (!gid) return null;
+
+      const ajustesCache = __readFreshSettingsScreenCache();
+      const guildInfoCache = __readJsonStorage(`guildInfo_${gid}`);
+      const goalsCache = __readJsonStorage(`guildGoals_${gid}`);
+      const tagCache = __readJsonStorage(`tagMembros_${gid}`);
+      const guildMultiRaw = __readJsonStorage(`guildMulti_${gid}`);
+      const guildMultiTs = Number(localStorage.getItem(`guildMulti_${gid}_ts`) || 0) || 0;
+
+      const freshGuildInfo = __isFreshCacheObject(guildInfoCache) ? guildInfoCache : null;
+      const freshGoals = __isFreshCacheObject(goalsCache) ? goalsCache : null;
+      const freshTag = __isFreshCacheObject(tagCache) ? tagCache : null;
+      const freshMultiGuildSlots = Array.isArray(guildMultiRaw) && guildMultiRaw.length && __isFreshCacheObject({ ts: guildMultiTs })
+        ? guildMultiRaw
+        : null;
+
+      const merged = { ...(ajustesCache || {}), guildId: gid };
+
+      if (!Array.isArray(merged.multiGuildSlots) || !merged.multiGuildSlots.length) {
+        if (freshMultiGuildSlots) merged.multiGuildSlots = freshMultiGuildSlots;
+      }
+
+      if (!merged.goals && freshGoals) merged.goals = freshGoals;
+      if (!merged.tag && freshTag?.value) merged.tag = String(freshTag.value || '').trim();
+      if (!merged.guildName && freshGuildInfo?.name) merged.guildName = String(freshGuildInfo.name || '').trim();
+
+      if ((!Array.isArray(merged.multiGuildSlots) || !merged.multiGuildSlots.length) && (merged.guildName || getGuildContext()?.guildName)) {
+        merged.multiGuildSlots = [{
+          slot: 1,
+          nameField: 'name',
+          tagField: 'tagMembros',
+          name: merged.guildName || getGuildContext()?.guildName || '',
+          tag: merged.tag || '',
+          exists: true
+        }];
+      }
+
+      const hasUsefulData =
+        (Array.isArray(merged.multiGuildSlots) && merged.multiGuildSlots.length) ||
+        !!merged.goals ||
+        !!merged.tag ||
+        !!merged.guildName;
+
+      return hasUsefulData ? merged : null;
+    }
+
+    function __cacheSettingsSnapshot(extra = {}) {
+      const primarySlot = (currentGuildSlotsMeta || []).find(item => Number(item?.slot) === 1) || {};
+      __writeSettingsScreenCache({
+        guildName: primarySlot.name || getGuildContext()?.guildName || '',
+        tag: memberTag || primarySlot.tag || '',
+        goals: normalizeGoalsFromAnySource(guildGoals || {}),
+        multiGuildSlots: normalizeGuildSlotMetaList(currentGuildSlotsMeta),
+        ...extra
+      });
+    }
+
+    function normalizeGuildSlotMetaList(list = []) {
+      const map = new Map();
+      (Array.isArray(list) ? list : []).forEach((slot) => {
+        const n = Math.max(1, Math.min(4, Math.floor(Number(slot?.slot) || 1)));
+        map.set(n, {
+          slot: n,
+          nameField: slot?.nameField || (n <= 1 ? 'name' : `name${n}`),
+          tagField: slot?.tagField || (n <= 1 ? 'tagMembros' : `tagMembros${n}`),
+          name: String(slot?.name || '').trim(),
+          tag: String(slot?.tag || '').trim(),
+          exists: n === 1 ? true : slot?.exists !== false && !!String(slot?.name || '').trim()
+        });
+      });
+      return Array.from(map.values()).sort((a, b) => a.slot - b.slot);
     }
 
     function normalizeVipTierClient(v) {
@@ -591,7 +685,9 @@
     function __currentGuildDisplayName(slot = currentGuildSlot) {
       const meta = __getGuildSlotMeta(slot);
       const name = (meta?.name || '').toString().trim();
-      return name || `Guilda ${slot}`;
+      if (name) return name;
+      if (Number(slot) === 1) return (getGuildContext()?.guildName || '').toString().trim() || 'Guilda principal';
+      return `Guilda ${slot}`;
     }
 
     function __updateCurrentMemberTag() {
@@ -840,7 +936,7 @@
     // FUNÇÕES DE RENDERIZAÇÃO
     // ==========================================
     const PLAY_MODE_FILTER_OPTIONS = [
-      { key: 'all', label: 'Todos' },
+      { key: 'all', label: 'Exibir todos' },
       { key: 'rush', label: 'Rush' },
       { key: 'full-gas', label: 'Full Gás' },
       { key: 'curandeiro', label: 'Curandeiro' },
@@ -849,6 +945,7 @@
     ];
 
     const GOAL_MET_FILTER_OPTIONS = [
+      { key: 'none', label: 'Exibir todos' },
       { key: 'all', label: 'Todos que bateram' },
       { key: 'rush', label: 'Rush' },
       { key: 'full-gas', label: 'Full Gás' },
@@ -1059,9 +1156,11 @@
 
       const baseMembers = getVisibleMembers({ ignoreGoalMet: true });
       dropdown.innerHTML = GOAL_MET_FILTER_OPTIONS.map((option) => {
-        const count = option.key === 'all'
-          ? baseMembers.filter(member => memberMetAnyGuildWarGoal(member)).length
-          : baseMembers.filter(member => memberMetGuildWarGoalForMode(member, option.key)).length;
+        const count = option.key === 'none'
+          ? baseMembers.length
+          : option.key === 'all'
+            ? baseMembers.filter(member => memberMetAnyGuildWarGoal(member)).length
+            : baseMembers.filter(member => memberMetGuildWarGoalForMode(member, option.key)).length;
         const active = currentGoalMetFilter === option.key;
 
         return `
@@ -2175,24 +2274,47 @@
       if(!user) return;
       document.getElementById('btn-logout').onclick = logout;
 
-      const settingsCache = __readFreshSettingsScreenCache();
-      const cachedSlots = Array.isArray(settingsCache?.multiGuildSlots) ? settingsCache.multiGuildSlots : null;
+      const settingsCache = __readFreshDirectSettingsCache();
+      const cachedSlots = Array.isArray(settingsCache?.multiGuildSlots) ? normalizeGuildSlotMetaList(settingsCache.multiGuildSlots) : null;
       currentGuildSlotsMeta = cachedSlots && cachedSlots.length
         ? cachedSlots
-        : await getGuildMultiConfig(4).catch(() => ([{ slot: 1, name: '', tag: '', exists: true }]));
+        : [{ slot: 1, name: getGuildContext()?.guildName || '', tag: settingsCache?.tag || '', exists: true }];
       const vipTier = normalizeVipTierClient(getGuildContext()?.vipTier || getVipTier());
       canUseMultiGuildMembers = ['pro', 'business', 'vitalicio'].includes(vipTier);
       currentGuildSlot = canUseMultiGuildMembers ? __readSelectedGuildSlot() : 1;
       if (!__isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
       __writeSelectedGuildSlot(currentGuildSlot);
+
+      memberTag = settingsCache?.tag ? String(settingsCache.tag || '').trim() : memberTag;
+      __updateCurrentMemberTag();
+      guildGoals = settingsCache?.goals ? normalizeGoalsFromAnySource(settingsCache.goals) : guildGoals;
       __syncGuildSlotButtonState();
       __renderGuildSlotDropdown();
       refreshPlayModeCounterUi();
-
-      memberTag = await getMemberTagConfig();
-      __updateCurrentMemberTag();
-      guildGoals = settingsCache?.goals ? normalizeGoalsFromAnySource(settingsCache.goals) : await getGuildGoalsConfig();
       refreshGoalMetFilterUi();
+
+      try {
+        const [freshSlots, freshTag, freshGoals] = await Promise.all([
+          getGuildMultiConfig(4, { ttlMs: SETTINGS_SCREEN_CACHE_TTL_MS }).catch(() => null),
+          getMemberTagConfig({ ttlMs: SETTINGS_SCREEN_CACHE_TTL_MS }).catch(() => null),
+          getGuildGoalsConfig({ ttlMs: SETTINGS_SCREEN_CACHE_TTL_MS }).catch(() => null)
+        ]);
+
+        if (Array.isArray(freshSlots) && freshSlots.length) currentGuildSlotsMeta = normalizeGuildSlotMetaList(freshSlots);
+        if (freshTag) memberTag = freshTag;
+        __updateCurrentMemberTag();
+        if (freshGoals) guildGoals = normalizeGoalsFromAnySource(freshGoals);
+
+        if (!__isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
+        __writeSelectedGuildSlot(currentGuildSlot);
+        __syncGuildSlotButtonState();
+        __renderGuildSlotDropdown();
+        refreshPlayModeCounterUi();
+        refreshGoalMetFilterUi();
+        __cacheSettingsSnapshot();
+      } catch (_) {
+        __cacheSettingsSnapshot();
+      }
 
       const hasTagEl = document.getElementById('has-tag');
       if (hasTagEl) {

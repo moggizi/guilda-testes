@@ -89,9 +89,9 @@ export function getVipExpiresAtMs() {
   return (__guildCtx && __guildCtx.vipExpiresAtMs != null) ? Number(__guildCtx.vipExpiresAtMs) : null;
 }
 
-// Cache padrão das configurações: 1 hora.
+// Cache padrão das configurações: 24 horas.
 // Leituras usam cache primeiro; Firebase só entra quando expira ou quando forceRefresh=true.
-const __SETTINGS_CACHE_TTL_MS = 60 * 60 * 1000;
+const __SETTINGS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function __cacheIsFresh(cached, ttlMs = __SETTINGS_CACHE_TTL_MS) {
   try {
