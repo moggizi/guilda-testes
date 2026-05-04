@@ -282,6 +282,7 @@ const els = {
   btnClosePartnerModal: qs('btn-close-partner-modal'),
   btnAcceptPartner: qs('btn-accept-partner'),
   btnDeclinePartner: qs('btn-decline-partner'),
+  inputPartnerSocials: qs('input-partner-socials'),
   btnTogglePartnerPanel: qs('btn-toggle-partner-panel'),
   partnerCurrentBalance: qs('partner-current-balance'),
   partnerWithdrawnBalance: qs('partner-withdrawn-balance'),
@@ -514,9 +515,22 @@ function formatCurrencyBR(value) {
   });
 }
 
+function getPartnerSocialsInput() {
+  return String(els.inputPartnerSocials?.value || '').trim().slice(0, 600);
+}
+
 function setPartnerModalVisible(isVisible) {
   els.modalPartner?.classList.toggle('hidden', !isVisible);
   els.modalPartner?.classList.toggle('flex', isVisible);
+
+  if (isVisible && els.inputPartnerSocials) {
+    els.inputPartnerSocials.value = String(
+      currentMonetizeData?.redesSociais ||
+      currentMonetizeData?.redes ||
+      currentProfileData?.redesSociaisParceiro ||
+      ''
+    ).slice(0, 600);
+  }
 }
 
 function buildPartnerReferralLink() {
@@ -624,6 +638,7 @@ function buildPartnerDocPayload(profile = currentProfileData, existing = current
   const email = auth.currentUser?.email || profile?.email || '';
   const type = getPartnerType(profile, existing);
   const isVerified = type === 'verificado';
+  const redesSociais = getPartnerSocialsInput() || String(existing?.redesSociais || existing?.redes || '').trim().slice(0, 600);
 
   return {
     uid,
@@ -643,6 +658,7 @@ function buildPartnerDocPayload(profile = currentProfileData, existing = current
     totalConvidados: Number(existing?.totalConvidados ?? existing?.convidados ?? 0) || 0,
     totalPagantes: Number(existing?.totalPagantes ?? existing?.pagantes ?? existing?.convertidos ?? 0) || 0,
     pix: existing?.pix || '',
+    redesSociais,
     linkIndicacao: existing?.linkIndicacao || buildPartnerReferralLink(),
     createdAt: existing?.createdAt || serverTimestamp(),
     updatedAt: serverTimestamp()
@@ -674,6 +690,9 @@ async function handleAcceptPartner() {
     return;
   }
 
+  const partnerSocials = getPartnerSocialsInput();
+  if (partnerSocials && !validarTextoPermitido(partnerSocials, 'As redes sociais')) return;
+
   const originalHtml = els.btnAcceptPartner?.innerHTML || '';
   if (els.btnAcceptPartner) {
     els.btnAcceptPartner.disabled = true;
@@ -687,6 +706,7 @@ async function handleAcceptPartner() {
       parceiroTipo: getPartnerType(currentProfileData, currentMonetizeData),
       parceiroVerificado: getPartnerType(currentProfileData, currentMonetizeData) === 'verificado',
       monetizeId: currentUserProfileId,
+      redesSociaisParceiro: partnerSocials,
       updatedAt: serverTimestamp()
     };
 
