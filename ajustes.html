@@ -141,19 +141,42 @@
             </div>
             <div class="flex-1">
               <h3 class="font-semibold text-gray-900">Metas</h3>
-              <p class="text-xs text-gray-500 mt-0.5">Defina as metas da GG e da Honra semanal.</p>
+              <p class="text-xs text-gray-500 mt-0.5">Defina metas de GG por modo e uma meta única de Honra semanal.</p>
             </div>
           </div>
 
-          <div class="grid sm:grid-cols-2 gap-3">
+          <div class="space-y-4">
             <div>
-              <label class="text-sm font-medium text-gray-700 mb-1 block">Meta da GG</label>
-              <input id="goal-gg-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 300" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
-            </div>
-
-            <div>
-              <label class="text-sm font-medium text-gray-700 mb-1 block">Meta de honra</label>
-              <input id="goal-honra-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 5000" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+              <div class="flex items-center justify-between gap-3 mb-2">
+                <label class="text-sm font-semibold text-gray-700 block">Metas da GG por modo</label>
+                <span class="text-[11px] text-gray-400">A Honra continua única</span>
+              </div>
+              <div class="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="text-xs font-medium text-gray-700 mb-1 block">Rush</label>
+                  <input id="goal-gg-rush-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 300" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-700 mb-1 block">Curandeiro</label>
+                  <input id="goal-gg-curandeiro-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 250" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-700 mb-1 block">Full Gás</label>
+                  <input id="goal-gg-full-gas-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 300" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-700 mb-1 block">Suporte</label>
+                  <input id="goal-gg-suporte-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 200" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-700 mb-1 block">Fuzileiro</label>
+                  <input id="goal-gg-fuzileiro-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 300" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-700 mb-1 block">Meta de honra</label>
+                  <input id="goal-honra-input" type="number" inputmode="numeric" min="0" step="1" placeholder="Ex: 5000" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -288,8 +311,19 @@
     const btnSaveGuildName = document.getElementById('btn-save-guild-name');
     const guildNameHint = document.getElementById('guild-name-hint');
     const guildCreatedEl = document.getElementById('guild-created');
-    const goalGgInput = document.getElementById('goal-gg-input');
+    const goalGgRushInput = document.getElementById('goal-gg-rush-input');
+    const goalGgCurandeiroInput = document.getElementById('goal-gg-curandeiro-input');
+    const goalGgFullGasInput = document.getElementById('goal-gg-full-gas-input');
+    const goalGgSuporteInput = document.getElementById('goal-gg-suporte-input');
+    const goalGgFuzileiroInput = document.getElementById('goal-gg-fuzileiro-input');
     const goalHonraInput = document.getElementById('goal-honra-input');
+    const ggGoalInputs = {
+      metaGGRush: goalGgRushInput,
+      metaGGCurandeiro: goalGgCurandeiroInput,
+      metaGGFullGas: goalGgFullGasInput,
+      metaGGSuporte: goalGgSuporteInput,
+      metaGGFuzileiro: goalGgFuzileiroInput
+    };
     const btnSaveGoals = document.getElementById('btn-save-goals');
     const goalsHint = document.getElementById('goals-hint');
     const guildAccessKeyEl = document.getElementById('guild-access-key');
@@ -306,6 +340,9 @@
     let currentIsLeader = false;
     let currentIsAdmin = false;
     let currentCanAddGuildSlot = false;
+    let currentGuildKeyForCache = '';
+    let currentGuildProfileExistsForCache = null;
+    let freshSettingsLoaded = false;
     let multiGuildSlots = [];
     function getMultiGuildCacheKey(guildId) {
       const gid = (guildId || currentCtx?.guildId || '').toString().trim();
@@ -323,6 +360,97 @@
       } catch (_) {
         return [];
       }
+    }
+
+    function getSettingsCacheKey(guildId) {
+      const gid = (guildId || currentCtx?.guildId || '').toString().trim();
+      return gid ? `ajustesTela_${gid}` : '';
+    }
+
+    function readSettingsCache(guildId) {
+      try {
+        const key = getSettingsCacheKey(guildId);
+        if (!key) return null;
+        const raw = localStorage.getItem(key);
+        return raw ? (JSON.parse(raw) || null) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function writeSettingsCache(guildId, data = {}) {
+      try {
+        const key = getSettingsCacheKey(guildId);
+        if (!key) return;
+        const previous = readSettingsCache(guildId) || {};
+        localStorage.setItem(key, JSON.stringify({ ...previous, ...data, guildId, ts: Date.now() }));
+      } catch (_) {}
+    }
+
+    function normalizeGoalValue(value) {
+      const n = toNumberOrNull(value);
+      return n == null ? null : n;
+    }
+
+    function normalizeGoalsPayload(source = {}) {
+      const legacy = normalizeGoalValue(source.metaGG);
+      const goals = {
+        metaGGRush: normalizeGoalValue(source.metaGGRush ?? legacy),
+        metaGGCurandeiro: normalizeGoalValue(source.metaGGCurandeiro ?? legacy),
+        metaGGFullGas: normalizeGoalValue(source.metaGGFullGas ?? legacy),
+        metaGGSuporte: normalizeGoalValue(source.metaGGSuporte ?? legacy),
+        metaGGFuzileiro: normalizeGoalValue(source.metaGGFuzileiro ?? legacy),
+        metaHonra: normalizeGoalValue(source.metaHonra)
+      };
+      goals.metaGG = goals.metaGGRush ?? legacy;
+      return goals;
+    }
+
+    function applyGoalsToInputs(goals = {}) {
+      const normalized = normalizeGoalsPayload(goals);
+      Object.entries(ggGoalInputs).forEach(([field, input]) => {
+        if (!input) return;
+        input.value = normalized[field] != null ? String(normalized[field]) : '';
+      });
+      if (goalHonraInput) goalHonraInput.value = normalized.metaHonra != null ? String(normalized.metaHonra) : '';
+    }
+
+    function readGoalsFromInputs() {
+      return normalizeGoalsPayload({
+        metaGGRush: goalGgRushInput?.value,
+        metaGGCurandeiro: goalGgCurandeiroInput?.value,
+        metaGGFullGas: goalGgFullGasInput?.value,
+        metaGGSuporte: goalGgSuporteInput?.value,
+        metaGGFuzileiro: goalGgFuzileiroInput?.value,
+        metaHonra: goalHonraInput?.value
+      });
+    }
+
+    function hasAnyGoal(goals = {}) {
+      const normalized = normalizeGoalsPayload(goals);
+      return ['metaGGRush', 'metaGGCurandeiro', 'metaGGFullGas', 'metaGGSuporte', 'metaGGFuzileiro', 'metaHonra']
+        .some((field) => normalized[field] != null);
+    }
+
+    function getGoalsHintText(goals = {}) {
+      const g = normalizeGoalsPayload(goals);
+      if (!hasAnyGoal(g)) return 'Nenhuma meta configurada ainda.';
+      return `Metas atuais: Rush ${g.metaGGRush ?? 0} • Curandeiro ${g.metaGGCurandeiro ?? 0} • Full Gás ${g.metaGGFullGas ?? 0} • Suporte ${g.metaGGSuporte ?? 0} • Fuzileiro ${g.metaGGFuzileiro ?? 0} • Honra ${g.metaHonra ?? 0}`;
+    }
+
+    function writeCurrentSettingsCache(extra = {}) {
+      const gid = (currentCtx?.guildId || '').toString().trim();
+      if (!gid) return;
+      writeSettingsCache(gid, {
+        tag: (tagInput?.value || '').trim(),
+        guildName: (guildNameInput?.value || '').trim(),
+        guildCreatedText: (guildCreatedEl?.textContent || '').trim(),
+        goals: readGoalsFromInputs(),
+        guildAccessKey: currentGuildKeyForCache || '',
+        guildProfileExists: currentGuildProfileExistsForCache,
+        multiGuildSlots: normalizeMultiGuildSlots(multiGuildSlots),
+        ...extra
+      });
     }
 
     function normalizeMultiGuildSlots(list) {
@@ -430,7 +558,7 @@
     }
 
     function setGoalsReadonly(isReadonly) {
-      [goalGgInput, goalHonraInput].forEach((el) => {
+      [...Object.values(ggGoalInputs), goalHonraInput].forEach((el) => {
         if (!el) return;
         el.disabled = isReadonly;
         if (isReadonly) el.classList.add('bg-gray-50');
@@ -606,8 +734,13 @@
       try {
         btn.disabled = true;
         btn.classList.add('opacity-50', 'cursor-not-allowed');
+        if (!freshSettingsLoaded) {
+          showToast('info', 'Aguarde os dados atualizados carregarem antes de salvar.');
+          return;
+        }
         await setGuildSlotConfig(slot, { name: nameValue, tag: tagValue });
         upsertMultiGuildSlot(slot, { name: nameValue, tag: tagValue });
+        writeCurrentSettingsCache({ multiGuildSlots });
         renderExtraGuildSlots();
         setAddGuildSlotState();
         showToast('success', `Guilda ${slot} salva com sucesso!`);
@@ -626,8 +759,13 @@
       try {
         btnAddGuildSlot.disabled = true;
         btnAddGuildSlot.classList.add('opacity-50', 'cursor-not-allowed');
+        if (!freshSettingsLoaded) {
+          showToast('info', 'Aguarde os dados atualizados carregarem antes de criar outra guilda.');
+          return;
+        }
         const created = await addGuildSlotConfig(4);
         upsertMultiGuildSlot(created.slot, created);
+        writeCurrentSettingsCache({ multiGuildSlots });
         renderExtraGuildSlots();
         setAddGuildSlotState();
         showToast('success', `Guilda ${created.slot} criada com sucesso!`);
@@ -651,14 +789,15 @@
       const ctx = getGuildContext();
       currentCtx = ctx || null;
       if (ctx) {
-        const isLeader = ctx.role === 'Líder';
+        const isLeader = false;
         const isAdmin = ctx.role === 'Admin';
-        currentIsLeader = isLeader;
+        // Cache só pré-carrega visualmente. A escrita fica travada até a leitura atual do Firebase terminar.
+        currentIsLeader = false;
         currentIsAdmin = isAdmin;
-        currentCanAddGuildSlot = isLeader && ['pro', 'business', 'vitalicio'].includes(normalizeVipTierClient(ctx?.vipTier || getVipTier()));
-        setReadonly(!isLeader, isAdmin);
-        setGoalsReadonly(!isLeader);
-        setGuildNameReadonly(!isLeader);
+        currentCanAddGuildSlot = false;
+        setReadonly(true, isAdmin);
+        setGoalsReadonly(true);
+        setGuildNameReadonly(true);
         setAddGuildSlotState();
 
         if (guildUidEl) guildUidEl.textContent = ctx.guildId || '';
@@ -674,11 +813,11 @@
         } catch (_) {}
 
         try {
-          const rawGoals = localStorage.getItem(`guildGoals_${ctx.guildId}`);
-          if (rawGoals) {
-            const cachedGoals = JSON.parse(rawGoals) || {};
-            if (goalGgInput) goalGgInput.value = cachedGoals?.metaGG != null ? String(cachedGoals.metaGG) : '';
-            if (goalHonraInput) goalHonraInput.value = cachedGoals?.metaHonra != null ? String(cachedGoals.metaHonra) : '';
+          const pageCache = readSettingsCache(ctx.guildId);
+          if (pageCache?.goals) applyGoalsToInputs(pageCache.goals);
+          else {
+            const rawGoals = localStorage.getItem(`guildGoals_${ctx.guildId}`);
+            if (rawGoals) applyGoalsToInputs(JSON.parse(rawGoals) || {});
           }
         } catch (_) {}
 
@@ -748,6 +887,7 @@
       currentIsLeader = !!isLeader;
       currentIsAdmin = !!isAdmin;
       currentCanAddGuildSlot = !!isLeader && ['pro', 'business', 'vitalicio'].includes(normalizeVipTierClient(ctx?.vipTier || getVipTier()));
+      freshSettingsLoaded = false;
       setReadonly(!isLeader, isAdmin);
       setGoalsReadonly(!isLeader);
       setGuildNameReadonly(!isLeader);
@@ -763,11 +903,8 @@
 
       try {
         const goals = await getGuildGoalsConfig();
-        if (goalGgInput) goalGgInput.value = goals?.metaGG != null ? String(goals.metaGG) : '';
-        if (goalHonraInput) goalHonraInput.value = goals?.metaHonra != null ? String(goals.metaHonra) : '';
-        goalsHint.textContent = (goals?.metaGG != null || goals?.metaHonra != null)
-          ? `Metas atuais: GG ${goals?.metaGG ?? 0} • Honra ${goals?.metaHonra ?? 0}`
-          : 'Nenhuma meta configurada ainda.';
+        applyGoalsToInputs(goals || {});
+        goalsHint.textContent = getGoalsHintText(goals || {});
       } catch (_) {
         goalsHint.textContent = 'Nenhuma meta configurada ainda.';
       }
@@ -816,8 +953,16 @@
         }
       }
 
+      currentGuildKeyForCache = currentGuildKey || '';
+      currentGuildProfileExistsForCache = guildProfileExists;
       applyGuildKeyVisibility(currentGuildKey || '', isAdmin);
       syncGuildKeyButtons(currentGuildKey || '', isLeader, isAdmin, guildProfileExists);
+      freshSettingsLoaded = true;
+      writeCurrentSettingsCache({
+        guildAccessKey: currentGuildKeyForCache,
+        guildProfileExists: currentGuildProfileExistsForCache,
+        multiGuildSlots
+      });
 
       btnCopyGuildKey?.addEventListener('click', async () => {
         const realValue = (currentGuildKey || '').trim();
@@ -837,6 +982,9 @@
           btnGenerateGuildKey.classList.add('opacity-50', 'cursor-not-allowed');
           currentGuildKey = await generateGuildAccessKey();
           guildProfileExists = false;
+          currentGuildKeyForCache = currentGuildKey || '';
+          currentGuildProfileExistsForCache = guildProfileExists;
+          writeCurrentSettingsCache({ guildAccessKey: currentGuildKeyForCache, guildProfileExists });
           applyGuildKeyVisibility(currentGuildKey, false);
           syncGuildKeyButtons(currentGuildKey, true, false, guildProfileExists);
           showToast('success', 'Chave gerada com sucesso!');
@@ -856,6 +1004,8 @@
           btnCreateGuildProfile.classList.add('opacity-50', 'cursor-not-allowed');
           const result = await createGuildProfile();
           guildProfileExists = true;
+          currentGuildProfileExistsForCache = guildProfileExists;
+          writeCurrentSettingsCache({ guildProfileExists });
           syncGuildKeyButtons(currentGuildKey || '', true, false, guildProfileExists);
           showToast('success', result?.alreadyExists ? 'Perfil da guilda já existia.' : 'Perfil da guilda criado com sucesso!');
         } catch (e) {
@@ -869,6 +1019,10 @@
 
       btnSave.addEventListener('click', async () => {
         if (!isLeader) return;
+        if (!freshSettingsLoaded) {
+          showToast('info', 'Aguarde os dados atualizados carregarem antes de salvar.');
+          return;
+        }
         const value = (tagInput.value || '').trim();
         if (!value) {
           showToast('error', 'Digite uma tag antes de salvar.');
@@ -878,6 +1032,7 @@
         try {
           await setMemberTagConfig(value);
           upsertMultiGuildSlot(1, { tag: value });
+          writeCurrentSettingsCache({ tag: value, multiGuildSlots });
           showToast('success', 'Tag salva com sucesso!');
           hint.textContent = `Tag configurada: "${value}"`;
         } catch (e) {
@@ -888,12 +1043,17 @@
 
       btnSaveGoals?.addEventListener('click', async () => {
         if (!isLeader) return;
-        const metaGG = toNumberOrNull(goalGgInput?.value);
-        const metaHonra = toNumberOrNull(goalHonraInput?.value);
+        if (!freshSettingsLoaded) {
+          showToast('info', 'Aguarde os dados atualizados carregarem antes de salvar.');
+          return;
+        }
+        const goals = readGoalsFromInputs();
 
         try {
-          await setGuildGoalsConfig({ metaGG, metaHonra });
-          goalsHint.textContent = `Metas atuais: GG ${metaGG ?? 0} • Honra ${metaHonra ?? 0}`;
+          await setGuildGoalsConfig(goals);
+          applyGoalsToInputs(goals);
+          goalsHint.textContent = getGoalsHintText(goals);
+          writeCurrentSettingsCache({ goals });
           showToast('success', 'Metas salvas com sucesso!');
         } catch (e) {
           console.error(e);
@@ -903,6 +1063,10 @@
 
       btnSaveGuildName?.addEventListener('click', async () => {
         if (!isLeader) return;
+        if (!freshSettingsLoaded) {
+          showToast('info', 'Aguarde os dados atualizados carregarem antes de salvar.');
+          return;
+        }
         const value = (guildNameInput?.value || '').trim();
         if (!value) {
           showToast('error', 'Digite o nome da guilda antes de salvar.');
@@ -912,6 +1076,7 @@
         try {
           await setGuildNameConfig(value);
           upsertMultiGuildSlot(1, { name: value });
+          writeCurrentSettingsCache({ guildName: value, multiGuildSlots });
           guildNameHint.textContent = `Nome atual: ${value}`;
           showToast('success', 'Nome da guilda salvo com sucesso!');
         } catch (e) {
