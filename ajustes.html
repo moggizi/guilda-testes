@@ -93,9 +93,15 @@
 <!-- Conteúdo -->
 <main class="flex-1 min-w-0 lg:ml-72">
       <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
-        <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
-          <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500"><i data-lucide="menu" class="w-5 h-5"></i></button>
-          <h1 class="text-lg font-semibold text-gray-900">Ajustes</h1>
+        <div class="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div class="flex items-center gap-3">
+            <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500"><i data-lucide="menu" class="w-5 h-5"></i></button>
+            <h1 class="text-lg font-semibold text-gray-900">Ajustes</h1>
+          </div>
+          <button id="btn-refresh-settings" type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 shadow-sm hover:bg-gray-50 active:scale-95 transition">
+            <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+            <span class="hidden sm:inline">Recarregar</span>
+          </button>
         </div>
       </header>
 
@@ -333,6 +339,7 @@
     const btnCopyGuildKey = document.getElementById('btn-copy-guild-key');
     const btnCreateGuildProfile = document.getElementById('btn-create-guild-profile');
     const btnAddGuildSlot = document.getElementById('btn-add-guild-slot');
+    const btnRefreshSettings = document.getElementById('btn-refresh-settings');
     const multiGuildHint = document.getElementById('multi-guild-hint');
     const extraGuildsList = document.getElementById('extra-guilds-list');
 
@@ -340,6 +347,8 @@
     let currentIsLeader = false;
     let currentIsAdmin = false;
     let currentCanAddGuildSlot = false;
+    let currentGuildKey = '';
+    let guildProfileExists = null;
     let currentGuildKeyForCache = '';
     let currentGuildProfileExistsForCache = null;
     let freshSettingsLoaded = false;
@@ -735,7 +744,7 @@
         btn.disabled = true;
         btn.classList.add('opacity-50', 'cursor-not-allowed');
         if (!freshSettingsLoaded) {
-          showToast('info', 'Aguarde os dados atualizados carregarem antes de salvar.');
+          showToast('info', 'Aguarde o carregamento terminar antes de salvar.');
           return;
         }
         await setGuildSlotConfig(slot, { name: nameValue, tag: tagValue });
@@ -760,7 +769,7 @@
         btnAddGuildSlot.disabled = true;
         btnAddGuildSlot.classList.add('opacity-50', 'cursor-not-allowed');
         if (!freshSettingsLoaded) {
-          showToast('info', 'Aguarde os dados atualizados carregarem antes de criar outra guilda.');
+          showToast('info', 'Aguarde o carregamento terminar antes de criar outra guilda.');
           return;
         }
         const created = await addGuildSlotConfig(4);
@@ -876,6 +885,101 @@
       renderExtraGuildSlots();
     }
 
+    async function loadSettingsData({ forceRefresh = false, feedback = false } = {}) {
+      const ctx = currentCtx || getGuildContext();
+      if (!ctx?.guildId) return;
+
+      const options = { forceRefresh };
+      freshSettingsLoaded = false;
+      if (btnRefreshSettings) {
+        btnRefreshSettings.disabled = true;
+        btnRefreshSettings.classList.add('opacity-50', 'cursor-not-allowed');
+      }
+
+      try {
+        try {
+          const current = await getMemberTagConfig(options);
+          tagInput.value = current || '';
+          hint.textContent = current ? `Tag configurada: "${current}"` : 'Nenhuma tag configurada ainda.';
+        } catch (_) {
+          hint.textContent = 'Nenhuma tag configurada ainda.';
+        }
+
+        try {
+          const goals = await getGuildGoalsConfig(options);
+          applyGoalsToInputs(goals || {});
+          goalsHint.textContent = getGoalsHintText(goals || {});
+        } catch (_) {
+          goalsHint.textContent = 'Nenhuma meta configurada ainda.';
+        }
+
+        try {
+          const info = await getGuildInfoCached(ctx.guildId, options);
+          if (guildUidEl && info?.guildId) guildUidEl.textContent = info.guildId;
+          if (guildNameInput) guildNameInput.value = info?.name || (ctx?.guildName || '');
+          if (guildNameHint) guildNameHint.textContent = info?.name ? `Nome atual: ${info.name}` : ((ctx?.guildName) ? `Nome atual: ${ctx.guildName}` : 'Nenhum nome encontrado.');
+          if (guildCreatedEl) guildCreatedEl.textContent = fmtDate(info?.createdAtMs);
+        } catch (_) {
+          if (guildUidEl) guildUidEl.textContent = ctx?.guildId || '-';
+          if (guildNameInput) guildNameInput.value = ctx?.guildName || '';
+          if (guildNameHint) guildNameHint.textContent = ctx?.guildName ? `Nome atual: ${ctx.guildName}` : 'Nenhum nome encontrado.';
+        }
+
+        try {
+          multiGuildSlots = normalizeMultiGuildSlots(await getGuildMultiConfig(4, options));
+          const primarySlot = multiGuildSlots.find((slot) => Number(slot?.slot) === 1);
+          if (primarySlot?.name && guildNameInput) guildNameInput.value = primarySlot.name;
+          if (primarySlot?.name && guildNameHint) guildNameHint.textContent = `Nome atual: ${primarySlot.name}`;
+          if (primarySlot && typeof primarySlot.tag === 'string') {
+            tagInput.value = primarySlot.tag || '';
+            hint.textContent = primarySlot.tag ? `Tag configurada: "${primarySlot.tag}"` : 'Nenhuma tag configurada ainda.';
+          }
+        } catch (_) {
+          multiGuildSlots = [];
+        }
+        renderExtraGuildSlots();
+        setAddGuildSlotState();
+
+        try {
+          currentGuildKey = await getGuildAccessKeyConfig(options);
+        } catch (_) {
+          currentGuildKey = '';
+        }
+
+        if (currentGuildKey) {
+          try {
+            guildProfileExists = await getGuildProfileExists(options);
+          } catch (_) {
+            guildProfileExists = getCachedGuildProfileState(ctx?.guildId);
+          }
+        } else {
+          guildProfileExists = null;
+        }
+
+        currentGuildKeyForCache = currentGuildKey || '';
+        currentGuildProfileExistsForCache = guildProfileExists;
+        applyGuildKeyVisibility(currentGuildKey || '', currentIsAdmin);
+        syncGuildKeyButtons(currentGuildKey || '', currentIsLeader, currentIsAdmin, guildProfileExists);
+
+        writeCurrentSettingsCache({
+          guildAccessKey: currentGuildKeyForCache,
+          guildProfileExists: currentGuildProfileExistsForCache,
+          multiGuildSlots
+        });
+
+        if (feedback) showToast('success', 'Dados recarregados do Firebase.');
+      } catch (e) {
+        console.error(e);
+        if (feedback) showToast('error', 'Não foi possível recarregar os dados agora.');
+      } finally {
+        freshSettingsLoaded = true;
+        if (btnRefreshSettings) {
+          btnRefreshSettings.disabled = false;
+          btnRefreshSettings.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      }
+    }
+
     checkAuth().then(async (user) => {
       if (!user) return;
       document.getElementById('btn-logout').onclick = logout;
@@ -893,75 +997,10 @@
       setGuildNameReadonly(!isLeader);
       setAddGuildSlotState();
 
-      try {
-        const current = await getMemberTagConfig();
-        tagInput.value = current || '';
-        hint.textContent = current ? `Tag configurada: "${current}"` : 'Nenhuma tag configurada ainda.';
-      } catch (_) {
-        hint.textContent = 'Nenhuma tag configurada ainda.';
-      }
+      await loadSettingsData({ forceRefresh: false });
 
-      try {
-        const goals = await getGuildGoalsConfig();
-        applyGoalsToInputs(goals || {});
-        goalsHint.textContent = getGoalsHintText(goals || {});
-      } catch (_) {
-        goalsHint.textContent = 'Nenhuma meta configurada ainda.';
-      }
-
-      let currentGuildKey = '';
-      let guildProfileExists = null;
-
-      try {
-        const info = await getGuildInfoCached(ctx?.guildId);
-        if (guildUidEl && info?.guildId) guildUidEl.textContent = info.guildId;
-        if (guildNameInput) guildNameInput.value = info?.name || (ctx?.guildName || '');
-        if (guildNameHint) guildNameHint.textContent = info?.name ? `Nome atual: ${info.name}` : ((ctx?.guildName) ? `Nome atual: ${ctx.guildName}` : 'Nenhum nome encontrado.');
-        if (guildCreatedEl) guildCreatedEl.textContent = fmtDate(info?.createdAtMs);
-      } catch (_) {
-        if (guildUidEl) guildUidEl.textContent = ctx?.guildId || '-';
-        if (guildNameInput) guildNameInput.value = ctx?.guildName || '';
-        if (guildNameHint) guildNameHint.textContent = ctx?.guildName ? `Nome atual: ${ctx.guildName}` : 'Nenhum nome encontrado.';
-      }
-
-      try {
-        multiGuildSlots = normalizeMultiGuildSlots(await getGuildMultiConfig(4));
-        const primarySlot = multiGuildSlots.find((slot) => Number(slot?.slot) === 1);
-        if (primarySlot?.name && guildNameInput) guildNameInput.value = primarySlot.name;
-        if (primarySlot?.name && guildNameHint) guildNameHint.textContent = `Nome atual: ${primarySlot.name}`;
-        if (primarySlot && typeof primarySlot.tag === 'string') {
-          tagInput.value = primarySlot.tag || '';
-          hint.textContent = primarySlot.tag ? `Tag configurada: "${primarySlot.tag}"` : 'Nenhuma tag configurada ainda.';
-        }
-      } catch (_) {
-        multiGuildSlots = [];
-      }
-      renderExtraGuildSlots();
-      setAddGuildSlotState();
-
-      try {
-        currentGuildKey = await getGuildAccessKeyConfig();
-      } catch (_) {
-        currentGuildKey = '';
-      }
-
-      if (currentGuildKey) {
-        try {
-          guildProfileExists = await getGuildProfileExists();
-        } catch (_) {
-          guildProfileExists = getCachedGuildProfileState(ctx?.guildId);
-        }
-      }
-
-      currentGuildKeyForCache = currentGuildKey || '';
-      currentGuildProfileExistsForCache = guildProfileExists;
-      applyGuildKeyVisibility(currentGuildKey || '', isAdmin);
-      syncGuildKeyButtons(currentGuildKey || '', isLeader, isAdmin, guildProfileExists);
-      freshSettingsLoaded = true;
-      writeCurrentSettingsCache({
-        guildAccessKey: currentGuildKeyForCache,
-        guildProfileExists: currentGuildProfileExistsForCache,
-        multiGuildSlots
+      btnRefreshSettings?.addEventListener('click', async () => {
+        await loadSettingsData({ forceRefresh: true, feedback: true });
       });
 
       btnCopyGuildKey?.addEventListener('click', async () => {
@@ -1020,7 +1059,7 @@
       btnSave.addEventListener('click', async () => {
         if (!isLeader) return;
         if (!freshSettingsLoaded) {
-          showToast('info', 'Aguarde os dados atualizados carregarem antes de salvar.');
+          showToast('info', 'Aguarde o carregamento terminar antes de salvar.');
           return;
         }
         const value = (tagInput.value || '').trim();
@@ -1044,7 +1083,7 @@
       btnSaveGoals?.addEventListener('click', async () => {
         if (!isLeader) return;
         if (!freshSettingsLoaded) {
-          showToast('info', 'Aguarde os dados atualizados carregarem antes de salvar.');
+          showToast('info', 'Aguarde o carregamento terminar antes de salvar.');
           return;
         }
         const goals = readGoalsFromInputs();
@@ -1064,7 +1103,7 @@
       btnSaveGuildName?.addEventListener('click', async () => {
         if (!isLeader) return;
         if (!freshSettingsLoaded) {
-          showToast('info', 'Aguarde os dados atualizados carregarem antes de salvar.');
+          showToast('info', 'Aguarde o carregamento terminar antes de salvar.');
           return;
         }
         const value = (guildNameInput?.value || '').trim();

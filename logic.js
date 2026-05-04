@@ -89,18 +89,63 @@ export function getVipExpiresAtMs() {
   return (__guildCtx && __guildCtx.vipExpiresAtMs != null) ? Number(__guildCtx.vipExpiresAtMs) : null;
 }
 
+// Cache padrão das configurações: 1 hora.
+// Leituras usam cache primeiro; Firebase só entra quando expira ou quando forceRefresh=true.
+const __SETTINGS_CACHE_TTL_MS = 60 * 60 * 1000;
+
+function __cacheIsFresh(cached, ttlMs = __SETTINGS_CACHE_TTL_MS) {
+  try {
+    if (!cached) return false;
+    const ts = Number(cached.ts || 0);
+    if (!Number.isFinite(ts) || ts <= 0) return false;
+    const ttl = Number(ttlMs);
+    if (!Number.isFinite(ttl) || ttl <= 0) return false;
+    return (Date.now() - ts) < ttl;
+  } catch (_) {
+    return false;
+  }
+}
+
+function __shouldUseCache(cached, options = {}) {
+  return options?.forceRefresh !== true && __cacheIsFresh(cached, options?.ttlMs ?? __SETTINGS_CACHE_TTL_MS);
+}
+
+function __readJsonCache(key) {
+  try {
+    if (!key) return null;
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) || null) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function __writeJsonCache(key, value = {}) {
+  try {
+    if (!key) return;
+    localStorage.setItem(key, JSON.stringify({ ...(value || {}), ts: Date.now() }));
+  } catch (_) {}
+}
+
 
 
 // --- Guilda: info básica com cache (1 leitura no máximo) --------------------
 // Cache em localStorage: guildInfo_<guildId>
 // Retorna: { guildId, name, createdAtMs }
-export async function getGuildInfoCached(guildId) {
+export async function getGuildInfoCached(guildId, options = {}) {
   const gid = (guildId || getGuildContext()?.guildId || "").toString().trim();
   if (!gid) return { guildId: null, name: null, createdAtMs: null };
 
   const key = `guildInfo_${gid}`;
+  const cached = __readJsonCache(key);
+  if (__shouldUseCache(cached, options) && cached?.guildId === gid) {
+    return {
+      guildId: gid,
+      name: cached.name || null,
+      createdAtMs: (cached.createdAtMs != null ? Number(cached.createdAtMs) : null)
+    };
+  }
 
-  // Firebase é a fonte principal. O cache só entra como fallback se a leitura falhar.
   try {
     const snap = await getDoc(doc(db, "guildas", gid));
     const data = snap.exists() ? (snap.data() || {}) : {};
@@ -115,25 +160,16 @@ export async function getGuildInfoCached(guildId) {
       createdAtMs = isFinite(t) ? t : null;
     }
 
-    try {
-      localStorage.setItem(key, JSON.stringify({ guildId: gid, name, createdAtMs, ts: Date.now() }));
-    } catch (_) {}
-
+    __writeJsonCache(key, { guildId: gid, name, createdAtMs });
     return { guildId: gid, name, createdAtMs };
   } catch (_) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const cached = JSON.parse(raw);
-        if (cached && cached.guildId === gid) {
-          return {
-            guildId: gid,
-            name: cached?.name || null,
-            createdAtMs: (cached?.createdAtMs != null ? Number(cached.createdAtMs) : null)
-          };
-        }
-      }
-    } catch (_) {}
+    if (cached && cached.guildId === gid) {
+      return {
+        guildId: gid,
+        name: cached?.name || null,
+        createdAtMs: (cached?.createdAtMs != null ? Number(cached.createdAtMs) : null)
+      };
+    }
     return { guildId: gid, name: null, createdAtMs: null };
   }
 }
@@ -601,7 +637,7 @@ export async function finalizeSignup(user, username) {
   };
 }
 
-export async function getMemberTagConfig() {
+export async function getMemberTagConfig(options = {}) {
   let guildId = null;
   try {
     guildId = requireGuildId();
@@ -609,28 +645,27 @@ export async function getMemberTagConfig() {
     return null;
   }
 
-  // Firebase é a fonte principal. O cache só é fallback quando a leitura falha.
+  const cacheKey = `tagMembros_${guildId}`;
+  const cached = __readJsonCache(cacheKey);
+  if (__shouldUseCache(cached, options) && cached?.value) {
+    return String(cached.value);
+  }
+
   try {
     const snap = await getDoc(doc(db, "configGuilda", guildId));
     if (!snap.exists()) {
-      try { localStorage.removeItem(`tagMembros_${guildId}`); } catch (_) {}
+      try { localStorage.removeItem(cacheKey); } catch (_) {}
       return null;
     }
     const data = snap.data() || {};
     const tag = (data.tagMembros || "").toString().trim();
     try {
-      if (tag) localStorage.setItem(`tagMembros_${guildId}`, JSON.stringify({ value: tag, ts: Date.now() }));
-      else localStorage.removeItem(`tagMembros_${guildId}`);
+      if (tag) __writeJsonCache(cacheKey, { value: tag });
+      else localStorage.removeItem(cacheKey);
     } catch (_) {}
     return tag || null;
   } catch (e) {
-    try {
-      const raw = localStorage.getItem(`tagMembros_${guildId}`);
-      if (raw) {
-        const cached = JSON.parse(raw);
-        if (cached?.value) return String(cached.value);
-      }
-    } catch (_) {}
+    if (cached?.value) return String(cached.value);
     return null;
   }
 }
@@ -684,7 +719,7 @@ function __normalizeGuildGoals(data = {}) {
   return out;
 }
 
-export async function getGuildGoalsConfig() {
+export async function getGuildGoalsConfig(options = {}) {
   let guildId = null;
   try {
     guildId = requireGuildId();
@@ -692,23 +727,25 @@ export async function getGuildGoalsConfig() {
     return __normalizeGuildGoals({});
   }
 
-  // Firebase é a fonte principal. O cache só entra como fallback se a leitura falhar.
+  const cacheKey = `guildGoals_${guildId}`;
+  const cached = __readJsonCache(cacheKey);
+  if (__shouldUseCache(cached, options)) {
+    return __normalizeGuildGoals(cached || {});
+  }
+
   try {
     const snap = await getDoc(doc(db, "configGuilda", guildId));
     if (!snap.exists()) {
       const empty = __normalizeGuildGoals({});
-      try { localStorage.setItem(`guildGoals_${guildId}`, JSON.stringify({ ...empty, ts: Date.now() })); } catch (_) {}
+      __writeJsonCache(cacheKey, empty);
       return empty;
     }
     const data = snap.data() || {};
     const goals = __normalizeGuildGoals(data);
-    try { localStorage.setItem(`guildGoals_${guildId}`, JSON.stringify({ ...goals, ts: Date.now() })); } catch (_) {}
+    __writeJsonCache(cacheKey, goals);
     return goals;
   } catch (_) {
-    try {
-      const raw = localStorage.getItem(`guildGoals_${guildId}`);
-      if (raw) return __normalizeGuildGoals(JSON.parse(raw) || {});
-    } catch (_) {}
+    if (cached) return __normalizeGuildGoals(cached || {});
     return __normalizeGuildGoals({});
   }
 }
@@ -844,38 +881,60 @@ function __readGuildMultiCache(guildId) {
   }
 }
 
+function __guildMultiCacheTsKey(guildId) {
+  const gid = (guildId || '').toString().trim();
+  return gid ? `${__guildMultiCacheKey(gid)}_ts` : '';
+}
+
+function __readGuildMultiCacheTs(guildId) {
+  try {
+    const key = __guildMultiCacheTsKey(guildId);
+    if (!key) return 0;
+    return Number(localStorage.getItem(key) || 0) || 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
 function __writeGuildMultiCache(guildId, slots) {
   try {
     const key = __guildMultiCacheKey(guildId);
     if (!key) return;
     localStorage.setItem(key, JSON.stringify(Array.isArray(slots) ? slots : []));
+    const tsKey = __guildMultiCacheTsKey(guildId);
+    if (tsKey) localStorage.setItem(tsKey, String(Date.now()));
   } catch (_) {}
 }
 
 
-export async function getGuildMultiConfig(maxSlots = 4) {
+export async function getGuildMultiConfig(maxSlots = 4, options = {}) {
+  if (typeof maxSlots === 'object' && maxSlots !== null) {
+    options = maxSlots;
+    maxSlots = 4;
+  }
+
   const guildId = requireGuildId();
   const safeMax = Math.max(1, Math.min(4, Math.floor(Number(maxSlots) || 4)));
+  const cachedSlots = __readGuildMultiCache(guildId);
+  const cachedTs = __readGuildMultiCacheTs(guildId);
+
+  if (options?.forceRefresh !== true && cachedSlots && cachedSlots.length && __cacheIsFresh({ ts: cachedTs }, options?.ttlMs ?? __SETTINGS_CACHE_TTL_MS)) {
+    return cachedSlots.filter(Boolean).slice(0, safeMax);
+  }
 
   let cfg = {};
-  let usedCacheFallback = false;
   try {
     const snap = await getDoc(doc(db, "configGuilda", guildId));
     cfg = snap.exists() ? (snap.data() || {}) : {};
   } catch (_) {
+    if (cachedSlots && cachedSlots.length) return cachedSlots.filter(Boolean).slice(0, safeMax);
     cfg = {};
-    usedCacheFallback = true;
-  }
-
-  if (usedCacheFallback) {
-    const cached = __readGuildMultiCache(guildId);
-    if (cached && cached.length) return cached.filter(Boolean).slice(0, safeMax);
   }
 
   let primaryName = (cfg.name || '').toString().trim();
   if (!primaryName) {
     try {
-      const info = await getGuildInfoCached(guildId);
+      const info = await getGuildInfoCached(guildId, options);
       primaryName = (info?.name || '').toString().trim();
     } catch (_) {
       primaryName = '';
@@ -1043,7 +1102,7 @@ function readGuildInfoFromLocalCache(guildId) {
   return { guildId: gid, name, createdAtMs, tag };
 }
 
-export async function getGuildAccessKeyConfig() {
+export async function getGuildAccessKeyConfig(options = {}) {
   let guildId = null;
   try {
     guildId = requireGuildId();
@@ -1052,8 +1111,11 @@ export async function getGuildAccessKeyConfig() {
   }
 
   const cacheKey = `${GUILD_ACCESS_KEY_PREFIX}${guildId}`;
+  const cached = __readJsonCache(cacheKey);
+  if (__shouldUseCache(cached, options) && cached?.value) {
+    return String(cached.value);
+  }
 
-  // Firebase é a fonte principal. O cache só entra como fallback se a leitura falhar.
   try {
     const snap = await getDoc(doc(db, 'configGuilda', guildId));
     if (!snap.exists()) {
@@ -1063,18 +1125,12 @@ export async function getGuildAccessKeyConfig() {
     const data = snap.data() || {};
     const value = (data.guildAccessKey || '').toString().trim();
     try {
-      if (value) localStorage.setItem(cacheKey, JSON.stringify({ value, ts: Date.now() }));
+      if (value) __writeJsonCache(cacheKey, { value });
       else localStorage.removeItem(cacheKey);
     } catch (_) {}
     return value || null;
   } catch (_) {
-    try {
-      const raw = localStorage.getItem(cacheKey);
-      if (raw) {
-        const cached = JSON.parse(raw);
-        if (cached?.value) return String(cached.value);
-      }
-    } catch (_) {}
+    if (cached?.value) return String(cached.value);
     return null;
   }
 }
@@ -1120,9 +1176,15 @@ function writeCachedGuildProfileState(guildId, exists) {
   } catch (_) {}
 }
 
-export async function getGuildProfileExists() {
+export async function getGuildProfileExists(options = {}) {
   const guildId = requireGuildId();
-  const accessKey = await getGuildAccessKeyConfig();
+  const profileCacheKey = getGuildProfileCacheKey(guildId);
+  const cachedProfile = __readJsonCache(profileCacheKey);
+  if (options?.forceRefresh !== true && cachedProfile?.exists != null && __cacheIsFresh(cachedProfile, options?.ttlMs ?? __SETTINGS_CACHE_TTL_MS)) {
+    return !!cachedProfile.exists;
+  }
+
+  const accessKey = await getGuildAccessKeyConfig(options);
   if (!accessKey) {
     writeCachedGuildProfileState(guildId, false);
     return false;
