@@ -271,6 +271,28 @@ const els = {
   viewRole: qs('view-role'),
   viewCreated: qs('view-created'),
   btnSave: qs('btn-save-profile'),
+
+  partnerEntryCard: qs('partner-entry-card'),
+  partnerPanelCard: qs('partner-panel-card'),
+  partnerPanelBody: qs('partner-panel-body'),
+  partnerTypeBadge: qs('partner-type-badge'),
+  partnerTypeDescription: qs('partner-type-description'),
+  btnOpenPartnerModal: qs('btn-open-partner-modal'),
+  modalPartner: qs('modal-partner-program'),
+  btnClosePartnerModal: qs('btn-close-partner-modal'),
+  btnAcceptPartner: qs('btn-accept-partner'),
+  btnDeclinePartner: qs('btn-decline-partner'),
+  btnTogglePartnerPanel: qs('btn-toggle-partner-panel'),
+  partnerCurrentBalance: qs('partner-current-balance'),
+  partnerWithdrawnBalance: qs('partner-withdrawn-balance'),
+  partnerInvitedCount: qs('partner-invited-count'),
+  partnerPaidCount: qs('partner-paid-count'),
+  partnerRefLink: qs('partner-ref-link'),
+  btnCopyPartnerLink: qs('btn-copy-partner-link'),
+  inputPartnerPix: qs('input-partner-pix'),
+  btnSavePartnerPix: qs('btn-save-partner-pix'),
+  btnRequestPartnerWithdraw: qs('btn-request-partner-withdraw'),
+  partnerWithdrawStatus: qs('partner-withdraw-status'),
   
   modalCreate: qs('modal-create-profile'),
   formCreate: qs('form-create-profile'),
@@ -283,6 +305,9 @@ const els = {
 
 let currentUserProfileId = null; 
 let currentBase64Photo = '';
+let currentProfileData = null;
+let currentMonetizeData = null;
+let isPartnerPanelCollapsed = false;
 
 // --- Helpers de Imagem (Compressão < 1MB) ---
 function dataUrlSizeBytes(dataUrl = '') {
@@ -461,8 +486,390 @@ function buildBridgePayload(gameProfileDoc, oldAuthDocData = {}) {
     guilda: gameProfileDoc.guilda || oldAuthDocData.guilda || '',
     role: gameProfileDoc.role || oldAuthDocData.role || 'Membro',
 
+    parceiro: gameProfileDoc.parceiro === true || oldAuthDocData.parceiro === true,
+    parceiroTipo: gameProfileDoc.parceiroTipo || oldAuthDocData.parceiroTipo || (gameProfileDoc.parceiroVerificado || oldAuthDocData.parceiroVerificado ? 'verificado' : 'normal'),
+    parceiroVerificado: gameProfileDoc.parceiroVerificado === true || oldAuthDocData.parceiroVerificado === true,
+    monetizeId: gameProfileDoc.monetizeId || oldAuthDocData.monetizeId || '',
+
     updatedAt: serverTimestamp()
   };
+}
+
+
+// --- Monetização / Parceiros ---
+function toMoneyNumber(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const clean = String(value ?? '')
+    .replace(/[^0-9,.-]/g, '')
+    .replace(/\.(?=\d{3}(\D|$))/g, '')
+    .replace(',', '.');
+  const parsed = Number(clean);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatCurrencyBR(value) {
+  return toMoneyNumber(value).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+}
+
+function setPartnerModalVisible(isVisible) {
+  els.modalPartner?.classList.toggle('hidden', !isVisible);
+  els.modalPartner?.classList.toggle('flex', isVisible);
+}
+
+function buildPartnerReferralLink() {
+  const ref = encodeURIComponent(String(currentUserProfileId || auth.currentUser?.uid || '').trim());
+  return `${window.location.origin}/?ref=${ref}`;
+}
+
+function isAcceptedPartner(profile = currentProfileData, monetize = currentMonetizeData) {
+  return profile?.parceiro === true || monetize?.parceiro === true;
+}
+
+function getPartnerType(profile = currentProfileData, monetize = currentMonetizeData) {
+  const rawType = String(
+    monetize?.tipoParceiro ||
+    monetize?.tipo ||
+    profile?.parceiroTipo ||
+    profile?.partnerType ||
+    ''
+  ).trim().toLowerCase();
+
+  if (rawType === 'verificado' || monetize?.verificado === true || profile?.parceiroVerificado === true) {
+    return 'verificado';
+  }
+
+  return 'normal';
+}
+
+function renderPartnerWithdrawStatus(monetize = currentMonetizeData) {
+  if (!els.partnerWithdrawStatus) return;
+
+  const saque = monetize?.saque || {};
+  const hasPendingWithdraw = saque?.status === 'pendente' || monetize?.saquePendente === true;
+
+  if (!hasPendingWithdraw) {
+    els.partnerWithdrawStatus.textContent = '';
+    els.partnerWithdrawStatus.classList.add('hidden');
+    return;
+  }
+
+  const amount = toMoneyNumber(saque?.valor || monetize?.valorSaqueSolicitado || monetize?.saldoAtual || 0);
+  els.partnerWithdrawStatus.textContent = `Saque pendente de análise: ${formatCurrencyBR(amount)}. O saldo só deve ser baixado pela equipe/admin após o pagamento.`;
+  els.partnerWithdrawStatus.classList.remove('hidden');
+}
+
+function renderPartnerState(profile = currentProfileData, monetize = currentMonetizeData) {
+  const accepted = isAcceptedPartner(profile, monetize);
+
+  els.partnerEntryCard?.classList.toggle('hidden', accepted);
+  els.partnerPanelCard?.classList.toggle('hidden', !accepted);
+
+  if (!accepted) return;
+
+  const type = getPartnerType(profile, monetize);
+  const isVerified = type === 'verificado';
+  const saldoAtual = toMoneyNumber(monetize?.saldoAtual ?? monetize?.saldoDisponivel ?? 0);
+  const saldoSacado = toMoneyNumber(monetize?.saldoSacado ?? monetize?.totalSacado ?? 0);
+  const convidados = Number(monetize?.totalConvidados ?? monetize?.convidados ?? 0) || 0;
+  const pagantes = Number(monetize?.totalPagantes ?? monetize?.pagantes ?? monetize?.convertidos ?? 0) || 0;
+  const hasPendingWithdraw = monetize?.saque?.status === 'pendente' || monetize?.saquePendente === true;
+
+  if (els.partnerTypeBadge) {
+    els.partnerTypeBadge.textContent = isVerified ? 'Parceiro verificado' : 'Parceiro normal';
+    els.partnerTypeBadge.className = isVerified
+      ? 'inline-flex items-center rounded-full bg-amber-300 text-amber-950 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider'
+      : 'inline-flex items-center rounded-full bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-300/20 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider';
+  }
+
+  if (els.partnerTypeDescription) {
+    els.partnerTypeDescription.textContent = isVerified
+      ? 'Você recebe comissão e mantém os recursos pagos liberados enquanto a plataforma considerar sua performance boa.'
+      : 'Você recebe comissão por usuários indicados que assinarem um plano pago.';
+  }
+
+  if (els.partnerCurrentBalance) els.partnerCurrentBalance.textContent = formatCurrencyBR(saldoAtual);
+  if (els.partnerWithdrawnBalance) els.partnerWithdrawnBalance.textContent = formatCurrencyBR(saldoSacado);
+  if (els.partnerInvitedCount) els.partnerInvitedCount.textContent = String(convidados);
+  if (els.partnerPaidCount) els.partnerPaidCount.textContent = String(pagantes);
+  if (els.partnerRefLink) els.partnerRefLink.value = monetize?.linkIndicacao || buildPartnerReferralLink();
+  if (els.inputPartnerPix) els.inputPartnerPix.value = monetize?.pix || '';
+
+  if (els.btnRequestPartnerWithdraw) {
+    els.btnRequestPartnerWithdraw.disabled = saldoAtual < 10 || hasPendingWithdraw;
+  }
+
+  renderPartnerWithdrawStatus(monetize);
+
+  els.partnerPanelBody?.classList.toggle('hidden', isPartnerPanelCollapsed);
+  if (els.btnTogglePartnerPanel) {
+    els.btnTogglePartnerPanel.innerHTML = isPartnerPanelCollapsed
+      ? '<i data-lucide="eye" class="w-4 h-4"></i> Mostrar painel'
+      : '<i data-lucide="eye-off" class="w-4 h-4"></i> Ocultar painel';
+  }
+
+  initIcons();
+}
+
+async function getMonetizeDocData() {
+  if (!currentUserProfileId) return null;
+  const snap = await getDoc(doc(db, 'monetize', currentUserProfileId));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+function buildPartnerDocPayload(profile = currentProfileData, existing = currentMonetizeData) {
+  const uid = auth.currentUser?.uid || '';
+  const email = auth.currentUser?.email || profile?.email || '';
+  const type = getPartnerType(profile, existing);
+  const isVerified = type === 'verificado';
+
+  return {
+    uid,
+    email,
+    userId: currentUserProfileId,
+    gameId: currentUserProfileId,
+    nick: String(els.inputNick?.value || profile?.nick || '').trim(),
+    parceiro: true,
+    tipoParceiro: type,
+    verificado: isVerified,
+    beneficiosLiberados: existing?.beneficiosLiberados === true || isVerified,
+
+    comissaoPercentual: 20,
+    comissaoVitalicio: 40,
+    saldoAtual: toMoneyNumber(existing?.saldoAtual ?? existing?.saldoDisponivel ?? 0),
+    saldoSacado: toMoneyNumber(existing?.saldoSacado ?? existing?.totalSacado ?? 0),
+    totalConvidados: Number(existing?.totalConvidados ?? existing?.convidados ?? 0) || 0,
+    totalPagantes: Number(existing?.totalPagantes ?? existing?.pagantes ?? existing?.convertidos ?? 0) || 0,
+    pix: existing?.pix || '',
+    linkIndicacao: existing?.linkIndicacao || buildPartnerReferralLink(),
+    createdAt: existing?.createdAt || serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+}
+
+async function loadPartnerData(profile = currentProfileData) {
+  if (!currentUserProfileId) return;
+
+  try {
+    currentMonetizeData = await getMonetizeDocData();
+
+    if (profile?.parceiro === true && !currentMonetizeData) {
+      const payload = buildPartnerDocPayload(profile, null);
+      await setDoc(doc(db, 'monetize', currentUserProfileId), payload, { merge: true });
+      currentMonetizeData = await getMonetizeDocData();
+    }
+  } catch (error) {
+    console.error('Erro ao carregar monetização:', error);
+    currentMonetizeData = null;
+  }
+
+  renderPartnerState(profile, currentMonetizeData);
+}
+
+async function handleAcceptPartner() {
+  if (!currentUserProfileId) {
+    showToast('error', 'Perfil não encontrado.');
+    return;
+  }
+
+  const originalHtml = els.btnAcceptPartner?.innerHTML || '';
+  if (els.btnAcceptPartner) {
+    els.btnAcceptPartner.disabled = true;
+    els.btnAcceptPartner.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Ativando...';
+    initIcons();
+  }
+
+  try {
+    const userPayload = {
+      parceiro: true,
+      parceiroTipo: getPartnerType(currentProfileData, currentMonetizeData),
+      parceiroVerificado: getPartnerType(currentProfileData, currentMonetizeData) === 'verificado',
+      monetizeId: currentUserProfileId,
+      updatedAt: serverTimestamp()
+    };
+
+    await setDoc(doc(db, 'users', currentUserProfileId), userPayload, { merge: true });
+    await setDoc(doc(db, 'users', auth.currentUser.uid), userPayload, { merge: true });
+
+    currentProfileData = {
+      ...(currentProfileData || {}),
+      ...userPayload,
+      id: currentUserProfileId
+    };
+
+    const partnerPayload = buildPartnerDocPayload(currentProfileData, currentMonetizeData);
+    await setDoc(doc(db, 'monetize', currentUserProfileId), partnerPayload, { merge: true });
+
+    currentMonetizeData = await getMonetizeDocData();
+    setPartnerModalVisible(false);
+    renderPartnerState(currentProfileData, currentMonetizeData);
+    showToast('success', 'Programa de parceiros ativado.');
+  } catch (error) {
+    console.error(error);
+    showToast('error', 'Não foi possível ativar o programa de parceiros.');
+  } finally {
+    if (els.btnAcceptPartner) {
+      els.btnAcceptPartner.disabled = false;
+      els.btnAcceptPartner.innerHTML = originalHtml || '<i data-lucide="check-circle" class="w-4 h-4"></i> Aceitar e ativar';
+      initIcons();
+    }
+  }
+}
+
+async function handleDeclinePartner() {
+  if (!currentUserProfileId) {
+    setPartnerModalVisible(false);
+    return;
+  }
+
+  try {
+    const payload = {
+      parceiro: false,
+      updatedAt: serverTimestamp()
+    };
+
+    await setDoc(doc(db, 'users', currentUserProfileId), payload, { merge: true });
+    await setDoc(doc(db, 'users', auth.currentUser.uid), payload, { merge: true });
+
+    currentProfileData = {
+      ...(currentProfileData || {}),
+      ...payload
+    };
+
+    setPartnerModalVisible(false);
+    renderPartnerState(currentProfileData, currentMonetizeData);
+    showToast('info', 'Sem problema. Você pode aceitar depois.');
+  } catch (error) {
+    console.error(error);
+    showToast('error', 'Não foi possível salvar sua escolha.');
+  }
+}
+
+async function handleSavePartnerPix() {
+  if (!isAcceptedPartner()) {
+    showToast('error', 'Ative o programa de parceiros primeiro.');
+    return;
+  }
+
+  const pix = String(els.inputPartnerPix?.value || '').trim();
+  if (pix.length < 4) {
+    showToast('error', 'Informe uma chave Pix válida.');
+    return;
+  }
+
+  const originalHtml = els.btnSavePartnerPix?.innerHTML || '';
+  if (els.btnSavePartnerPix) {
+    els.btnSavePartnerPix.disabled = true;
+    els.btnSavePartnerPix.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Salvando...';
+    initIcons();
+  }
+
+  try {
+    await setDoc(doc(db, 'monetize', currentUserProfileId), {
+      pix,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    currentMonetizeData = {
+      ...(currentMonetizeData || {}),
+      pix
+    };
+
+    showToast('success', 'Pix salvo com sucesso.');
+  } catch (error) {
+    console.error(error);
+    showToast('error', 'Não foi possível salvar o Pix.');
+  } finally {
+    if (els.btnSavePartnerPix) {
+      els.btnSavePartnerPix.disabled = false;
+      els.btnSavePartnerPix.innerHTML = originalHtml || '<i data-lucide="save" class="w-4 h-4"></i> Salvar Pix';
+      initIcons();
+    }
+  }
+}
+
+async function handleRequestPartnerWithdraw() {
+  if (!isAcceptedPartner()) {
+    showToast('error', 'Ative o programa de parceiros primeiro.');
+    return;
+  }
+
+  const saldoAtual = toMoneyNumber(currentMonetizeData?.saldoAtual ?? currentMonetizeData?.saldoDisponivel ?? 0);
+  const pix = String(els.inputPartnerPix?.value || currentMonetizeData?.pix || '').trim();
+  const hasPendingWithdraw = currentMonetizeData?.saque?.status === 'pendente' || currentMonetizeData?.saquePendente === true;
+
+  if (saldoAtual < 10) {
+    showToast('error', 'O saque mínimo é de R$ 10,00.');
+    return;
+  }
+
+  if (pix.length < 4) {
+    showToast('error', 'Informe uma chave Pix antes de solicitar o saque.');
+    return;
+  }
+
+  if (hasPendingWithdraw) {
+    showToast('info', 'Você já tem um saque pendente.');
+    return;
+  }
+
+  const originalHtml = els.btnRequestPartnerWithdraw?.innerHTML || '';
+  if (els.btnRequestPartnerWithdraw) {
+    els.btnRequestPartnerWithdraw.disabled = true;
+    els.btnRequestPartnerWithdraw.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Solicitando...';
+    initIcons();
+  }
+
+  try {
+    const saque = {
+      status: 'pendente',
+      valor: saldoAtual,
+      pix,
+      solicitadoEm: serverTimestamp()
+    };
+
+    await setDoc(doc(db, 'monetize', currentUserProfileId), {
+      pix,
+      saque,
+      saquePendente: true,
+      valorSaqueSolicitado: saldoAtual,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    currentMonetizeData = {
+      ...(currentMonetizeData || {}),
+      pix,
+      saque: { ...saque, solicitadoEm: new Date() },
+      saquePendente: true,
+      valorSaqueSolicitado: saldoAtual
+    };
+
+    renderPartnerState(currentProfileData, currentMonetizeData);
+    showToast('success', 'Saque solicitado. Aguarde a análise da equipe.');
+  } catch (error) {
+    console.error(error);
+    showToast('error', 'Não foi possível solicitar o saque.');
+  } finally {
+    if (els.btnRequestPartnerWithdraw) {
+      els.btnRequestPartnerWithdraw.innerHTML = originalHtml || '<i data-lucide="wallet" class="w-4 h-4"></i> Solicitar saque';
+      initIcons();
+    }
+  }
+}
+
+async function handleCopyPartnerLink() {
+  const link = els.partnerRefLink?.value || buildPartnerReferralLink();
+
+  try {
+    await navigator.clipboard.writeText(link);
+    showToast('success', 'Link copiado.');
+  } catch (_) {
+    els.partnerRefLink?.select();
+    document.execCommand('copy');
+    showToast('success', 'Link copiado.');
+  }
 }
 
 // --- Lógica Principal ---
@@ -506,6 +913,7 @@ async function loadProfile() {
       await setDoc(doc(db, 'users', uid), buildBridgePayload(gameProfileDoc, oldAuthDocData || {}), { merge: true });
 
       fillProfileForm(gameProfileDoc);
+      await loadPartnerData(gameProfileDoc);
 
       setLoadingVisible(false);
       setCreateModalVisible(false);
@@ -530,6 +938,7 @@ async function loadProfile() {
 }
 
 function fillProfileForm(data) {
+  currentProfileData = { ...(data || {}) };
   const ctx = getGuildContext() || {};
   
   const actualGuildName = ctx.guildName || data.guilda || 'Sem guilda';
@@ -630,6 +1039,8 @@ async function handleCreateProfile(e) {
     setMainFormVisible(true);
 
     fillProfileForm(payload);
+    currentMonetizeData = null;
+    renderPartnerState(payload, null);
     initIcons();
   } catch (error) {
     console.error(error);
@@ -673,6 +1084,23 @@ async function handleSaveProfile(e) {
     await setDoc(doc(db, 'users', currentUserProfileId), payload, { merge: true });
     await setDoc(doc(db, 'users', auth.currentUser.uid), payload, { merge: true });
 
+    currentProfileData = {
+      ...(currentProfileData || {}),
+      ...payload
+    };
+
+    if (isAcceptedPartner(currentProfileData, currentMonetizeData)) {
+      await setDoc(doc(db, 'monetize', currentUserProfileId), {
+        nick,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      currentMonetizeData = {
+        ...(currentMonetizeData || {}),
+        nick
+      };
+    }
+
     showToast('success', 'Perfil atualizado com sucesso!');
   } catch (error) {
     console.error(error);
@@ -711,6 +1139,27 @@ function bindEvents() {
       console.error(err);
       showToast('error', 'Não foi possível processar a foto.');
     }
+  });
+
+  els.btnOpenPartnerModal?.addEventListener('click', () => setPartnerModalVisible(true));
+  els.btnClosePartnerModal?.addEventListener('click', () => setPartnerModalVisible(false));
+  els.btnAcceptPartner?.addEventListener('click', handleAcceptPartner);
+  els.btnDeclinePartner?.addEventListener('click', handleDeclinePartner);
+  els.btnSavePartnerPix?.addEventListener('click', handleSavePartnerPix);
+  els.btnRequestPartnerWithdraw?.addEventListener('click', handleRequestPartnerWithdraw);
+  els.btnCopyPartnerLink?.addEventListener('click', handleCopyPartnerLink);
+
+  els.btnTogglePartnerPanel?.addEventListener('click', () => {
+    isPartnerPanelCollapsed = !isPartnerPanelCollapsed;
+    renderPartnerState(currentProfileData, currentMonetizeData);
+  });
+
+  els.inputPartnerPix?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') event.preventDefault();
+  });
+
+  els.modalPartner?.addEventListener('click', (event) => {
+    if (event.target === els.modalPartner) setPartnerModalVisible(false);
   });
 
   els.formCreate.addEventListener('submit', handleCreateProfile);

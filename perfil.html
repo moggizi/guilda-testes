@@ -179,6 +179,92 @@
             </div>
           </div>
 
+
+          <section id="partner-entry-card" class="bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 rounded-3xl border border-emerald-900/40 p-6 shadow-sm text-white overflow-hidden relative">
+            <div class="absolute -right-12 -top-12 w-36 h-36 rounded-full bg-emerald-400/10 blur-2xl"></div>
+            <div class="relative flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+              <div>
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-300/20 px-3 py-1 text-[11px] font-black uppercase tracking-wider mb-3">
+                  <i data-lucide="hand-coins" class="w-3.5 h-3.5"></i> Monetização
+                </span>
+                <h3 class="text-xl font-black leading-tight">Seja um parceiro da Guilda HUB</h3>
+                <p class="mt-2 text-sm text-slate-300 leading-relaxed max-w-2xl">
+                  Indique novos usuários para a plataforma e receba comissão quando eles assinarem um plano pago.
+                </p>
+              </div>
+              <button type="button" id="btn-open-partner-modal" class="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-400 text-slate-950 text-sm font-black hover:bg-emerald-300 transition-all shadow-lg shadow-emerald-500/20 active:scale-[0.98]">
+                <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i> Seja um parceiro
+              </button>
+            </div>
+          </section>
+
+          <section id="partner-panel-card" class="hidden bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="p-6 border-b border-gray-100 bg-slate-950 text-white">
+              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div>
+                  <div class="flex flex-wrap items-center gap-2 mb-2">
+                    <h3 class="text-lg font-black flex items-center gap-2">
+                      <i data-lucide="hand-coins" class="w-5 h-5 text-emerald-300"></i> Painel de Parceiro
+                    </h3>
+                    <span id="partner-type-badge" class="inline-flex items-center rounded-full bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-300/20 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider">Normal</span>
+                  </div>
+                  <p id="partner-type-description" class="text-sm text-slate-300 leading-relaxed">Você ganha comissão por usuários indicados que assinarem um plano pago.</p>
+                </div>
+                <button type="button" id="btn-toggle-partner-panel" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 text-white text-xs font-black hover:bg-white/15 transition-colors">
+                  <i data-lucide="eye-off" class="w-4 h-4"></i> Ocultar painel
+                </button>
+              </div>
+            </div>
+
+            <div id="partner-panel-body" class="p-6 space-y-5">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="rounded-2xl bg-emerald-50 border border-emerald-100 p-4">
+                  <p class="text-[11px] font-black text-emerald-700 uppercase tracking-wider">Saldo atual</p>
+                  <p id="partner-current-balance" class="mt-1 text-2xl font-black text-emerald-900">R$ 0,00</p>
+                  <p class="mt-1 text-[11px] font-semibold text-emerald-700/70">Mínimo para saque: R$ 10,00</p>
+                </div>
+                <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+                  <p class="text-[11px] font-black text-slate-500 uppercase tracking-wider">Saldo sacado</p>
+                  <p id="partner-withdrawn-balance" class="mt-1 text-2xl font-black text-slate-900">R$ 0,00</p>
+                  <p class="mt-1 text-[11px] font-semibold text-slate-400">Total já enviado para você</p>
+                </div>
+                <div class="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm">
+                  <p class="text-[11px] font-black text-slate-500 uppercase tracking-wider">Convidados</p>
+                  <p id="partner-invited-count" class="mt-1 text-2xl font-black text-slate-900">0</p>
+                  <p class="mt-1 text-[11px] font-semibold text-slate-400"><span id="partner-paid-count">0</span> pagantes</p>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
+                <label class="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Seu link de indicação</label>
+                <div class="flex flex-col sm:flex-row gap-2">
+                  <input type="text" id="partner-ref-link" readonly class="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-bold text-gray-700 outline-none">
+                  <button type="button" id="btn-copy-partner-link" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 text-white text-sm font-black hover:bg-slate-800 transition-colors">
+                    <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                  </button>
+                </div>
+                <p class="mt-2 text-xs font-semibold text-gray-400">Comissão: 20% nos planos Plus, Pro e Business • R$ 40,00 fixo no Vitalício.</p>
+              </div>
+
+              <div class="grid grid-cols-1 lg:grid-cols-[1fr,auto] gap-3 items-end">
+                <div>
+                  <label class="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Chave Pix para receber</label>
+                  <input type="text" id="input-partner-pix" maxlength="120" placeholder="CPF, e-mail, telefone ou chave aleatória" class="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 transition-all">
+                </div>
+                <div class="flex flex-col sm:flex-row gap-2">
+                  <button type="button" id="btn-save-partner-pix" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm font-black hover:bg-gray-50 transition-colors">
+                    <i data-lucide="save" class="w-4 h-4"></i> Salvar Pix
+                  </button>
+                  <button type="button" id="btn-request-partner-withdraw" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-500 text-white text-sm font-black hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    <i data-lucide="wallet" class="w-4 h-4"></i> Solicitar saque
+                  </button>
+                </div>
+              </div>
+
+              <p id="partner-withdraw-status" class="hidden rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-xs font-bold text-amber-700"></p>
+            </div>
+          </section>
+
           <div class="flex justify-end pt-2 pb-10">
             <button type="submit" id="btn-save-profile" class="flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-slate-900 text-white text-sm font-extrabold shadow-xl shadow-slate-900/10 hover:bg-slate-800 transition-all hover:-translate-y-0.5 active:translate-y-0">
               <i data-lucide="save" class="w-4 h-4"></i> Salvar Alterações
@@ -228,6 +314,65 @@
         </div>
       </footer>
     </main>
+  </div>
+
+
+  <div id="modal-partner-program" class="fixed inset-0 z-[70] hidden items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="relative z-10 w-full max-w-2xl rounded-3xl bg-white border border-gray-100 shadow-2xl overflow-hidden animate-in">
+      <div class="p-6 sm:p-7">
+        <div class="flex items-start justify-between gap-4 mb-5">
+          <div class="flex items-center gap-3">
+            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+              <i data-lucide="badge-dollar-sign" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h3 class="text-xl font-black text-gray-900">Programa de Parceiros</h3>
+              <p class="text-sm font-medium text-gray-500">Monetize indicando novos usuários para a Guilda HUB.</p>
+            </div>
+          </div>
+          <button type="button" id="btn-close-partner-modal" class="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+          <div class="rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
+            <span class="inline-flex items-center rounded-full bg-slate-900 text-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider mb-3">Parceiro normal</span>
+            <p class="text-sm text-gray-600 leading-relaxed">
+              Você recebe um link próprio. Cada novo usuário que entrar pelo seu link e pagar um plano gera comissão para você.
+            </p>
+          </div>
+          <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+            <span class="inline-flex items-center rounded-full bg-emerald-600 text-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider mb-3">Parceiro verificado</span>
+            <p class="text-sm text-emerald-900/80 leading-relaxed">
+              Além da comissão, fica com tudo liberado no site enquanto mantiver boa performance como parceiro.
+            </p>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-100 bg-white p-4 mb-5">
+          <h4 class="text-sm font-black text-gray-900 mb-3">Regras principais</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
+            <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> 20% de comissão nos planos Plus, Pro e Business.</p>
+            <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> R$ 40,00 fixo para venda do plano Vitalício.</p>
+            <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> Saque disponível a partir de R$ 10,00.</p>
+            <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> A plataforma decide quem sobe ou desce de categoria.</p>
+          </div>
+        </div>
+
+        <p class="text-xs text-gray-400 font-semibold leading-relaxed mb-6">
+          Ao aceitar, seu perfil será marcado como parceiro e um registro será criado na coleção <b>monetize</b> com seus saldos, link de indicação, Pix e estatísticas.
+        </p>
+
+        <div class="flex flex-col sm:flex-row justify-end gap-3">
+          <button type="button" id="btn-decline-partner" class="px-5 py-3 rounded-2xl bg-gray-100 text-gray-600 text-sm font-black hover:bg-gray-200 transition-colors">Agora não</button>
+          <button type="button" id="btn-accept-partner" class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-500 text-white text-sm font-black hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/20">
+            <i data-lucide="check-circle" class="w-4 h-4"></i> Aceitar e ativar
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="modal-create-profile" class="fixed inset-0 z-[60] hidden items-center justify-center p-4">
