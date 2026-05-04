@@ -941,7 +941,8 @@
       { key: 'full-gas', label: 'Full Gás' },
       { key: 'curandeiro', label: 'Curandeiro' },
       { key: 'fuzileiro', label: 'Fuzileiro' },
-      { key: 'suporte', label: 'Suporte' }
+      { key: 'suporte', label: 'Suporte' },
+      { key: 'coringa', label: 'Coringa 🃏' }
     ];
 
     const GOAL_MET_FILTER_OPTIONS = [
@@ -951,7 +952,8 @@
       { key: 'full-gas', label: 'Full Gás' },
       { key: 'curandeiro', label: 'Curandeiro' },
       { key: 'fuzileiro', label: 'Fuzileiro' },
-      { key: 'suporte', label: 'Suporte' }
+      { key: 'suporte', label: 'Suporte' },
+      { key: 'coringa', label: 'Coringa 🃏' }
     ];
 
     const GG_GOAL_FIELD_BY_MODE = {
@@ -959,7 +961,8 @@
       'full-gas': 'metaGGFullGas',
       'curandeiro': 'metaGGCurandeiro',
       'fuzileiro': 'metaGGFuzileiro',
-      'suporte': 'metaGGSuporte'
+      'suporte': 'metaGGSuporte',
+      'coringa': 'metaGGCoringa'
     };
 
     function normalizePlayModeValue(value) {
@@ -975,6 +978,7 @@
       if (raw === 'curandeiro') return 'curandeiro';
       if (raw === 'fuzileiro') return 'fuzileiro';
       if (raw === 'suporte') return 'suporte';
+      if (raw === 'coringa' || raw === 'coringa 🃏') return 'coringa';
       return raw.replace(/\s+/g, '-');
     }
 
@@ -986,6 +990,11 @@
         .filter(Boolean);
     }
 
+    function isCoringaMember(member) {
+      const modes = getMemberPlayModes(member).filter((mode) => mode !== 'coringa');
+      return new Set(modes).size >= 2 || getMemberPlayModes(member).includes('coringa');
+    }
+
     function getPlayModeLabel(value) {
       const normalized = normalizePlayModeValue(value);
       if (normalized === 'rush') return 'Rush';
@@ -993,6 +1002,7 @@
       if (normalized === 'curandeiro') return 'Curandeiro';
       if (normalized === 'fuzileiro') return 'Fuzileiro';
       if (normalized === 'suporte') return 'Suporte';
+      if (normalized === 'coringa') return 'Coringa 🃏';
       return '';
     }
 
@@ -1013,6 +1023,7 @@
         metaGGFullGas: toNullableGoal(data.metaGGFullGas ?? legacy),
         metaGGSuporte: toNullableGoal(data.metaGGSuporte ?? legacy),
         metaGGFuzileiro: toNullableGoal(data.metaGGFuzileiro ?? legacy),
+        metaGGCoringa: toNullableGoal(data.metaGGCoringa ?? legacy),
         metaHonra: toNullableGoal(data.metaHonra)
       };
       goals.metaGGByRole = {
@@ -1020,18 +1031,21 @@
         Curandeiro: goals.metaGGCurandeiro,
         'Full Gás': goals.metaGGFullGas,
         Suporte: goals.metaGGSuporte,
-        Fuzileiro: goals.metaGGFuzileiro
+        Fuzileiro: goals.metaGGFuzileiro,
+        Coringa: goals.metaGGCoringa,
+        'Coringa 🃏': goals.metaGGCoringa
       };
       return goals;
     }
 
     function renderMemberPlayModeLine(member) {
-      const labels = getMemberPlayModeLabels(member);
-      if (!labels.length) return '';
+      const labels = getMemberPlayModeLabels(member).filter((label) => label !== 'Coringa 🃏');
+      const coringaBadge = isCoringaMember(member) ? ' • 🃏 Coringa' : '';
+      if (!labels.length && !coringaBadge) return '';
 
       return `
         <div class="mt-2 flex justify-end">
-          <span class="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold text-emerald-700">${labels.join(' • ')}</span>
+          <span class="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold text-emerald-700">${labels.join(' • ')}${coringaBadge}</span>
         </div>
       `;
     }
@@ -1049,6 +1063,7 @@
 
     function matchesCurrentPlayModeFilter(member) {
       if (currentPlayModeFilter === 'all') return true;
+      if (currentPlayModeFilter === 'coringa') return isCoringaMember(member);
       return getMemberPlayModes(member).includes(currentPlayModeFilter);
     }
 
@@ -1093,7 +1108,9 @@
       dropdown.innerHTML = PLAY_MODE_FILTER_OPTIONS.map((option) => {
         const count = option.key === 'all'
           ? baseMembers.length
-          : baseMembers.filter(member => getMemberPlayModes(member).includes(option.key)).length;
+          : option.key === 'coringa'
+            ? baseMembers.filter(member => isCoringaMember(member)).length
+            : baseMembers.filter(member => getMemberPlayModes(member).includes(option.key)).length;
         const active = currentPlayModeFilter === option.key;
 
         return `
@@ -1704,6 +1721,12 @@
       const normalizedModes = (Array.isArray(modes) ? modes : [modes])
         .map(normalizePlayModeValue)
         .filter(Boolean);
+      const uniqueModes = [...new Set(normalizedModes.filter((mode) => mode !== 'coringa'))];
+
+      if (uniqueModes.length >= 2) {
+        const coringaGoal = getGoalThresholdForMode('coringa');
+        if (coringaGoal != null) return coringaGoal;
+      }
 
       const goals = normalizedModes
         .map(getGoalThresholdForMode)
@@ -1717,6 +1740,13 @@
       const normalizedMode = normalizePlayModeValue(modeKey);
       if (!normalizedMode || normalizedMode === 'all') return memberMetAnyGuildWarGoal(member);
 
+      if (normalizedMode === 'coringa') {
+        if (!isCoringaMember(member)) return false;
+        const goal = getGoalThresholdForMode('coringa');
+        if (goal == null) return !!member.guildWar;
+        return toSafeNumber(member.guildWarMeta) >= goal;
+      }
+
       const modes = getMemberPlayModes(member);
       if (!modes.includes(normalizedMode)) return false;
 
@@ -1727,6 +1757,10 @@
 
     function memberMetAnyGuildWarGoal(member) {
       const modes = getMemberPlayModes(member);
+      if (isCoringaMember(member)) {
+        const coringaGoal = getGoalThresholdForMode('coringa');
+        if (coringaGoal != null) return toSafeNumber(member.guildWarMeta) >= coringaGoal;
+      }
       if (modes.length) return modes.some((mode) => memberMetGuildWarGoalForMode(member, mode));
 
       const legacyGoal = getGoalThreshold('metaGG');
@@ -1866,23 +1900,33 @@
 
     function buildMemberCopyText(member) {
       const modeKeys = getMemberPlayModes(member);
-      const modes = getMemberPlayModeLabels(member);
+      const modes = getMemberPlayModeLabels(member).filter((label) => label !== 'Coringa 🃏');
+      const isCoringa = isCoringaMember(member);
+      const modesText = `${modes.length ? modes.join(' • ') : '-'}${isCoringa ? ' • 🃏 Coringa' : ''}`;
       const honraGoal = getGoalThreshold('metaHonra');
       const ggValue = toSafeNumber(member.guildWarMeta);
       const honraValue = toSafeNumber(member.weeklyMetaValue);
       const honraStatus = honraGoal == null ? (member.weeklyMeta ? 'Batida' : 'Pendente') : (honraValue >= honraGoal ? 'Batida' : 'Pendente');
-      const ggLines = modeKeys.length
-        ? modeKeys.map((mode) => {
+      const ggLines = (() => {
+        const lines = [];
+        if (isCoringa) {
+          const goal = getGoalThresholdForMode('coringa');
+          const status = goal == null ? (member.guildWar ? 'Batida' : 'Pendente') : (ggValue >= goal ? 'Batida' : 'Pendente');
+          lines.push(`• Coringa 🃏: ${ggValue}${goal != null ? ` / ${goal}` : ''} • ${status}`);
+        }
+        if (modeKeys.length) {
+          lines.push(...modeKeys.filter((mode) => mode !== 'coringa').map((mode) => {
             const label = getPlayModeLabel(mode) || mode;
             const goal = getGoalThresholdForMode(mode);
             const status = goal == null ? (member.guildWar ? 'Batida' : 'Pendente') : (ggValue >= goal ? 'Batida' : 'Pendente');
             return `• ${label}: ${ggValue}${goal != null ? ` / ${goal}` : ''} • ${status}`;
-          })
-        : (() => {
-            const goal = getGoalThreshold('metaGG');
-            const status = goal == null ? (member.guildWar ? 'Batida' : 'Pendente') : (ggValue >= goal ? 'Batida' : 'Pendente');
-            return [`• GG: ${ggValue}${goal != null ? ` / ${goal}` : ''} • ${status}`];
-          })();
+          }));
+          return lines;
+        }
+        const goal = getGoalThreshold('metaGG');
+        const status = goal == null ? (member.guildWar ? 'Batida' : 'Pendente') : (ggValue >= goal ? 'Batida' : 'Pendente');
+        return [`• GG: ${ggValue}${goal != null ? ` / ${goal}` : ''} • ${status}`];
+      })();
 
       return [
         `📋 Dados do membro`,
@@ -1890,7 +1934,7 @@
         `Nick: ${member.nick || '-'}`,
         `ID: ${member.visibleId || member.id || '-'}`,
         `Guilda: ${__currentGuildDisplayName()}`,
-        `Modo(s): ${modes.length ? modes.join(' • ') : '-'}`,
+        `Modo(s): ${modesText}`,
         `WhatsApp: ${member.whatsapp || '-'}`,
         `Tag: ${member.hasTag ? 'Sim' : 'Não'}`,
         ``,

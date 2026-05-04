@@ -689,7 +689,8 @@ const GG_GOAL_FIELDS = [
   ['metaGGCurandeiro', 'Curandeiro'],
   ['metaGGFullGas', 'Full Gás'],
   ['metaGGSuporte', 'Suporte'],
-  ['metaGGFuzileiro', 'Fuzileiro']
+  ['metaGGFuzileiro', 'Fuzileiro'],
+  ['metaGGCoringa', 'Coringa 🃏']
 ];
 
 function __numberOrNull(value) {
@@ -713,7 +714,9 @@ function __normalizeGuildGoals(data = {}) {
     Curandeiro: out.metaGGCurandeiro,
     'Full Gás': out.metaGGFullGas,
     Suporte: out.metaGGSuporte,
-    Fuzileiro: out.metaGGFuzileiro
+    Fuzileiro: out.metaGGFuzileiro,
+    Coringa: out.metaGGCoringa,
+    'Coringa 🃏': out.metaGGCoringa
   };
 
   return out;
@@ -757,7 +760,8 @@ export async function setGuildGoalsConfig({
   metaGGCurandeiro = null,
   metaGGFullGas = null,
   metaGGSuporte = null,
-  metaGGFuzileiro = null
+  metaGGFuzileiro = null,
+  metaGGCoringa = null
 } = {}) {
   const guildId = requireGuildId();
   const normalized = __normalizeGuildGoals({
@@ -767,7 +771,8 @@ export async function setGuildGoalsConfig({
     metaGGCurandeiro,
     metaGGFullGas,
     metaGGSuporte,
-    metaGGFuzileiro
+    metaGGFuzileiro,
+    metaGGCoringa
   });
 
   const payload = {
@@ -777,6 +782,7 @@ export async function setGuildGoalsConfig({
     metaGGFullGas: normalized.metaGGFullGas,
     metaGGSuporte: normalized.metaGGSuporte,
     metaGGFuzileiro: normalized.metaGGFuzileiro,
+    metaGGCoringa: normalized.metaGGCoringa,
     metaHonra: normalized.metaHonra,
     updatedAt: serverTimestamp()
   };
