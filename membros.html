@@ -38,6 +38,55 @@
     .counter-option-count{min-width:2.2rem;padding:.25rem .55rem;border-radius:999px;background:#f3f4f6;color:#6b7280;font-size:.75rem;font-weight:700;text-align:center}
     .counter-option.counter-active .counter-option-count{background:#10b981;color:#fff}
 
+    /* melhora toque dos botões de filtro no mobile */
+    #btn-guild-slot,
+    #btn-playmode-counter,
+    #btn-goal-met-filter,
+    #btn-filter{
+      min-height:48px;
+      touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;
+      position:relative;
+      z-index:1;
+    }
+    #btn-guild-slot *,
+    #btn-playmode-counter *,
+    #btn-goal-met-filter *,
+    #btn-filter *{
+      pointer-events:none;
+    }
+    @media (max-width: 640px){
+      #btn-guild-slot,
+      #btn-playmode-counter,
+      #btn-goal-met-filter,
+      #btn-filter{
+        flex:1 1 calc(50% - .25rem);
+        justify-content:center;
+        padding-left:.75rem;
+        padding-right:.75rem;
+      }
+      #guild-slot-label,
+      #playmode-filter-label,
+      #goal-met-filter-label,
+      #filter-label{
+        display:none !important;
+      }
+    }
+
+    /* advertência do membro */
+    .member-warning-card{
+      border-color:#f59e0b !important;
+      background:linear-gradient(135deg,#fff7ed 0%,#ffffff 55%,#fef2f2 100%);
+      box-shadow:0 8px 24px rgba(245,158,11,.10);
+    }
+    .member-warning-avatar{
+      background:linear-gradient(135deg,#f59e0b,#ef4444) !important;
+    }
+    .warning-reason-box{
+      background:linear-gradient(135deg,#fffbeb 0%,#fff7ed 100%);
+      border:1px solid #fcd34d;
+    }
+
     /* Quick Edit specific fixes */
     .animate-in { animation: fadeIn 0.2s ease-out forwards; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -180,7 +229,7 @@
 
             <!-- Dropdown Filtro Avançado -->
             <div class="relative">
-              <button onclick="toggleFilterDropdown()" id="btn-filter" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+              <button id="btn-filter" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
                 <i data-lucide="filter" class="w-4 h-4"></i> <span class="hidden sm:inline" id="filter-label">Todos</span>
               </button>
               
@@ -478,6 +527,45 @@
     </div>
   </div>
 
+  <!-- MODAL DE ADVERTÊNCIA -->
+  <div id="warning-member-modal" class="fixed inset-0 z-[63] flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeWarningMemberModal()"></div>
+    <div class="relative bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 m-0 sm:m-4 zoom-in-95">
+      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 mb-4 mx-auto">
+        <i data-lucide="triangle-alert" class="w-7 h-7 text-amber-600"></i>
+      </div>
+      <h3 id="warning-member-title" class="text-xl font-bold text-center text-gray-900 mb-2">Advertir membro</h3>
+      <p id="warning-member-desc" class="text-sm text-center text-gray-500 mb-5 leading-relaxed">Escolha um motivo ou escreva manualmente.</p>
+
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-semibold text-gray-700 mb-1 block">Motivo rápido</label>
+          <select id="warning-preset" class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none text-sm">
+            <option value="">Selecionar motivo</option>
+            <option value="Acabou a luz (de novo)">Acabou a luz (de novo)</option>
+            <option value="O tataravô faleceu">O tataravô faleceu</option>
+            <option value="O peixe teve que ir ao hospital">O peixe teve que ir ao hospital</option>
+            <option value="A internet caiu bem na hora">A internet caiu bem na hora</option>
+            <option value="Foi comprar pão e desapareceu">Foi comprar pão e desapareceu</option>
+            <option value="Dormiu no lobby">Dormiu no lobby</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-sm font-semibold text-gray-700 mb-1 block">Motivo da advertência</label>
+          <textarea id="warning-reason" rows="4" maxlength="500" placeholder="Escreva o motivo..." class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none text-sm resize-none"></textarea>
+          <p class="mt-1 text-[11px] text-gray-400">Esse motivo fica salvo no próprio documento do membro.</p>
+        </div>
+      </div>
+
+      <div class="flex gap-3 mt-6">
+        <button type="button" onclick="closeWarningMemberModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
+        <button type="button" id="btn-remove-warning" onclick="removeMemberWarning()" class="hidden flex-1 py-3 rounded-xl border border-red-200 bg-red-50 text-red-600 font-bold text-sm hover:bg-red-100 transition-colors">Remover</button>
+        <button type="button" id="btn-save-warning" onclick="saveMemberWarning()" class="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-lg shadow-amber-200 transition-all active:scale-95">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildGoalsConfig, getGuildContext, getGuildMultiConfig, getVipTier } from './logic.js';
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -501,6 +589,7 @@
     let currentDeleteId = ''; 
     let currentMoveId = ''; 
     let currentMoveTargetSlot = null; 
+    let currentWarningId = '';
     let currentGuildSlot = 1;
     let currentGuildSlotsMeta = [];
     let canUseMultiGuildMembers = false;
@@ -640,6 +729,25 @@
       return 'free';
     }
 
+    function __readCachedGuildContextRaw() {
+      try {
+        const raw = localStorage.getItem('guildCtx_cache_v1');
+        return raw ? (JSON.parse(raw) || null) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function __getCachedVipTierFast() {
+      const ctx = getGuildContext?.() || {};
+      const cachedCtx = __readCachedGuildContextRaw() || {};
+      return normalizeVipTierClient(ctx.vipTier || cachedCtx.vipTier || getVipTier?.() || 'free');
+    }
+
+    function __canUseMultiGuildFromCache() {
+      return ['pro', 'business', 'vitalicio'].includes(__getCachedVipTierFast());
+    }
+
     function __guildSlotSelectionKey() {
       const gid = getGuildContext()?.guildId;
       return gid ? `membersGuildSlot_${gid}` : 'membersGuildSlot';
@@ -722,6 +830,41 @@
       btn.classList.toggle('opacity-60', !canUseMultiGuildMembers);
       btn.classList.toggle('cursor-not-allowed', !canUseMultiGuildMembers);
       btn.setAttribute('aria-disabled', canUseMultiGuildMembers ? 'false' : 'true');
+    }
+
+    function __hydrateToolbarFromCacheNow() {
+      try {
+        const settingsCache = __readFreshDirectSettingsCache();
+        const cachedSlots = Array.isArray(settingsCache?.multiGuildSlots)
+          ? normalizeGuildSlotMetaList(settingsCache.multiGuildSlots)
+          : null;
+
+        if (cachedSlots && cachedSlots.length) {
+          currentGuildSlotsMeta = cachedSlots;
+        } else if (!currentGuildSlotsMeta.length) {
+          currentGuildSlotsMeta = [{
+            slot: 1,
+            nameField: 'name',
+            tagField: 'tagMembros',
+            name: settingsCache?.guildName || getGuildContext()?.guildName || '',
+            tag: settingsCache?.tag || '',
+            exists: true
+          }];
+        }
+
+        canUseMultiGuildMembers = __canUseMultiGuildFromCache();
+        currentGuildSlot = canUseMultiGuildMembers ? __readSelectedGuildSlot() : 1;
+        if (!__isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
+
+        if (settingsCache?.tag) memberTag = String(settingsCache.tag || '').trim();
+        __updateCurrentMemberTag();
+        if (settingsCache?.goals) guildGoals = normalizeGoalsFromAnySource(settingsCache.goals);
+
+        __syncGuildSlotButtonState();
+        __renderGuildSlotDropdown();
+        refreshPlayModeCounterUi();
+        refreshGoalMetFilterUi();
+      } catch (_) {}
     }
 
     function __positionGuildSlotDropdown() {
@@ -1257,6 +1400,70 @@
       refreshGoalMetFilterUi();
     };
 
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function hasMemberWarning(member) {
+      return !!(member && (member.warningActive || member.hasWarning || member.advertencia || member.warningReason));
+    }
+
+    function getMemberWarningReason(member) {
+      return (member?.warningReason || member?.advertenciaMotivo || member?.warningPreset || '').toString().trim();
+    }
+
+    function formatWarningDate(value) {
+      try {
+        if (!value) return '';
+        let date = null;
+        if (typeof value === 'number') date = new Date(value);
+        else if (typeof value === 'string') date = new Date(value);
+        else if (typeof value?.toDate === 'function') date = value.toDate();
+        else if (typeof value?.seconds === 'number') date = new Date(value.seconds * 1000);
+        if (!date || Number.isNaN(date.getTime())) return '';
+        return date.toLocaleDateString('pt-BR');
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function renderWarningSummary(member) {
+      if (!hasMemberWarning(member)) return '';
+      const reason = getMemberWarningReason(member) || 'Sem motivo informado';
+      return `
+        <div class="mt-3 warning-reason-box rounded-xl px-3 py-2">
+          <div class="flex items-start gap-2">
+            <i data-lucide="triangle-alert" class="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0"></i>
+            <div class="min-w-0">
+              <p class="text-[11px] font-bold uppercase tracking-wide text-amber-700">Advertência ativa</p>
+              <p class="text-xs text-amber-900 mt-0.5 break-words">${escapeHtml(reason)}</p>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderWarningDetails(member) {
+      if (!hasMemberWarning(member)) return '';
+      const reason = getMemberWarningReason(member) || 'Sem motivo informado';
+      const date = formatWarningDate(member.warningAt || member.advertenciaAt || member.updatedAt);
+      return `
+        <div class="warning-reason-box rounded-xl p-3">
+          <div class="flex items-start gap-2">
+            <i data-lucide="triangle-alert" class="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0"></i>
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-bold text-amber-800">Advertência</p>
+              <p class="text-xs text-amber-900 mt-1 break-words">${escapeHtml(reason)}</p>
+              ${date ? `<p class="text-[11px] text-amber-700 mt-1">Marcada em ${escapeHtml(date)}</p>` : ''}
+            </div>
+          </div>
+        </div>`;
+    }
+
     function badge(active, icon) {
       return `<div class="w-7 h-7 rounded-lg flex items-center justify-center ${active ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'}"><i data-lucide="${icon}" class="w-3 h-3"></i></div>`;
     }
@@ -1285,10 +1492,10 @@
       }
 
       el.innerHTML = list.map(m => `
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
+        <div class="${hasMemberWarning(m) ? 'member-warning-card' : 'bg-white'} rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
           <div class="w-full p-5 cursor-pointer" onclick="toggleDetails('${m.id}')">
             <div class="flex items-center gap-3">
-              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
+              <div class="w-11 h-11 rounded-full ${hasMemberWarning(m) ? 'member-warning-avatar' : 'bg-gradient-to-br from-emerald-400 to-green-500'} flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
                 ${m.nick ? m.nick.charAt(0).toUpperCase() : '?'}
               </div>
               <div class="flex-1 min-w-0">
@@ -1299,12 +1506,15 @@
                 ${badge(m.guildWar, 'swords')}
                 ${badge(m.weeklyMeta, 'target')}
                 ${badge(m.hasTag, 'tag')}
+                ${hasMemberWarning(m) ? badge(true, 'triangle-alert') : ''}
               </div>
               <div class="text-gray-300"><i data-lucide="chevron-down" class="w-5 h-5"></i></div>
             </div>
             ${renderMemberPlayModeLine(m)}
+            ${renderWarningSummary(m)}
           </div>
           <div id="details-${m.id}" class="hidden border-t border-gray-100 p-4 bg-gray-50/50 space-y-3">
+            ${renderWarningDetails(m)}
             <div class="grid grid-cols-2 gap-3">
               ${detailBox('Guerra', m.guildWar, m.guildWarMeta)}
               ${detailBox('Meta Semanal', m.weeklyMeta, m.weeklyMetaValue)}
@@ -1317,9 +1527,10 @@
                 ${m.whatsapp ? `<a href="https://wa.me/55${m.whatsapp}" target="_blank" class="text-emerald-600 text-xs hover:underline">${m.whatsapp}</a>` : '<span class="text-xs text-gray-400">-</span>'}
               </div>
             </div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
               <button type="button" onclick="event.stopPropagation(); copyMemberData('${m.id}'); return false;" class="py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50">Copiar</button>
               <button type="button" onclick="event.stopPropagation(); editMember('${m.id}'); return false;" class="py-2.5 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50">Editar</button>
+              <button type="button" onclick="event.stopPropagation(); openWarningMemberModal('${m.id}'); return false;" class="py-2.5 rounded-xl border ${hasMemberWarning(m) ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100' : 'border-amber-200 text-amber-600 hover:bg-amber-50'} text-sm font-medium">${hasMemberWarning(m) ? 'Ver advert.' : 'Advertir'}</button>
               <button type="button" onclick="event.stopPropagation(); moveMember('${m.id}'); return false;" class="py-2.5 rounded-xl border border-blue-200 text-blue-600 text-sm font-medium hover:bg-blue-50">Mover</button>
               <button type="button" onclick="event.stopPropagation(); deleteMember('${m.id}'); return false;" class="py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50">Excluir</button>
             </div>
@@ -1937,6 +2148,8 @@
         `Modo(s): ${modesText}`,
         `WhatsApp: ${member.whatsapp || '-'}`,
         `Tag: ${member.hasTag ? 'Sim' : 'Não'}`,
+        `Advertência: ${hasMemberWarning(member) ? 'Sim' : 'Não'}`,
+        ...(hasMemberWarning(member) ? [`Motivo: ${getMemberWarningReason(member) || '-'}`] : []),
         ``,
         `GG por modalidade:`,
         ...ggLines,
@@ -2122,6 +2335,147 @@
       }
     };
 
+    window.closeWarningMemberModal = () => {
+      currentWarningId = '';
+      document.getElementById('warning-member-modal')?.classList.add('hidden');
+    };
+
+    window.openWarningMemberModal = (id) => {
+      const member = membersCache.find(x => String(x.id || '') === String(id || ''));
+      if (!member) return;
+
+      currentWarningId = String(id || '').trim();
+      const warned = hasMemberWarning(member);
+      const reason = getMemberWarningReason(member);
+
+      const title = document.getElementById('warning-member-title');
+      const desc = document.getElementById('warning-member-desc');
+      const preset = document.getElementById('warning-preset');
+      const textarea = document.getElementById('warning-reason');
+      const removeBtn = document.getElementById('btn-remove-warning');
+
+      if (title) title.textContent = warned ? 'Advertência do membro' : 'Advertir membro';
+      if (desc) desc.innerHTML = `Membro: <b>${escapeHtml(member.nick || member.visibleId || 'Sem nick')}</b>`;
+      if (preset) preset.value = '';
+      if (textarea) textarea.value = reason || '';
+      if (removeBtn) removeBtn.classList.toggle('hidden', !warned);
+
+      document.getElementById('warning-member-modal')?.classList.remove('hidden');
+      initIcons();
+    };
+
+    window.saveMemberWarning = async () => {
+      const id = String(currentWarningId || '').trim();
+      const member = membersCache.find(x => String(x.id || '') === id);
+      if (!id || !member) {
+        closeWarningMemberModal();
+        return;
+      }
+
+      const textarea = document.getElementById('warning-reason');
+      const reason = (textarea?.value || '').toString().trim();
+      if (!reason) {
+        showToast('error', 'Escreva ou selecione um motivo para a advertência.');
+        return;
+      }
+
+      const btn = document.getElementById('btn-save-warning');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Salvando...';
+      }
+
+      const payload = {
+        warningActive: true,
+        hasWarning: true,
+        warningReason: reason,
+        warningAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      try {
+        await setDoc(doc(db, 'guildas', getGuildContext().guildId, __membersCollectionName(), id), payload, { merge: true });
+        const idx = membersCache.findIndex(x => String(x.id || '') === id);
+        if (idx >= 0) {
+          membersCache[idx] = {
+            ...membersCache[idx],
+            warningActive: true,
+            hasWarning: true,
+            warningReason: reason,
+            warningAt: Date.now(),
+            updatedAt: Date.now()
+          };
+          __setMembersCache(membersCache);
+        }
+        closeWarningMemberModal();
+        showToast('success', 'Advertência salva.');
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Erro ao salvar advertência.');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Salvar';
+        }
+      }
+    };
+
+    window.removeMemberWarning = async () => {
+      const id = String(currentWarningId || '').trim();
+      const member = membersCache.find(x => String(x.id || '') === id);
+      if (!id || !member) {
+        closeWarningMemberModal();
+        return;
+      }
+
+      const btn = document.getElementById('btn-remove-warning');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Removendo...';
+      }
+
+      const payload = {
+        warningActive: false,
+        hasWarning: false,
+        warningReason: '',
+        warningAt: null,
+        updatedAt: serverTimestamp()
+      };
+
+      try {
+        await setDoc(doc(db, 'guildas', getGuildContext().guildId, __membersCollectionName(), id), payload, { merge: true });
+        const idx = membersCache.findIndex(x => String(x.id || '') === id);
+        if (idx >= 0) {
+          membersCache[idx] = {
+            ...membersCache[idx],
+            warningActive: false,
+            hasWarning: false,
+            warningReason: '',
+            warningAt: null,
+            updatedAt: Date.now()
+          };
+          __setMembersCache(membersCache);
+        }
+        closeWarningMemberModal();
+        showToast('success', 'Advertência removida.');
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Erro ao remover advertência.');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Remover';
+        }
+      }
+    };
+
+    document.getElementById('warning-preset')?.addEventListener('change', (e) => {
+      const value = (e.target?.value || '').toString().trim();
+      if (!value) return;
+      const textarea = document.getElementById('warning-reason');
+      if (textarea) textarea.value = value;
+    });
+
     window.fetchNick = async () => {
       const uid = document.getElementById('visible-id').value.trim();
       const feedback = document.getElementById('api-feedback');
@@ -2259,7 +2613,32 @@
     });
 
 
-    document.getElementById('btn-guild-slot')?.addEventListener('click', () => {
+    function bindReliableTap(el, handler) {
+      if (!el || typeof handler !== 'function') return;
+      let lastPointerTs = 0;
+      const run = (ev) => {
+        const now = Date.now();
+        if (ev.type === 'click' && lastPointerTs && (now - lastPointerTs) < 450) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+          return;
+        }
+        if (ev.type === 'pointerup') lastPointerTs = now;
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+        handler(ev);
+      };
+      el.addEventListener('pointerup', run);
+      el.addEventListener('click', run, true);
+    }
+
+    bindReliableTap(document.getElementById('btn-filter'), () => {
+      window.toggleFilterDropdown();
+    });
+
+    bindReliableTap(document.getElementById('btn-guild-slot'), () => {
       if (!canUseMultiGuildMembers) {
         showToast('info', 'Trocar entre guildas nesta tela é um recurso do plano PRO ou superior.');
         return;
@@ -2270,7 +2649,7 @@
       __positionGuildSlotDropdown();
     });
 
-    document.getElementById('btn-playmode-counter')?.addEventListener('click', () => {
+    bindReliableTap(document.getElementById('btn-playmode-counter'), () => {
       window.togglePlayModeCounterDropdown();
     });
 
@@ -2281,7 +2660,7 @@
       window.applyPlayModeFilter(filterKey);
     });
 
-    document.getElementById('btn-goal-met-filter')?.addEventListener('click', () => {
+    bindReliableTap(document.getElementById('btn-goal-met-filter'), () => {
       window.toggleGoalMetDropdown();
     });
 
@@ -2303,6 +2682,8 @@
       await __applyGuildSlot(slot, false);
     });
 
+    __hydrateToolbarFromCacheNow();
+
     window.addEventListener('resize', () => {
       __positionGuildSlotDropdown();
       positionPlayModeCounterDropdown();
@@ -2323,7 +2704,7 @@
       currentGuildSlotsMeta = cachedSlots && cachedSlots.length
         ? cachedSlots
         : [{ slot: 1, name: getGuildContext()?.guildName || '', tag: settingsCache?.tag || '', exists: true }];
-      const vipTier = normalizeVipTierClient(getGuildContext()?.vipTier || getVipTier());
+      const vipTier = __getCachedVipTierFast();
       canUseMultiGuildMembers = ['pro', 'business', 'vitalicio'].includes(vipTier);
       currentGuildSlot = canUseMultiGuildMembers ? __readSelectedGuildSlot() : 1;
       if (!__isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
