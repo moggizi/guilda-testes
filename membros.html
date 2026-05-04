@@ -163,6 +163,16 @@
               <div id="playmode-counter-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
             </div>
 
+            <!-- Filtro por meta cumprida na modalidade -->
+            <div class="relative">
+              <button id="btn-goal-met-filter" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+                <i data-lucide="check-check" class="w-4 h-4 text-emerald-500"></i>
+                <span id="goal-met-filter-label" class="hidden sm:inline">Meta cumprida</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
+              </button>
+              <div id="goal-met-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
+            </div>
+
             <!-- Botão Edição Rápida Novo -->
             <button onclick="openQuickEditModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
               <i data-lucide="zap" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Edição Rápida</span>
@@ -482,6 +492,7 @@
     let membersCache = [];
     let currentFilter = 'all';
     let currentPlayModeFilter = 'all';
+    let currentGoalMetFilter = 'none';
     let memberTag = null;
     let guildGoals = { metaGG: null, metaHonra: null };
     let hasTagManualOverride = false;
@@ -493,6 +504,38 @@
     let currentGuildSlot = 1;
     let currentGuildSlotsMeta = [];
     let canUseMultiGuildMembers = false;
+
+    const SETTINGS_SCREEN_CACHE_TTL_MS = 60 * 60 * 1000;
+
+    function __isFreshCacheObject(cached, ttlMs = SETTINGS_SCREEN_CACHE_TTL_MS) {
+      try {
+        const ts = Number(cached?.ts || 0);
+        return !!ts && Number.isFinite(ts) && (Date.now() - ts) < ttlMs;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function __settingsScreenCacheKey() {
+      const gid = getGuildContext()?.guildId;
+      return gid ? `ajustesTela_${gid}` : '';
+    }
+
+    function __readSettingsScreenCache() {
+      try {
+        const key = __settingsScreenCacheKey();
+        if (!key) return null;
+        const raw = localStorage.getItem(key);
+        return raw ? (JSON.parse(raw) || null) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function __readFreshSettingsScreenCache() {
+      const cached = __readSettingsScreenCache();
+      return __isFreshCacheObject(cached) ? cached : null;
+    }
 
     function normalizeVipTierClient(v) {
       const s = (v || '').toString().toLowerCase().trim();
@@ -805,6 +848,23 @@
       { key: 'suporte', label: 'Suporte' }
     ];
 
+    const GOAL_MET_FILTER_OPTIONS = [
+      { key: 'all', label: 'Todos que bateram' },
+      { key: 'rush', label: 'Rush' },
+      { key: 'full-gas', label: 'Full Gás' },
+      { key: 'curandeiro', label: 'Curandeiro' },
+      { key: 'fuzileiro', label: 'Fuzileiro' },
+      { key: 'suporte', label: 'Suporte' }
+    ];
+
+    const GG_GOAL_FIELD_BY_MODE = {
+      'rush': 'metaGGRush',
+      'full-gas': 'metaGGFullGas',
+      'curandeiro': 'metaGGCurandeiro',
+      'fuzileiro': 'metaGGFuzileiro',
+      'suporte': 'metaGGSuporte'
+    };
+
     function normalizePlayModeValue(value) {
       const raw = (value == null ? '' : String(value))
         .normalize('NFD')
@@ -846,6 +906,28 @@
       return [...new Set(labels)];
     }
 
+    function normalizeGoalsFromAnySource(source = {}) {
+      const data = source && typeof source === 'object' ? source : {};
+      const legacy = toNullableGoal(data.metaGG);
+      const goals = {
+        metaGG: legacy,
+        metaGGRush: toNullableGoal(data.metaGGRush ?? legacy),
+        metaGGCurandeiro: toNullableGoal(data.metaGGCurandeiro ?? legacy),
+        metaGGFullGas: toNullableGoal(data.metaGGFullGas ?? legacy),
+        metaGGSuporte: toNullableGoal(data.metaGGSuporte ?? legacy),
+        metaGGFuzileiro: toNullableGoal(data.metaGGFuzileiro ?? legacy),
+        metaHonra: toNullableGoal(data.metaHonra)
+      };
+      goals.metaGGByRole = {
+        Rush: goals.metaGGRush,
+        Curandeiro: goals.metaGGCurandeiro,
+        'Full Gás': goals.metaGGFullGas,
+        Suporte: goals.metaGGSuporte,
+        Fuzileiro: goals.metaGGFuzileiro
+      };
+      return goals;
+    }
+
     function renderMemberPlayModeLine(member) {
       const labels = getMemberPlayModeLabels(member);
       if (!labels.length) return '';
@@ -873,7 +955,13 @@
       return getMemberPlayModes(member).includes(currentPlayModeFilter);
     }
 
-    function getVisibleMembers({ ignorePlayMode = false } = {}) {
+    function matchesGoalMetFilter(member) {
+      if (currentGoalMetFilter === 'none') return true;
+      if (currentGoalMetFilter === 'all') return memberMetAnyGuildWarGoal(member);
+      return memberMetGuildWarGoalForMode(member, currentGoalMetFilter);
+    }
+
+    function getVisibleMembers({ ignorePlayMode = false, ignoreGoalMet = false } = {}) {
       const termo = document.getElementById('search-input')?.value.toLowerCase() || '';
 
       return membersCache.filter((member) => {
@@ -882,6 +970,7 @@
         if (!matchBusca) return false;
         if (!matchesCurrentMainFilter(member)) return false;
         if (!ignorePlayMode && !matchesCurrentPlayModeFilter(member)) return false;
+        if (!ignoreGoalMet && !matchesGoalMetFilter(member)) return false;
         return true;
       });
     }
@@ -951,8 +1040,87 @@
       initIcons();
     }
 
+    function updateGoalMetFilterButtonLabel() {
+      const labelEl = document.getElementById('goal-met-filter-label');
+      const buttonEl = document.getElementById('btn-goal-met-filter');
+      const active = GOAL_MET_FILTER_OPTIONS.find(option => option.key === currentGoalMetFilter);
+      const label = currentGoalMetFilter === 'none' ? 'Meta cumprida' : (active ? active.label : 'Meta cumprida');
+
+      if (labelEl) labelEl.innerText = label;
+      if (buttonEl) {
+        buttonEl.classList.toggle('border-emerald-300', currentGoalMetFilter !== 'none');
+        buttonEl.classList.toggle('bg-emerald-50', currentGoalMetFilter !== 'none');
+      }
+    }
+
+    function renderGoalMetDropdown() {
+      const dropdown = document.getElementById('goal-met-dropdown');
+      if (!dropdown) return;
+
+      const baseMembers = getVisibleMembers({ ignoreGoalMet: true });
+      dropdown.innerHTML = GOAL_MET_FILTER_OPTIONS.map((option) => {
+        const count = option.key === 'all'
+          ? baseMembers.filter(member => memberMetAnyGuildWarGoal(member)).length
+          : baseMembers.filter(member => memberMetGuildWarGoalForMode(member, option.key)).length;
+        const active = currentGoalMetFilter === option.key;
+
+        return `
+          <button
+            type="button"
+            class="counter-option ${active ? 'counter-active' : ''}"
+            data-goal-met-filter-option="${option.key}"
+          >
+            <span class="counter-option-label">${option.label} - ${count}</span>
+            <span class="counter-option-count">${count}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function positionGoalMetDropdown() {
+      const dropdown = document.getElementById('goal-met-dropdown');
+      if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+      dropdown.style.left = '';
+      dropdown.style.right = '0';
+      dropdown.style.transform = 'translateX(0)';
+
+      requestAnimationFrame(() => {
+        const rect = dropdown.getBoundingClientRect();
+        const margin = 12;
+        const maxRight = window.innerWidth - margin;
+        let shiftX = 0;
+
+        if (rect.right > maxRight) shiftX -= (rect.right - maxRight);
+        if ((rect.left + shiftX) < margin) shiftX += (margin - (rect.left + shiftX));
+
+        dropdown.style.transform = `translateX(${shiftX}px)`;
+      });
+    }
+
+    function refreshGoalMetFilterUi() {
+      updateGoalMetFilterButtonLabel();
+      renderGoalMetDropdown();
+      positionGoalMetDropdown();
+      initIcons();
+    }
+
+    window.toggleGoalMetDropdown = () => {
+      refreshGoalMetFilterUi();
+      document.getElementById('goal-met-dropdown')?.classList.toggle('hidden');
+      positionGoalMetDropdown();
+    };
+
+    window.applyGoalMetFilter = (filterKey) => {
+      currentGoalMetFilter = filterKey || 'none';
+      document.getElementById('goal-met-dropdown')?.classList.add('hidden');
+      refreshGoalMetFilterUi();
+      applyFiltersAndRender();
+    };
+
     window.togglePlayModeCounterDropdown = () => {
       refreshPlayModeCounterUi();
+      refreshGoalMetFilterUi();
       document.getElementById('playmode-counter-dropdown')?.classList.toggle('hidden');
       positionPlayModeCounterDropdown();
     };
@@ -968,8 +1136,9 @@
       const termo = document.getElementById('search-input')?.value.toLowerCase() || '';
       const filtrados = getVisibleMembers();
 
-      renderList(filtrados, termo !== '' || currentFilter !== 'all' || currentPlayModeFilter !== 'all');
+      renderList(filtrados, termo !== '' || currentFilter !== 'all' || currentPlayModeFilter !== 'all' || currentGoalMetFilter !== 'none');
       refreshPlayModeCounterUi();
+      refreshGoalMetFilterUi();
     };
 
     function badge(active, icon) {
@@ -1032,7 +1201,8 @@
                 ${m.whatsapp ? `<a href="https://wa.me/55${m.whatsapp}" target="_blank" class="text-emerald-600 text-xs hover:underline">${m.whatsapp}</a>` : '<span class="text-xs text-gray-400">-</span>'}
               </div>
             </div>
-            <div class="grid grid-cols-3 gap-2 pt-2">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+              <button type="button" onclick="event.stopPropagation(); copyMemberData('${m.id}'); return false;" class="py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50">Copiar</button>
               <button type="button" onclick="event.stopPropagation(); editMember('${m.id}'); return false;" class="py-2.5 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-medium hover:bg-emerald-50">Editar</button>
               <button type="button" onclick="event.stopPropagation(); moveMember('${m.id}'); return false;" class="py-2.5 rounded-xl border border-blue-200 text-blue-600 text-sm font-medium hover:bg-blue-50">Mover</button>
               <button type="button" onclick="event.stopPropagation(); deleteMember('${m.id}'); return false;" class="py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50">Excluir</button>
@@ -1367,6 +1537,12 @@
       if (playModeBtn && playModeDropdown && !playModeBtn.contains(e.target) && !playModeDropdown.contains(e.target)) {
         playModeDropdown.classList.add('hidden');
       }
+
+      const goalMetBtn = document.getElementById('btn-goal-met-filter');
+      const goalMetDropdown = document.getElementById('goal-met-dropdown');
+      if (goalMetBtn && goalMetDropdown && !goalMetBtn.contains(e.target) && !goalMetDropdown.contains(e.target)) {
+        goalMetDropdown.classList.add('hidden');
+      }
     });
 
 
@@ -1404,24 +1580,74 @@
       return Number.isFinite(n) ? n : 0;
     }
 
+    function toNullableGoal(value) {
+      const n = Number(value);
+      return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+    }
+
     function getGoalThreshold(key) {
-      const raw = guildGoals && key in guildGoals ? guildGoals[key] : null;
+      const normalized = normalizeGoalsFromAnySource(guildGoals || {});
+      const raw = normalized && key in normalized ? normalized[key] : null;
       return (raw != null && Number.isFinite(Number(raw))) ? Number(raw) : null;
     }
 
-    function syncGoalToggle(toggleId, inputId, goalKey) {
+    function getGoalThresholdForMode(modeKey) {
+      const normalized = normalizePlayModeValue(modeKey);
+      const field = GG_GOAL_FIELD_BY_MODE[normalized];
+      if (!field) return getGoalThreshold('metaGG');
+
+      const specific = getGoalThreshold(field);
+      if (specific != null) return specific;
+      return getGoalThreshold('metaGG');
+    }
+
+    function getRequiredGuildWarGoalForModes(modes = []) {
+      const normalizedModes = (Array.isArray(modes) ? modes : [modes])
+        .map(normalizePlayModeValue)
+        .filter(Boolean);
+
+      const goals = normalizedModes
+        .map(getGoalThresholdForMode)
+        .filter((value) => value != null && Number.isFinite(Number(value)));
+
+      if (goals.length) return Math.max(...goals);
+      return getGoalThreshold('metaGG');
+    }
+
+    function memberMetGuildWarGoalForMode(member, modeKey) {
+      const normalizedMode = normalizePlayModeValue(modeKey);
+      if (!normalizedMode || normalizedMode === 'all') return memberMetAnyGuildWarGoal(member);
+
+      const modes = getMemberPlayModes(member);
+      if (!modes.includes(normalizedMode)) return false;
+
+      const goal = getGoalThresholdForMode(normalizedMode);
+      if (goal == null) return !!member.guildWar;
+      return toSafeNumber(member.guildWarMeta) >= goal;
+    }
+
+    function memberMetAnyGuildWarGoal(member) {
+      const modes = getMemberPlayModes(member);
+      if (modes.length) return modes.some((mode) => memberMetGuildWarGoalForMode(member, mode));
+
+      const legacyGoal = getGoalThreshold('metaGG');
+      if (legacyGoal == null) return !!member.guildWar;
+      return toSafeNumber(member.guildWarMeta) >= legacyGoal;
+    }
+
+    function syncGoalToggle(toggleId, inputId, goalKeyOrGetter) {
       const toggleEl = document.getElementById(toggleId);
       const inputEl = document.getElementById(inputId);
       if (!toggleEl || !inputEl) return;
 
-      const goal = getGoalThreshold(goalKey);
+      const goal = typeof goalKeyOrGetter === 'function' ? goalKeyOrGetter() : getGoalThreshold(goalKeyOrGetter);
       if (goal == null) return;
 
       toggleEl.checked = toSafeNumber(inputEl.value) >= goal;
     }
 
     function syncGoalTogglesFromValues() {
-      syncGoalToggle('guild-war', 'guild-war-meta', 'metaGG');
+      syncGoalToggle('guild-war', 'guild-war-meta', () => getRequiredGuildWarGoalForModes(getSelectedPlayModes()));
       syncGoalToggle('weekly-meta', 'weekly-meta-value', 'metaHonra');
     }
 
@@ -1471,11 +1697,13 @@
       else current.push(v);
 
       setSelectedPlayModes(current);
+      syncGoalTogglesFromValues();
     }
 
     function applyPlayMode(value) {
       if (Array.isArray(value)) setSelectedPlayModes(value);
       else setSelectedPlayModes(value ? [value] : []);
+      syncGoalTogglesFromValues();
     }
 
     function initPlayModePicker() {
@@ -1535,6 +1763,69 @@
       syncGoalTogglesFromValues();
       document.getElementById('modal-title').innerText = 'Editar Membro';
       document.getElementById('modal').classList.remove('hidden');
+    };
+
+    function buildMemberCopyText(member) {
+      const modeKeys = getMemberPlayModes(member);
+      const modes = getMemberPlayModeLabels(member);
+      const honraGoal = getGoalThreshold('metaHonra');
+      const ggValue = toSafeNumber(member.guildWarMeta);
+      const honraValue = toSafeNumber(member.weeklyMetaValue);
+      const honraStatus = honraGoal == null ? (member.weeklyMeta ? 'Batida' : 'Pendente') : (honraValue >= honraGoal ? 'Batida' : 'Pendente');
+      const ggLines = modeKeys.length
+        ? modeKeys.map((mode) => {
+            const label = getPlayModeLabel(mode) || mode;
+            const goal = getGoalThresholdForMode(mode);
+            const status = goal == null ? (member.guildWar ? 'Batida' : 'Pendente') : (ggValue >= goal ? 'Batida' : 'Pendente');
+            return `• ${label}: ${ggValue}${goal != null ? ` / ${goal}` : ''} • ${status}`;
+          })
+        : (() => {
+            const goal = getGoalThreshold('metaGG');
+            const status = goal == null ? (member.guildWar ? 'Batida' : 'Pendente') : (ggValue >= goal ? 'Batida' : 'Pendente');
+            return [`• GG: ${ggValue}${goal != null ? ` / ${goal}` : ''} • ${status}`];
+          })();
+
+      return [
+        `📋 Dados do membro`,
+        ``,
+        `Nick: ${member.nick || '-'}`,
+        `ID: ${member.visibleId || member.id || '-'}`,
+        `Guilda: ${__currentGuildDisplayName()}`,
+        `Modo(s): ${modes.length ? modes.join(' • ') : '-'}`,
+        `WhatsApp: ${member.whatsapp || '-'}`,
+        `Tag: ${member.hasTag ? 'Sim' : 'Não'}`,
+        ``,
+        `GG por modalidade:`,
+        ...ggLines,
+        `Honra semanal: ${honraValue}${honraGoal != null ? ` / ${honraGoal}` : ''} • ${honraStatus}`,
+        `Entrada: ${member.joinDate || '-'}`
+      ].join('\n');
+    }
+
+    window.copyMemberData = async (id) => {
+      const member = membersCache.find(x => String(x.id || '') === String(id || ''));
+      if (!member) return;
+
+      const text = buildMemberCopyText(member);
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.setAttribute('readonly', 'true');
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          textarea.remove();
+        }
+        showToast('success', 'Dados do membro copiados.');
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Não foi possível copiar os dados.');
+      }
     };
 
     window.closeDeleteConfirmModal = () => {
@@ -1847,6 +2138,17 @@
       window.applyPlayModeFilter(filterKey);
     });
 
+    document.getElementById('btn-goal-met-filter')?.addEventListener('click', () => {
+      window.toggleGoalMetDropdown();
+    });
+
+    document.getElementById('goal-met-dropdown')?.addEventListener('click', (e) => {
+      const option = e.target.closest('[data-goal-met-filter-option]');
+      if (!option) return;
+      const filterKey = String(option.getAttribute('data-goal-met-filter-option') || 'all');
+      window.applyGoalMetFilter(filterKey);
+    });
+
     document.getElementById('guild-slot-dropdown')?.addEventListener('click', async (e) => {
       const option = e.target.closest('[data-guild-slot-option]');
       if (!option) return;
@@ -1861,6 +2163,7 @@
     window.addEventListener('resize', () => {
       __positionGuildSlotDropdown();
       positionPlayModeCounterDropdown();
+      positionGoalMetDropdown();
     });
 
     // ==========================================
@@ -1872,7 +2175,11 @@
       if(!user) return;
       document.getElementById('btn-logout').onclick = logout;
 
-      currentGuildSlotsMeta = await getGuildMultiConfig(4).catch(() => ([{ slot: 1, name: '', tag: '', exists: true }]));
+      const settingsCache = __readFreshSettingsScreenCache();
+      const cachedSlots = Array.isArray(settingsCache?.multiGuildSlots) ? settingsCache.multiGuildSlots : null;
+      currentGuildSlotsMeta = cachedSlots && cachedSlots.length
+        ? cachedSlots
+        : await getGuildMultiConfig(4).catch(() => ([{ slot: 1, name: '', tag: '', exists: true }]));
       const vipTier = normalizeVipTierClient(getGuildContext()?.vipTier || getVipTier());
       canUseMultiGuildMembers = ['pro', 'business', 'vitalicio'].includes(vipTier);
       currentGuildSlot = canUseMultiGuildMembers ? __readSelectedGuildSlot() : 1;
@@ -1884,7 +2191,8 @@
 
       memberTag = await getMemberTagConfig();
       __updateCurrentMemberTag();
-      guildGoals = await getGuildGoalsConfig();
+      guildGoals = settingsCache?.goals ? normalizeGoalsFromAnySource(settingsCache.goals) : await getGuildGoalsConfig();
+      refreshGoalMetFilterUi();
 
       const hasTagEl = document.getElementById('has-tag');
       if (hasTagEl) {
