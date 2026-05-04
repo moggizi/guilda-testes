@@ -86,6 +86,69 @@
       background:linear-gradient(135deg,#fffbeb 0%,#fff7ed 100%);
       border:1px solid #fcd34d;
     }
+    .warning-preset-button{
+      width:100%;
+      min-height:48px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:.75rem;
+      padding:.75rem 1rem;
+      border-radius:14px;
+      border:1px solid #e5e7eb;
+      background:#fff;
+      color:#374151;
+      font-size:.875rem;
+      font-weight:600;
+      text-align:left;
+      transition:.15s;
+      box-shadow:0 1px 2px rgba(15,23,42,.04);
+      touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .warning-preset-button:hover{background:#fffbeb;border-color:#fcd34d}
+    .warning-preset-button:focus{outline:none;border-color:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.14)}
+    .warning-preset-button *{pointer-events:none}
+    .warning-preset-menu{
+      position:absolute;
+      left:0;
+      right:0;
+      top:calc(100% + .5rem);
+      z-index:80;
+      padding:.5rem;
+      border-radius:18px;
+      border:1px solid #fed7aa;
+      background:#fff;
+      box-shadow:0 18px 50px rgba(15,23,42,.16);
+      max-height:260px;
+      overflow-y:auto;
+    }
+    .warning-preset-option{
+      width:100%;
+      display:flex;
+      align-items:center;
+      gap:.65rem;
+      padding:.78rem .85rem;
+      border-radius:14px;
+      color:#374151;
+      font-size:.875rem;
+      font-weight:600;
+      text-align:left;
+      transition:.15s;
+    }
+    .warning-preset-option:hover{background:#fffbeb;color:#92400e}
+    .warning-preset-option.warning-preset-active{background:#fff7ed;color:#b45309;box-shadow:inset 0 0 0 1px #fed7aa}
+    .warning-preset-option-icon{
+      width:1.75rem;
+      height:1.75rem;
+      border-radius:999px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      background:#fffbeb;
+      border:1px solid #fde68a;
+      flex:0 0 auto;
+    }
 
     /* Quick Edit specific fixes */
     .animate-in { animation: fadeIn 0.2s ease-out forwards; }
@@ -538,17 +601,43 @@
       <p id="warning-member-desc" class="text-sm text-center text-gray-500 mb-5 leading-relaxed">Escolha um motivo ou escreva manualmente.</p>
 
       <div class="space-y-4">
-        <div>
+        <div class="relative">
           <label class="text-sm font-semibold text-gray-700 mb-1 block">Motivo rápido</label>
-          <select id="warning-preset" class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none text-sm">
-            <option value="">Selecionar motivo</option>
-            <option value="Acabou a luz (de novo)">Acabou a luz (de novo)</option>
-            <option value="O tataravô faleceu">O tataravô faleceu</option>
-            <option value="O peixe teve que ir ao hospital">O peixe teve que ir ao hospital</option>
-            <option value="A internet caiu bem na hora">A internet caiu bem na hora</option>
-            <option value="Foi comprar pão e desapareceu">Foi comprar pão e desapareceu</option>
-            <option value="Dormiu no lobby">Dormiu no lobby</option>
-          </select>
+          <input type="hidden" id="warning-preset" value="">
+          <button id="warning-preset-btn" type="button" class="warning-preset-button" aria-expanded="false" aria-controls="warning-preset-menu">
+            <span id="warning-preset-label" class="truncate">Selecionar motivo</span>
+            <i data-lucide="chevron-down" class="w-4 h-4 text-amber-500 shrink-0"></i>
+          </button>
+          <div id="warning-preset-menu" class="warning-preset-menu hidden">
+            <button type="button" class="warning-preset-option" data-warning-preset="">
+              <span class="warning-preset-option-icon">✍️</span>
+              <span>Escrever manualmente</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="Acabou a luz (de novo)">
+              <span class="warning-preset-option-icon">💡</span>
+              <span>Acabou a luz (de novo)</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="O tataravô faleceu">
+              <span class="warning-preset-option-icon">🪦</span>
+              <span>O tataravô faleceu</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="O peixe teve que ir ao hospital">
+              <span class="warning-preset-option-icon">🐟</span>
+              <span>O peixe teve que ir ao hospital</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="A internet caiu bem na hora">
+              <span class="warning-preset-option-icon">📶</span>
+              <span>A internet caiu bem na hora</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="Foi comprar pão e desapareceu">
+              <span class="warning-preset-option-icon">🥖</span>
+              <span>Foi comprar pão e desapareceu</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="Dormiu no lobby">
+              <span class="warning-preset-option-icon">😴</span>
+              <span>Dormiu no lobby</span>
+            </button>
+          </div>
         </div>
 
         <div>
@@ -2335,8 +2424,27 @@
       }
     };
 
+    function closeWarningPresetMenu() {
+      const menu = document.getElementById('warning-preset-menu');
+      const btn = document.getElementById('warning-preset-btn');
+      if (menu) menu.classList.add('hidden');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
+    function setWarningPresetLabel(value = '') {
+      const clean = String(value || '').trim();
+      const label = document.getElementById('warning-preset-label');
+      const preset = document.getElementById('warning-preset');
+      if (preset) preset.value = clean;
+      if (label) label.textContent = clean || 'Selecionar motivo';
+      document.querySelectorAll('.warning-preset-option').forEach((btn) => {
+        btn.classList.toggle('warning-preset-active', String(btn.dataset.warningPreset || '').trim() === clean);
+      });
+    }
+
     window.closeWarningMemberModal = () => {
       currentWarningId = '';
+      closeWarningPresetMenu();
       document.getElementById('warning-member-modal')?.classList.add('hidden');
     };
 
@@ -2356,9 +2464,10 @@
 
       if (title) title.textContent = warned ? 'Advertência do membro' : 'Advertir membro';
       if (desc) desc.innerHTML = `Membro: <b>${escapeHtml(member.nick || member.visibleId || 'Sem nick')}</b>`;
-      if (preset) preset.value = '';
+      setWarningPresetLabel('');
       if (textarea) textarea.value = reason || '';
       if (removeBtn) removeBtn.classList.toggle('hidden', !warned);
+      closeWarningPresetMenu();
 
       document.getElementById('warning-member-modal')?.classList.remove('hidden');
       initIcons();
@@ -2469,11 +2578,37 @@
       }
     };
 
-    document.getElementById('warning-preset')?.addEventListener('change', (e) => {
-      const value = (e.target?.value || '').toString().trim();
-      if (!value) return;
-      const textarea = document.getElementById('warning-reason');
-      if (textarea) textarea.value = value;
+    document.getElementById('warning-preset-btn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const menu = document.getElementById('warning-preset-menu');
+      const btn = document.getElementById('warning-preset-btn');
+      if (!menu) return;
+      const opening = menu.classList.contains('hidden');
+      menu.classList.toggle('hidden');
+      if (btn) btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+    });
+
+    document.getElementById('warning-preset-menu')?.addEventListener('click', (e) => {
+      const option = e.target.closest('[data-warning-preset]');
+      if (!option) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const value = String(option.dataset.warningPreset || '').trim();
+      setWarningPresetLabel(value);
+      if (value) {
+        const textarea = document.getElementById('warning-reason');
+        if (textarea) textarea.value = value;
+      }
+      closeWarningPresetMenu();
+    });
+
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('warning-preset-menu');
+      const btn = document.getElementById('warning-preset-btn');
+      if (!menu || menu.classList.contains('hidden')) return;
+      if (btn?.contains(e.target) || menu.contains(e.target)) return;
+      closeWarningPresetMenu();
     });
 
     window.fetchNick = async () => {
