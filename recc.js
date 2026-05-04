@@ -308,6 +308,22 @@ function bootManagementMode() {
 
   const ctxGuildId = () => String(getGuildContext()?.guildId || '').trim();
   const ctxGuildName = () => String(getGuildContext()?.guildName || '').trim();
+  const normalizeAccessRole = (value = '') => String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+  const canManageRecruitmentRole = () => {
+    const role = normalizeAccessRole(getGuildContext()?.role);
+    return role === 'lider' || role === 'leader' || role === 'admin' || role === 'administrador';
+  };
+  const syncRecruitmentRoleUi = () => {
+    const allowed = canManageRecruitmentRole();
+    document.querySelectorAll('[data-rec-admin-leader-only="true"]').forEach((el) => {
+      el.classList.toggle('hidden', !allowed);
+    });
+    return allowed;
+  };
   const getGuildContextData = () => getGuildContext() || {};
   const getGuildConfigData = () => {
     const ctx = getGuildContextData();
@@ -1039,6 +1055,12 @@ function bootManagementMode() {
     bindEvents();
     const user = await checkAuth(true);
     if (!user) return;
+    const roleAllowed = syncRecruitmentRoleUi();
+    if (!roleAllowed) {
+      showToast('error', 'Apenas Líder ou Admin podem acessar o recrutamento.');
+      window.location.href = 'dashboard.html';
+      return;
+    }
     const ctx = getGuildContext() || {};
     if (els.currentUid) els.currentUid.textContent = String(ctx.guildId || '-');
     await refreshManagementGuildSlots();
