@@ -281,6 +281,14 @@
       try { return JSON.parse(raw); } catch { return fallback; }
     }
 
+    function safeStorageGet(key){
+      try { return key ? localStorage.getItem(key) : null; } catch { return null; }
+    }
+
+    function safeStorageSet(key, value){
+      try { if (key) localStorage.setItem(key, value); } catch {}
+    }
+
     function isFreshCache(cached, ttlMs = SETTINGS_CACHE_TTL_MS){
       try {
         const ts = Number(cached?.ts || 0);
@@ -291,13 +299,13 @@
     function readJsonStorage(key, fallback = null){
       try {
         if (!key) return fallback;
-        const raw = localStorage.getItem(key);
+        const raw = safeStorageGet(key);
         return raw ? (JSON.parse(raw) || fallback) : fallback;
       } catch { return fallback; }
     }
 
     function writeJsonStorage(key, value){
-      try { if (key) localStorage.setItem(key, JSON.stringify(value)); } catch {}
+      safeStorageSet(key, JSON.stringify(value));
     }
 
     function currentGuildId(){
@@ -311,13 +319,13 @@
 
     function readSelectedGuildSlot(){
       try {
-        const n = Math.floor(Number(localStorage.getItem(guildSlotSelectionKey())) || 1);
+        const n = Math.floor(Number(safeStorageGet(guildSlotSelectionKey())) || 1);
         return (n >= 1 && n <= 4) ? n : 1;
       } catch { return 1; }
     }
 
     function writeSelectedGuildSlot(slot){
-      try { localStorage.setItem(guildSlotSelectionKey(), String(Math.max(1, Math.min(4, Math.floor(Number(slot) || 1))))); } catch {}
+      safeStorageSet(guildSlotSelectionKey(), String(Math.max(1, Math.min(4, Math.floor(Number(slot) || 1)))));
     }
 
     function membersCollectionName(slot = currentGuildSlot){
@@ -375,7 +383,7 @@
       const info = readJsonStorage(`guildInfo_${gid}`, null);
       const goals = readJsonStorage(`guildGoals_${gid}`, null);
       const multi = readJsonStorage(`guildMulti_${gid}`, null);
-      const multiTs = Number(localStorage.getItem(`guildMulti_${gid}_ts`) || 0) || 0;
+      const multiTs = Number(safeStorageGet(`guildMulti_${gid}_ts`) || 0) || 0;
 
       const merged = { ...(isFreshCache(ajustes) ? ajustes : {}), guildId: gid };
       if (!merged.guildName && isFreshCache(info) && info?.name) merged.guildName = info.name;
@@ -546,7 +554,7 @@
     function readMembersCacheForSlot(slot = currentGuildSlot){
       const gid = currentGuildId();
       if (!gid) return [];
-      const raw = localStorage.getItem(membersCacheKey(gid, slot)) || (Number(slot) === 1 ? localStorage.getItem(legacyMembersCacheKey(gid)) : null) || '[]';
+      const raw = safeStorageGet(membersCacheKey(gid, slot)) || (Number(slot) === 1 ? safeStorageGet(legacyMembersCacheKey(gid)) : null) || '[]';
       return normalizeMembers(safeParseJSON(raw, []));
     }
 
@@ -554,9 +562,9 @@
       const gid = currentGuildId();
       if (!gid) return;
       const normalized = normalizeMembers(members);
-      try { localStorage.setItem(membersCacheKey(gid, slot), JSON.stringify(normalized)); } catch {}
+      safeStorageSet(membersCacheKey(gid, slot), JSON.stringify(normalized));
       if (Number(slot) === 1) {
-        try { localStorage.setItem(legacyMembersCacheKey(gid), JSON.stringify(normalized)); } catch {}
+        safeStorageSet(legacyMembersCacheKey(gid), JSON.stringify(normalized));
       }
     }
 
@@ -765,7 +773,7 @@
       try {
         const snap = await getDocs(collection(db, 'guildas', guildId, membersCollectionName(slot)));
         const members = [];
-        snap.forEach(d => members.push({ id: d.id, ...d.data() }));
+        snap.forEach(d => { if (d.id === '__meta__') return; members.push({ id: d.id, ...d.data() }); });
         const normalized = normalizeMembers(members);
         writeMembersCacheForSlot(slot, normalized);
         if (Number(slot) === Number(currentGuildSlot)) updateUI(calcStats(normalized));
@@ -794,9 +802,9 @@
     }
 
     function updateGuildCtxCache(patch){
-      const prev = safeParseJSON(localStorage.getItem(GUILDCTX_LS_KEY) || '{}', {});
+      const prev = safeParseJSON(safeStorageGet(GUILDCTX_LS_KEY) || '{}', {});
       const next = { ...prev, ...patch, ts: Date.now() };
-      try { localStorage.setItem(GUILDCTX_LS_KEY, JSON.stringify(next)); } catch {}
+      safeStorageSet(GUILDCTX_LS_KEY, JSON.stringify(next));
       return next;
     }
 
@@ -890,7 +898,15 @@
 
       try { applyVipUiAndGates(ctx?.vipTier || getVipTier()); } catch {}
       await hydrateSettings();
-      await fetchMembersAndUpdateCache(ctx.guildId, currentGuildSlot);
+
+      // WebView/primeiro acesso: mantém cache-first. Só lê o Firebase se não houver cache real da lista.
+      const cachedMembers = readMembersCacheForSlot(currentGuildSlot);
+      if (cachedMembers && cachedMembers.length) {
+        updateUI(calcStats(cachedMembers));
+      } else {
+        await fetchMembersAndUpdateCache(ctx.guildId, currentGuildSlot);
+      }
+
       startVipRealtime(ctx.guildId);
     });
 

@@ -685,6 +685,14 @@
 
     const SETTINGS_SCREEN_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+    function __safeStorageGet(key) {
+      try { return key ? localStorage.getItem(key) : null; } catch { return null; }
+    }
+
+    function __safeStorageSet(key, value) {
+      try { if (key) localStorage.setItem(key, value); } catch {}
+    }
+
     function __isFreshCacheObject(cached, ttlMs = SETTINGS_SCREEN_CACHE_TTL_MS) {
       try {
         const ts = Number(cached?.ts || 0);
@@ -703,7 +711,7 @@
       try {
         const key = __settingsScreenCacheKey();
         if (!key) return null;
-        const raw = localStorage.getItem(key);
+        const raw = __safeStorageGet(key);
         return raw ? (JSON.parse(raw) || null) : null;
       } catch (_) {
         return null;
@@ -715,14 +723,14 @@
         const key = __settingsScreenCacheKey();
         if (!key) return;
         const previous = __readSettingsScreenCache() || {};
-        localStorage.setItem(key, JSON.stringify({ ...previous, ...(data || {}), guildId: getGuildContext()?.guildId || previous.guildId || '', ts: Date.now() }));
+        __safeStorageSet(key, JSON.stringify({ ...previous, ...(data || {}), guildId: getGuildContext()?.guildId || previous.guildId || '', ts: Date.now() }));
       } catch (_) {}
     }
 
     function __readJsonStorage(key) {
       try {
         if (!key) return null;
-        const raw = localStorage.getItem(key);
+        const raw = __safeStorageGet(key);
         return raw ? (JSON.parse(raw) || null) : null;
       } catch (_) {
         return null;
@@ -743,7 +751,7 @@
       const goalsCache = __readJsonStorage(`guildGoals_${gid}`);
       const tagCache = __readJsonStorage(`tagMembros_${gid}`);
       const guildMultiRaw = __readJsonStorage(`guildMulti_${gid}`);
-      const guildMultiTs = Number(localStorage.getItem(`guildMulti_${gid}_ts`) || 0) || 0;
+      const guildMultiTs = Number(__safeStorageGet(`guildMulti_${gid}_ts`) || 0) || 0;
 
       const freshGuildInfo = __isFreshCacheObject(guildInfoCache) ? guildInfoCache : null;
       const freshGoals = __isFreshCacheObject(goalsCache) ? goalsCache : null;
@@ -820,7 +828,7 @@
 
     function __readCachedGuildContextRaw() {
       try {
-        const raw = localStorage.getItem('guildCtx_cache_v1');
+        const raw = __safeStorageGet('guildCtx_cache_v1');
         return raw ? (JSON.parse(raw) || null) : null;
       } catch (_) {
         return null;
@@ -854,7 +862,7 @@
 
     function __readSelectedGuildSlot() {
       try {
-        const raw = localStorage.getItem(__guildSlotSelectionKey());
+        const raw = __safeStorageGet(__guildSlotSelectionKey());
         const n = Math.floor(Number(raw) || 1);
         return (n >= 1 && n <= 4) ? n : 1;
       } catch (_) {
@@ -864,7 +872,7 @@
 
     function __writeSelectedGuildSlot(slot) {
       try {
-        localStorage.setItem(__guildSlotSelectionKey(), String(Math.max(1, Math.min(4, Math.floor(Number(slot) || 1)))));
+        __safeStorageSet(__guildSlotSelectionKey(), String(Math.max(1, Math.min(4, Math.floor(Number(slot) || 1)))));
       } catch (_) {}
     }
 
@@ -1028,8 +1036,6 @@
       __renderGuildSlotDropdown();
       document.getElementById('guild-slot-dropdown')?.classList.add('hidden');
 
-      await __ensureMembersCollectionExists(nextSlot);
-
       const cached = __readMembersFromCache();
       if (cached && cached.length) {
         __setMembersCache(cached);
@@ -1040,6 +1046,8 @@
 
       membersCache = [];
       document.getElementById('member-count').textContent = `Carregando ${__currentGuildDisplayName(nextSlot)}...`;
+      await __ensureMembersCollectionExists(nextSlot);
+
       document.getElementById('members-list').innerHTML = `
         <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
           <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
@@ -1054,7 +1062,7 @@
 
     function __readMembersFromCache() {
       try {
-        const raw = localStorage.getItem(__membersLsKey());
+        const raw = __safeStorageGet(__membersLsKey());
         if (!raw) return null;
         const arr = JSON.parse(raw);
         return Array.isArray(arr) ? arr : null;
@@ -1065,7 +1073,7 @@
 
     function __writeMembersToCache(list) {
       try {
-        localStorage.setItem(__membersLsKey(), JSON.stringify(list || []));
+        __safeStorageSet(__membersLsKey(), JSON.stringify(list || []));
       } catch (_) {}
     }
     function __membersLsKeyBySlot(slot) {
@@ -1076,7 +1084,7 @@
 
     function __readMembersFromCacheBySlot(slot) {
       try {
-        const raw = localStorage.getItem(__membersLsKeyBySlot(slot));
+        const raw = __safeStorageGet(__membersLsKeyBySlot(slot));
         if (!raw) return null;
         const arr = JSON.parse(raw);
         return Array.isArray(arr) ? arr : null;
@@ -1087,7 +1095,7 @@
 
     function __writeMembersToCacheBySlot(slot, list) {
       try {
-        localStorage.setItem(__membersLsKeyBySlot(slot), JSON.stringify(list || []));
+        __safeStorageSet(__membersLsKeyBySlot(slot), JSON.stringify(list || []));
       } catch (_) {}
     }
 
