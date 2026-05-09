@@ -76,186 +76,263 @@
     </header>
 
     <!-- Hero Section -->
-    <section class="pt-6 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative overflow-hidden md:overflow-visible">
-        <!-- Decorative background element -->
-        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[500px] md:h-[500px] bg-green-400/10 blur-[100px] rounded-full pointer-events-none"></div>
-        
-       <div class="text-center relative z-10 max-w-3xl mx-auto">
-    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold uppercase tracking-[0.18em] mb-6 border border-green-200">
-        <i data-lucide="crosshair" class="w-3 h-3"></i>
-        Feito para guildas de Free Fire
-    </div>
-            
-            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 text-slate-900">
-                O fim da bagunça na sua <span class="text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-emerald-500">Guilda.</span>
-            </h1>
-            
-            <p class="text-lg md:text-xl text-slate-600 mb-10 max-w-2xl mx-auto leading-relaxed">
-                Abandone grupos confusos e planilhas improvisadas. Um painel centralizado para organizar membros, lines, eventos e hierarquia num só lugar.
-            </p>
-            
-            <div class="flex justify-center items-center">
-                <button id="open-auth-3" type="button" class="w-full sm:w-auto bg-gradient-to-r from-green-500 to-emerald-500 text-white px-8 py-4 rounded-md font-bold text-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg shadow-green-500/30">
-                    Começar Agora <i data-lucide="chevron-right" class="w-5 h-5"></i>
-                </button>
+    <section class="relative overflow-hidden bg-slate-50 px-4 py-14 sm:px-6 lg:px-8">
+        <div class="absolute left-1/2 top-16 h-[340px] w-[340px] -translate-x-1/2 rounded-full bg-emerald-300/20 blur-[90px] pointer-events-none"></div>
+        <div class="absolute -right-24 top-40 h-[260px] w-[260px] rounded-full bg-green-400/10 blur-[80px] pointer-events-none"></div>
+
+        <div class="relative z-10 mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.02fr_.98fr]">
+            <div class="text-center lg:text-left">
+                <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-green-200 bg-green-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-green-700">
+                    <i data-lucide="crosshair" class="h-3 w-3"></i>
+                    Feito para guildas de Free Fire
+                </div>
+
+                <h1 class="mx-auto max-w-4xl text-5xl font-extrabold tracking-tight text-slate-900 sm:text-6xl md:text-7xl lg:mx-0">
+                    O fim da bagunça na sua <span class="bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent">Guilda.</span>
+                </h1>
+
+                <p class="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-600 md:text-xl lg:mx-0">
+                    Abandone grupos confusos e planilhas improvisadas. Um painel centralizado para organizar membros, lines, eventos e hierarquia num só lugar.
+                </p>
+
+                <div class="mt-10 flex justify-center lg:justify-start">
+                    <button id="open-auth-3" type="button" class="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-500 px-8 py-4 text-lg font-black text-white shadow-lg shadow-green-500/30 transition hover:opacity-90 active:scale-[.98] sm:w-auto">
+                        Começar Agora <i data-lucide="chevron-right" class="h-5 w-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Preview inspirado no exemplo enviado -->
+            <div class="mx-auto w-full max-w-[430px] lg:max-w-[460px]" data-reveal>
+                <div class="relative">
+                    <div class="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-emerald-200/70 via-green-100/60 to-transparent blur-2xl"></div>
+                    <div class="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/10">
+                        <div class="mb-6 flex items-center justify-between border-b border-slate-100 pb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="grid h-11 w-11 place-items-center rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm">
+                                    <i data-lucide="menu" class="h-5 w-5 text-slate-800"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-black text-slate-900">Guilda • HUB</div>
+                                    <div class="text-xs font-semibold text-slate-400">Início</div>
+                                </div>
+                            </div>
+                            <button type="button" onclick="openAuth()" class="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-black text-white shadow-md shadow-emerald-500/20">
+                                Entrar
+                            </button>
+                        </div>
+
+                        <div class="space-y-6">
+                            <div>
+                                <div class="mb-3 flex items-end justify-between gap-4">
+                                    <div>
+                                        <h3 class="text-xl font-black text-slate-900">Recrutamentos</h3>
+                                        <div class="mt-1 h-1 w-9 rounded-full bg-emerald-500"></div>
+                                    </div>
+                                    <a href="eventos.html" class="text-sm font-black text-emerald-600 hover:text-emerald-700">ver mais &gt;&gt;&gt;</a>
+                                </div>
+                                <div class="grid grid-cols-3 gap-3">
+                                    <div class="flex h-28 flex-col justify-end rounded-[1.6rem] bg-emerald-500 p-3 text-white shadow-lg shadow-emerald-500/20">
+                                        <i data-lucide="user-plus" class="mb-auto h-5 w-5"></i>
+                                        <span class="text-[11px] font-black leading-tight">Divulgar guilda</span>
+                                    </div>
+                                    <div class="flex h-28 flex-col justify-end rounded-[1.6rem] bg-emerald-500 p-3 text-white shadow-lg shadow-emerald-500/20">
+                                        <i data-lucide="search" class="mb-auto h-5 w-5"></i>
+                                        <span class="text-[11px] font-black leading-tight">Achar players</span>
+                                    </div>
+                                    <div class="flex h-28 flex-col justify-end rounded-[1.6rem] bg-emerald-500 p-3 text-white shadow-lg shadow-emerald-500/20">
+                                        <i data-lucide="badge-check" class="mb-auto h-5 w-5"></i>
+                                        <span class="text-[11px] font-black leading-tight">Filtrar perfil</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="mb-3 flex items-end justify-between gap-4">
+                                    <div>
+                                        <h3 class="text-xl font-black text-slate-900">Lojinha</h3>
+                                        <div class="mt-1 h-1 w-9 rounded-full bg-emerald-500"></div>
+                                    </div>
+                                    <span class="text-sm font-black text-slate-400">em breve</span>
+                                </div>
+                                <div class="grid grid-cols-3 gap-3">
+                                    <div class="flex h-28 flex-col justify-end rounded-[1.6rem] bg-emerald-500 p-3 text-white opacity-90 shadow-lg shadow-emerald-500/20">
+                                        <i data-lucide="shopping-bag" class="mb-auto h-5 w-5"></i>
+                                        <span class="text-[11px] font-black leading-tight">Passes</span>
+                                    </div>
+                                    <div class="flex h-28 flex-col justify-end rounded-[1.6rem] bg-emerald-500 p-3 text-white opacity-90 shadow-lg shadow-emerald-500/20">
+                                        <i data-lucide="shield" class="mb-auto h-5 w-5"></i>
+                                        <span class="text-[11px] font-black leading-tight">Contas</span>
+                                    </div>
+                                    <div class="flex h-28 flex-col justify-end rounded-[1.6rem] bg-emerald-500 p-3 text-white opacity-90 shadow-lg shadow-emerald-500/20">
+                                        <i data-lucide="message-circle" class="mb-auto h-5 w-5"></i>
+                                        <span class="text-[11px] font-black leading-tight">Chat seguro</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="mb-4">
+                                    <h3 class="text-xl font-black text-slate-900">Guilda Hub</h3>
+                                    <div class="mt-1 h-1 w-9 rounded-full bg-emerald-500"></div>
+                                </div>
+                                <div class="grid grid-cols-3 gap-4 text-center">
+                                    <button type="button" onclick="openAuth()" class="group">
+                                        <span class="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition group-hover:scale-105">
+                                            <i data-lucide="shield-check" class="h-8 w-8"></i>
+                                        </span>
+                                        <span class="mt-2 block text-sm font-black text-slate-900">Guilda</span>
+                                    </button>
+                                    <button type="button" onclick="openAuth()" class="group">
+                                        <span class="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition group-hover:scale-105">
+                                            <i data-lucide="user-round" class="h-8 w-8"></i>
+                                        </span>
+                                        <span class="mt-2 block text-sm font-black text-slate-900">Perfil</span>
+                                    </button>
+                                    <div class="group">
+                                        <span class="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20">
+                                            <i data-lucide="shopping-cart" class="h-8 w-8"></i>
+                                        </span>
+                                        <span class="mt-2 block text-sm font-black text-slate-900">Lojinha</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
-    <!-- Visual Sections inspirado no layout de blocos do exemplo -->
-    <main class="bg-white pb-20">
-      <section class="px-4 sm:px-6 lg:px-8">
-        <div class="mx-auto w-full max-w-7xl space-y-14 sm:space-y-20">
-
-          <!-- Recrutamentos -->
-          <section data-reveal class="pt-2 sm:pt-8">
-            <div class="mb-6 flex items-end justify-between gap-4">
-              <div>
-                <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-slate-950">Recrutamentos</h2>
-                <div class="mt-2 h-1.5 w-12 rounded-full bg-emerald-500"></div>
-              </div>
-
-              <a href="eventos.html" class="shrink-0 text-sm sm:text-lg font-black tracking-wide text-emerald-600 hover:text-emerald-700">
-                ver mais &gt;&gt;&gt;
-              </a>
+    <!-- Home visual inspirado no exemplo -->
+    <main class="bg-white">
+        <section class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+            <div class="mb-10 max-w-3xl">
+                <p class="text-sm font-black uppercase tracking-[0.22em] text-emerald-600">início organizado</p>
+                <h2 class="mt-3 text-3xl font-black tracking-tight text-slate-900 md:text-4xl">A página inicial agora vira um hub de entrada.</h2>
+                <p class="mt-4 text-base leading-relaxed text-slate-600 md:text-lg">
+                    O visual fica mais parecido com um aplicativo: blocos grandes, leitura rápida no celular e atalhos claros para quem quer recrutar, administrar ou acompanhar novidades.
+                </p>
             </div>
 
-            <div class="grid grid-cols-3 gap-2.5 sm:gap-5 lg:gap-7">
-              <a href="eventos.html" class="group min-w-0">
-                <div class="aspect-square rounded-[1.6rem] sm:rounded-[2rem] bg-gradient-to-br from-emerald-500 to-green-600 p-3 sm:p-5 shadow-lg shadow-emerald-500/20 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-emerald-500/25">
-                  <div class="flex h-full flex-col justify-between text-white">
-                    <span class="w-fit rounded-full bg-white/18 px-2 py-1 text-[9px] sm:text-xs font-black uppercase tracking-wide backdrop-blur">aberto</span>
-                    <i data-lucide="user-plus" class="h-7 w-7 sm:h-10 sm:w-10"></i>
-                  </div>
-                </div>
-                <h3 class="mt-3 truncate text-sm sm:text-xl font-black text-slate-950">Entrar em guilda</h3>
-                <p class="mt-1 hidden sm:block text-sm leading-relaxed text-slate-500">Veja guildas procurando jogadores e entre em contato com mais praticidade.</p>
-              </a>
+            <div class="space-y-14">
+                <section data-reveal>
+                    <div class="mb-5 flex items-end justify-between gap-4">
+                        <div>
+                            <h3 class="text-2xl font-black text-slate-900">Recrutamentos</h3>
+                            <div class="mt-2 h-1 w-10 rounded-full bg-emerald-500"></div>
+                        </div>
+                        <a href="eventos.html" class="shrink-0 text-sm font-black text-emerald-600 hover:text-emerald-700">ver mais &gt;&gt;&gt;</a>
+                    </div>
 
-              <a href="eventos.html" class="group min-w-0">
-                <div class="aspect-square rounded-[1.6rem] sm:rounded-[2rem] bg-gradient-to-br from-emerald-500 to-green-600 p-3 sm:p-5 shadow-lg shadow-emerald-500/20 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-emerald-500/25">
-                  <div class="flex h-full flex-col justify-between text-white">
-                    <span class="w-fit rounded-full bg-white/18 px-2 py-1 text-[9px] sm:text-xs font-black uppercase tracking-wide backdrop-blur">rápido</span>
-                    <i data-lucide="users-round" class="h-7 w-7 sm:h-10 sm:w-10"></i>
-                  </div>
-                </div>
-                <h3 class="mt-3 truncate text-sm sm:text-xl font-black text-slate-950">Recrutar players</h3>
-                <p class="mt-1 hidden sm:block text-sm leading-relaxed text-slate-500">Divulgue sua guilda e encontre jogadores sem depender de prints perdidos.</p>
-              </a>
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <a href="eventos.html" class="group min-h-[210px] rounded-[2rem] bg-emerald-500 p-6 text-white shadow-lg shadow-emerald-500/20 transition hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/25">
+                            <div class="mb-10 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
+                                <i data-lucide="users-round" class="h-6 w-6"></i>
+                            </div>
+                            <h4 class="text-xl font-black">Encontrar membros</h4>
+                            <p class="mt-2 text-sm font-semibold leading-relaxed text-white/85">Recrutamento mais visível para atrair jogadores interessados em entrar para guildas.</p>
+                        </a>
 
-              <a href="eventos.html" class="group min-w-0">
-                <div class="aspect-square rounded-[1.6rem] sm:rounded-[2rem] bg-gradient-to-br from-emerald-500 to-green-600 p-3 sm:p-5 shadow-lg shadow-emerald-500/20 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-emerald-500/25">
-                  <div class="flex h-full flex-col justify-between text-white">
-                    <span class="w-fit rounded-full bg-white/18 px-2 py-1 text-[9px] sm:text-xs font-black uppercase tracking-wide backdrop-blur">organizado</span>
-                    <i data-lucide="clipboard-list" class="h-7 w-7 sm:h-10 sm:w-10"></i>
-                  </div>
-                </div>
-                <h3 class="mt-3 truncate text-sm sm:text-xl font-black text-slate-950">Eventos e testes</h3>
-                <p class="mt-1 hidden sm:block text-sm leading-relaxed text-slate-500">Centralize chamadas, testes e oportunidades em uma vitrine simples.</p>
-              </a>
+                        <a href="eventos.html" class="group min-h-[210px] rounded-[2rem] bg-emerald-500 p-6 text-white shadow-lg shadow-emerald-500/20 transition hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/25">
+                            <div class="mb-10 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
+                                <i data-lucide="megaphone" class="h-6 w-6"></i>
+                            </div>
+                            <h4 class="text-xl font-black">Divulgar guilda</h4>
+                            <p class="mt-2 text-sm font-semibold leading-relaxed text-white/85">Um caminho mais direto para líderes mostrarem vaga, requisitos e perfil da guilda.</p>
+                        </a>
+
+                        <a href="eventos.html" class="group min-h-[210px] rounded-[2rem] bg-emerald-500 p-6 text-white shadow-lg shadow-emerald-500/20 transition hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/25 sm:col-span-2 lg:col-span-1">
+                            <div class="mb-10 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
+                                <i data-lucide="filter" class="h-6 w-6"></i>
+                            </div>
+                            <h4 class="text-xl font-black">Requisitos claros</h4>
+                            <p class="mt-2 text-sm font-semibold leading-relaxed text-white/85">Evita conversa solta: o jogador já entende o básico antes de chamar a liderança.</p>
+                        </a>
+                    </div>
+                </section>
+
+                <section data-reveal>
+                    <div class="mb-5 flex items-end justify-between gap-4">
+                        <div>
+                            <h3 class="text-2xl font-black text-slate-900">Lojinha</h3>
+                            <div class="mt-2 h-1 w-10 rounded-full bg-emerald-500"></div>
+                        </div>
+                        <span class="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-slate-500">em breve</span>
+                    </div>
+
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div class="min-h-[210px] rounded-[2rem] border border-emerald-100 bg-gradient-to-br from-emerald-500 to-green-500 p-6 text-white shadow-lg shadow-emerald-500/20">
+                            <div class="mb-10 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
+                                <i data-lucide="badge-dollar-sign" class="h-6 w-6"></i>
+                            </div>
+                            <h4 class="text-xl font-black">Venda com menos atrito</h4>
+                            <p class="mt-2 text-sm font-semibold leading-relaxed text-white/85">Área preparada para produtos de Free Fire quando a estrutura permitir subir esse módulo.</p>
+                        </div>
+
+                        <div class="min-h-[210px] rounded-[2rem] border border-emerald-100 bg-gradient-to-br from-emerald-500 to-green-500 p-6 text-white shadow-lg shadow-emerald-500/20">
+                            <div class="mb-10 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
+                                <i data-lucide="lock-keyhole" class="h-6 w-6"></i>
+                            </div>
+                            <h4 class="text-xl font-black">Fluxo controlado</h4>
+                            <p class="mt-2 text-sm font-semibold leading-relaxed text-white/85">Espaço pensado para compra, chat e acompanhamento sem bagunçar o painel principal.</p>
+                        </div>
+
+                        <div class="min-h-[210px] rounded-[2rem] border border-emerald-100 bg-gradient-to-br from-emerald-500 to-green-500 p-6 text-white shadow-lg shadow-emerald-500/20 sm:col-span-2 lg:col-span-1">
+                            <div class="mb-10 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
+                                <i data-lucide="store" class="h-6 w-6"></i>
+                            </div>
+                            <h4 class="text-xl font-black">Visual já reservado</h4>
+                            <p class="mt-2 text-sm font-semibold leading-relaxed text-white/85">A seção aparece sem prometer funcionamento antes da integração real estar liberada.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section data-reveal>
+                    <div class="mb-6">
+                        <h3 class="text-2xl font-black text-slate-900">Guilda Hub</h3>
+                        <div class="mt-2 h-1 w-10 rounded-full bg-emerald-500"></div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4 text-center sm:max-w-2xl">
+                        <button type="button" onclick="openAuth()" class="group">
+                            <span class="mx-auto grid h-24 w-24 place-items-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition group-hover:scale-105 sm:h-28 sm:w-28">
+                                <i data-lucide="shield-check" class="h-9 w-9"></i>
+                            </span>
+                            <span class="mt-3 block text-base font-black text-slate-900">Guilda</span>
+                        </button>
+
+                        <button type="button" onclick="openAuth()" class="group">
+                            <span class="mx-auto grid h-24 w-24 place-items-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition group-hover:scale-105 sm:h-28 sm:w-28">
+                                <i data-lucide="user-round" class="h-9 w-9"></i>
+                            </span>
+                            <span class="mt-3 block text-base font-black text-slate-900">Perfil</span>
+                        </button>
+
+                        <div class="group">
+                            <span class="mx-auto grid h-24 w-24 place-items-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 sm:h-28 sm:w-28">
+                                <i data-lucide="shopping-bag" class="h-9 w-9"></i>
+                            </span>
+                            <span class="mt-3 block text-base font-black text-slate-900">Lojinha</span>
+                        </div>
+                    </div>
+                </section>
             </div>
-          </section>
+        </section>
 
-          <!-- Lojinha -->
-          <section id="lojinha" data-reveal>
-            <div class="mb-6 flex items-end justify-between gap-4">
-              <div>
-                <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-slate-950">Lojinha</h2>
-                <div class="mt-2 h-1.5 w-12 rounded-full bg-emerald-500"></div>
-              </div>
-
-              <a href="#lojinha" class="shrink-0 text-sm sm:text-lg font-black tracking-wide text-emerald-600 hover:text-emerald-700">
-                em breve &gt;&gt;&gt;
-              </a>
+        <!-- CTA Section -->
+        <section class="relative overflow-hidden bg-slate-50 px-4 py-20 sm:px-6 lg:px-8">
+            <div class="absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-300/20 blur-[90px] pointer-events-none"></div>
+            <div class="relative z-10 mx-auto max-w-4xl text-center">
+                <h2 class="text-4xl font-black tracking-tight text-slate-900 md:text-5xl">Pronto para elevar o nível da sua Guilda?</h2>
+                <p class="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-slate-600">
+                    Crie sua conta, organize os membros e pare de depender de prints, grupos perdidos e planilhas soltas.
+                </p>
+                <button type="button" onclick="openAuth()" class="mt-10 rounded-2xl bg-slate-900 px-10 py-4 text-lg font-extrabold text-white shadow-xl shadow-slate-900/10 transition hover:bg-slate-800 active:scale-[.98]">
+                    Criar Minha Guilda Grátis
+                </button>
             </div>
-
-            <div class="grid grid-cols-3 gap-2.5 sm:gap-5 lg:gap-7">
-              <div class="group min-w-0">
-                <div class="aspect-square rounded-[1.6rem] sm:rounded-[2rem] bg-gradient-to-br from-emerald-500 to-green-600 p-3 sm:p-5 shadow-lg shadow-emerald-500/20 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-emerald-500/25">
-                  <div class="flex h-full flex-col justify-between text-white">
-                    <span class="w-fit rounded-full bg-white/18 px-2 py-1 text-[9px] sm:text-xs font-black uppercase tracking-wide backdrop-blur">ff</span>
-                    <i data-lucide="shopping-bag" class="h-7 w-7 sm:h-10 sm:w-10"></i>
-                  </div>
-                </div>
-                <h3 class="mt-3 truncate text-sm sm:text-xl font-black text-slate-950">Itens FF</h3>
-                <p class="mt-1 hidden sm:block text-sm leading-relaxed text-slate-500">Espaço pensado para vendas relacionadas ao Free Fire dentro do ecossistema.</p>
-              </div>
-
-              <div class="group min-w-0">
-                <div class="aspect-square rounded-[1.6rem] sm:rounded-[2rem] bg-gradient-to-br from-emerald-500 to-green-600 p-3 sm:p-5 shadow-lg shadow-emerald-500/20 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-emerald-500/25">
-                  <div class="flex h-full flex-col justify-between text-white">
-                    <span class="w-fit rounded-full bg-white/18 px-2 py-1 text-[9px] sm:text-xs font-black uppercase tracking-wide backdrop-blur">seguro</span>
-                    <i data-lucide="shield-check" class="h-7 w-7 sm:h-10 sm:w-10"></i>
-                  </div>
-                </div>
-                <h3 class="mt-3 truncate text-sm sm:text-xl font-black text-slate-950">Vendedores</h3>
-                <p class="mt-1 hidden sm:block text-sm leading-relaxed text-slate-500">Cadastro e verificação para deixar o processo mais limpo quando a lojinha for liberada.</p>
-              </div>
-
-              <div class="group min-w-0">
-                <div class="aspect-square rounded-[1.6rem] sm:rounded-[2rem] bg-gradient-to-br from-emerald-500 to-green-600 p-3 sm:p-5 shadow-lg shadow-emerald-500/20 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-emerald-500/25">
-                  <div class="flex h-full flex-col justify-between text-white">
-                    <span class="w-fit rounded-full bg-white/18 px-2 py-1 text-[9px] sm:text-xs font-black uppercase tracking-wide backdrop-blur">hub</span>
-                    <i data-lucide="receipt" class="h-7 w-7 sm:h-10 sm:w-10"></i>
-                  </div>
-                </div>
-                <h3 class="mt-3 truncate text-sm sm:text-xl font-black text-slate-950">Pedidos</h3>
-                <p class="mt-1 hidden sm:block text-sm leading-relaxed text-slate-500">Pedidos, chat e suporte centralizados, sem bagunçar o foco principal do Guilda HUB.</p>
-              </div>
-            </div>
-          </section>
-
-          <!-- Guilda Hub -->
-          <section data-reveal>
-            <div class="mb-7">
-              <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-slate-950">Guilda Hub</h2>
-              <div class="mt-2 h-1.5 w-12 rounded-full bg-emerald-500"></div>
-            </div>
-
-            <div class="grid max-w-2xl grid-cols-3 gap-5 sm:gap-8">
-              <button type="button" onclick="openAuth()" class="group min-w-0 text-center">
-                <span class="mx-auto flex aspect-square w-full max-w-[150px] items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/20 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-emerald-500/25">
-                  <i data-lucide="shield" class="h-8 w-8 sm:h-11 sm:w-11"></i>
-                </span>
-                <span class="mt-4 block truncate text-base sm:text-xl font-black text-slate-950">Guilda</span>
-              </button>
-
-              <button type="button" onclick="openAuth()" class="group min-w-0 text-center">
-                <span class="mx-auto flex aspect-square w-full max-w-[150px] items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/20 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-emerald-500/25">
-                  <i data-lucide="user-round" class="h-8 w-8 sm:h-11 sm:w-11"></i>
-                </span>
-                <span class="mt-4 block truncate text-base sm:text-xl font-black text-slate-950">Perfil</span>
-              </button>
-
-              <a href="#lojinha" class="group min-w-0 text-center">
-                <span class="mx-auto flex aspect-square w-full max-w-[150px] items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/20 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-emerald-500/25">
-                  <i data-lucide="store" class="h-8 w-8 sm:h-11 sm:w-11"></i>
-                </span>
-                <span class="mt-4 block truncate text-base sm:text-xl font-black text-slate-950">Lojinha</span>
-              </a>
-            </div>
-          </section>
-
-          <!-- CTA mantendo o fluxo original -->
-          <section data-reveal class="rounded-[2rem] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-slate-50 px-5 py-8 text-center shadow-xl shadow-emerald-500/5 sm:px-10 sm:py-12">
-            <div class="mx-auto max-w-3xl">
-              <span class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-700 ring-1 ring-emerald-100">
-                <i data-lucide="zap" class="h-3.5 w-3.5"></i>
-                painel gratuito para começar
-              </span>
-              <h2 class="mt-5 text-3xl sm:text-4xl font-black tracking-tight text-slate-950">Organize sua guilda sem depender de print, grupo e planilha solta.</h2>
-              <p class="mx-auto mt-4 max-w-2xl text-base sm:text-lg leading-relaxed text-slate-600">
-                Crie sua conta, cadastre sua guilda e use o painel para deixar membros, metas, recrutamento e administração em um lugar só.
-              </p>
-              <button type="button" onclick="openAuth()" class="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-8 py-4 text-base font-black text-white shadow-xl shadow-slate-900/15 transition hover:bg-slate-800 sm:w-auto">
-                Criar Minha Guilda Grátis
-                <i data-lucide="chevron-right" class="h-5 w-5"></i>
-              </button>
-            </div>
-          </section>
-
-        </div>
-      </section>
+        </section>
     </main>
 
     <!-- Footer -->
