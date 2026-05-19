@@ -26,6 +26,47 @@ const recDb = getFirestore(secondaryApp);
 setupSidebar();
 initIcons();
 
+const PARTNER_REF_KEY = 'ghub_partner_ref';
+function sanitizePartnerRef(value) {
+  return String(value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+}
+function safeStorageGet(key) {
+  try { const value = localStorage.getItem(key); if (value) return value; } catch (_) {}
+  try { return sessionStorage.getItem(key) || ''; } catch (_) { return ''; }
+}
+function safeStorageSet(key, value) {
+  const clean = String(value || '').trim();
+  if (!clean) return;
+  try { localStorage.setItem(key, clean); } catch (_) {}
+  try { sessionStorage.setItem(key, clean); } catch (_) {}
+}
+function getStoredPartnerRef() {
+  return sanitizePartnerRef(safeStorageGet(PARTNER_REF_KEY));
+}
+function capturePartnerRefFromUrl() {
+  try {
+    const ref = sanitizePartnerRef(new URLSearchParams(window.location.search || '').get('ref'));
+    if (ref) safeStorageSet(PARTNER_REF_KEY, ref);
+  } catch (_) {}
+}
+function decorateInternalLinksWithPartnerRef() {
+  try {
+    const ref = getStoredPartnerRef();
+    if (!ref) return;
+    document.querySelectorAll('a[href]').forEach((link) => {
+      const rawHref = String(link.getAttribute('href') || '').trim();
+      if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) return;
+      if (/^https?:\/\//i.test(rawHref) && !rawHref.startsWith(window.location.origin)) return;
+      const url = new URL(rawHref, window.location.origin);
+      if (url.origin !== window.location.origin) return;
+      if (!url.searchParams.get('ref')) url.searchParams.set('ref', ref);
+      link.setAttribute('href', `${url.pathname}${url.search}${url.hash}`);
+    });
+  } catch (_) {}
+}
+capturePartnerRefFromUrl();
+decorateInternalLinksWithPartnerRef();
+
 const qs = (id) => document.getElementById(id);
 const normalizeTimestamp = (value) => {
   if (!value) return null;
@@ -736,6 +777,8 @@ function bootMarketplaceMode() {
   }
   function syncUrl(){
     const sp = new URLSearchParams(window.location.search);
+    const storedRef = getStoredPartnerRef();
+    if (storedRef && !sp.get('ref')) sp.set('ref', storedRef);
     const q = String(els.q.value || '').trim();
     const f = String(els.filter.value || 'all').trim();
     q ? sp.set('q', q) : sp.delete('q');

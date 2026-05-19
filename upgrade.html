@@ -14,11 +14,9 @@
 <body class="bg-gray-50/80">
 
   <div class="flex min-h-screen">
-    <!-- Menu Mobile Overlay -->
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
 
-    <!-- Sidebar -->
-   <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
+    <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
   <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
     <div class="flex items-center gap-3">
       <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
@@ -92,7 +90,6 @@
   </div>
 </aside>
 
-<!-- Main -->
 <main class="flex-1 min-w-0 lg:ml-72">
       <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-gray-200">
         <div class="flex items-center px-4 lg:px-8 py-4 gap-3">
@@ -194,7 +191,7 @@
   </div>
 
 <script type="module">
-  import { checkAuth, setupSidebar, initIcons, logout, getVipTier, showToast, getGuildContext, applyVipUiAndGates, auth } from './logic.js';
+  import { checkAuth, setupSidebar, initIcons, logout, getVipTier, showToast, getGuildContext, applyVipUiAndGates, auth } from './logic.js?v=upgrade-admin-20260517';
 
   // Ícones do sidebar são inicializados na hora!
   setupSidebar();
@@ -241,27 +238,27 @@
       {
         id: 'plus',
         name: 'PLUS',
-        price: 5.99,
-        priceLabel: 'R$5,99 / mês',
+        price: 6.99,
+        priceLabel: 'R$6,99 / mês',
         access: ['Dashboard', 'Membros', 'Configuração de tag', 'Administradores + Líderes', 'Lines', 'Estatísticas'],
         noAccess: ['Recrutamento (BETA)', 'Multi-guilda (BETA)', 'Eventos/Camp (EM BREVE)']
       },
       {
         id: 'pro',
         name: 'PRO',
-        price: 8.99,
-        priceLabel: 'R$8,99 / mês',
+        price: 9.99,
+        priceLabel: 'R$9,99 / mês',
         access: ['Dashboard', 'Membros', 'Configuração de tag', 'Administradores + Líderes', 'Lines', 'Estatísticas', 'Recrutamento (BETA)', 'Multi-guilda (BETA)', 'Eventos/Camp (EM BREVE)'],
         noAccess: []
       },
       {
         id: 'business',
         name: 'BUSINESS',
-        price: 89.90,
-        priceLabel: 'R$89,90 / ano',
+        price: 99.90,
+        priceLabel: 'R$99,90 / ano',
         access: ['Dashboard', 'Membros', 'Configuração de tag', 'Administradores + Líderes', 'Lines', 'Estatísticas', 'Recrutamento (BETA)', 'Multi-guilda (BETA)', 'Eventos/Camp (EM BREVE)'],
         noAccess: [], 
-        note: 'Equivalente a ~R$7,49/mês'
+        note: '+ 2 meses grátis!'
       },
       {
         id: 'vitalicio',
@@ -279,8 +276,73 @@
   }
 
   // --- Pagamento Mercado Pago (PIX automático) ------------------------------
+  
+  // NOVA FUNÇÃO: Modal de Identificação (Passo 1)
   window.requestUpgrade = (planId) => {
-    openPaymentModal(planId);
+    const root = ensureModalRoot();
+    
+    root.innerHTML = modalShell(`
+      <div class="p-6">
+       <div class="flex items-center gap-3 mb-4">
+          
+          <div class="flex items-center gap-3">
+            <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
+          </div>
+          <div>
+            <h3 class="text-lg font-extrabold text-gray-900">Identificação</h3>
+            <p class="text-xs text-gray-500">Etapa de segurança anti-fraude</p>
+          </div>
+          <button class="ml-auto p-2 rounded-lg hover:bg-gray-100 text-gray-400" data-close="1">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <p class="text-sm text-gray-600 mb-6 leading-relaxed">
+          Para sua segurança e conformidade com o sistema de pagamentos, precisamos do seu <b>CPF</b> para processar a geração do seu código PIX.
+        </p>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Digite seu CPF</label>
+            <input 
+              type="text" 
+              id="input-cpf-field" 
+              placeholder="000.000.000-00" 
+              class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium"
+            >
+          </div>
+          
+          <button id="btn-confirm-cpf" class="w-full py-4 rounded-xl bg-emerald-600 text-white font-extrabold text-sm hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all flex items-center justify-center gap-2">
+            Gerar Código PIX <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    `);
+
+    initIcons();
+
+    const input = document.getElementById('input-cpf-field');
+    const btn = document.getElementById('btn-confirm-cpf');
+
+    // Máscara simples de CPF
+    input.addEventListener('input', (e) => {
+      let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+      if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+      else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{3})/, "$1.$2.$3");
+      else if (v.length > 3) v = v.replace(/(\d{3})(\d{3})/, "$1.$2");
+      e.target.value = v;
+    });
+
+    btn.onclick = () => {
+      const cpf = input.value.replace(/\D/g, '');
+      if (cpf.length !== 11) {
+        showToast('error', 'CPF inválido. Digite os 11 números.');
+        return;
+      }
+      openPaymentModal(planId, cpf);
+    };
+
+    root.querySelectorAll('[data-close="1"]').forEach(el => el.addEventListener('click', closeModals));
   };
 
   function statusLabelFromMp(status){
@@ -301,11 +363,10 @@
     return 'bg-gray-100 text-gray-700 ring-gray-200';
   }
 
-  async function createPixPayment(planId){
+  async function createPixPayment(planId, cpf){
     const user = auth.currentUser;
     if (!user) throw new Error('Você precisa estar logado.');
 
-    // Pega o contexto atual (guilda) do cache/Firestore via logic.js
     const ctx = await getGuildContext();
     const guildId = String(ctx?.guildId || '');
     const email = String(user.email || '');
@@ -323,8 +384,7 @@
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${idToken}`
       },
-      // uid/email vêm do token (mais seguro). Enviamos só o necessário.
-      body: JSON.stringify({ plano: planId, guildId })
+      body: JSON.stringify({ plano: planId, guildId, cpf })
     });
 
     const data = await res.json().catch(() => ({}));
@@ -356,9 +416,9 @@
   function modalShell(innerHtml) {
     return `
       <div class="fixed inset-0 z-[9999]">
-        <div class="absolute inset-0 bg-black/40" data-close="1"></div>
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-all" data-close="1"></div>
         <div class="absolute inset-0 flex items-end sm:items-center justify-center p-4">
-          <div class="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+          <div class="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in duration-200">
             ${innerHtml}
           </div>
         </div>
@@ -465,7 +525,7 @@
   }
 
 
-  function openPaymentModal(planId){
+  function openPaymentModal(planId, cpf){
     const plan = (planId || '').toString().toLowerCase().trim();
     if (!['plus','pro','business','vitalicio'].includes(plan)) {
       showToast('error', 'Plano inválido.');
@@ -563,7 +623,7 @@
 
     (async () => {
       try {
-        const data = await createPixPayment(plan);
+        const data = await createPixPayment(plan, cpf);
         currentPaymentId = data.paymentId;
 
         const ta = root.querySelector('#pix-code');

@@ -3,12 +3,17 @@ const admin = require('firebase-admin');
 function getServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) throw new Error('Missing FIREBASE_SERVICE_ACCOUNT');
-  return JSON.parse(raw);
+  const sa = JSON.parse(raw);
+  if (sa.private_key && typeof sa.private_key === 'string') {
+    sa.private_key = sa.private_key.replace(/\\n/g, '\n');
+  }
+  return sa;
 }
 
 function initAdmin() {
-  if (admin.apps.length) return;
-  admin.initializeApp({ credential: admin.credential.cert(getServiceAccount()) });
+  const existingDefault = admin.apps.find((app) => app.name === '[DEFAULT]');
+  if (existingDefault) return existingDefault;
+  return admin.initializeApp({ credential: admin.credential.cert(getServiceAccount()) });
 }
 
 function toLabel(mpStatus){
@@ -51,6 +56,125 @@ function getExpiresAtMsForPlan(plan){
   if (p === 'plus') return Date.now() + (30 * 24 * 60 * 60 * 1000);
 
   return Date.now() + (30 * 24 * 60 * 60 * 1000);
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function normalizePlan(plan) {
+  const p = String(plan || '').trim().toLowerCase();
+  if (p.includes('vital') || p.includes('life')) return 'vitalicio';
+  if (p.includes('business') || p.includes('empresa') || p.includes('anual')) return 'business';
+  if (p.includes('pro')) return 'pro';
+  if (p.includes('plus')) return 'plus';
+  return p;
+}
+
+function commissionPercentForPlan(plan) {
+  const p = normalizePlan(plan);
+  if (p === 'plus' || p === 'pro') return 20;
+  if (p === 'business') return 10;
+  return null;
+}
+
+function commissionForPlan(plan, amount) {
+  const p = normalizePlan(plan);
+  if (p === 'vitalicio') return 40;
+
+  const percent = commissionPercentForPlan(p);
+  if (percent) return roundMoney(Number(amount || 0) * (percent / 100));
+
+  return 0;
+}
+
+async function creditPartnerCommissionIfNeeded({ db, uid, guildId, paymentId, plan, amount }) {
+  if (!guildId || !paymentId || !plan) return;
+
+  const commission = commissionForPlan(plan, amount);
+  if (!Number.isFinite(commission) || commission <= 0) return;
+
+  const guildCfgRef = db.collection('configGuilda').doc(String(guildId));
+
+  await db.runTransaction(async (tx) => {
+    const guildSnap = await tx.get(guildCfgRef);
+    if (!guildSnap.exists) return;
+
+    const guildCfg = guildSnap.data() || {};
+    const partnerId = String(guildCfg.indicadoPorParceiro || guildCfg.parceiroRef || '').trim();
+    if (!partnerId) return;
+
+    // Comissão de indicação é única por guilda, mesmo que ela pague de novo depois.
+    if (guildCfg.comissaoParceiroUsada === true || guildCfg.comissaoParceiroCreditada === true) return;
+
+    const partnerRef = db.collection('monetize').doc(partnerId);
+    const commissionRef = partnerRef.collection('comissoes').doc(String(guildId));
+    const indicatedRef = partnerRef.collection('indicados').doc(String(guildId));
+
+    const [partnerSnap, commissionSnap] = await Promise.all([
+      tx.get(partnerRef),
+      tx.get(commissionRef),
+    ]);
+
+    if (!partnerSnap.exists || commissionSnap.exists) return;
+
+    const partner = partnerSnap.data() || {};
+    if (partner.parceiro !== true) return;
+
+    const nowMs = Date.now();
+    const normalizedPlan = normalizePlan(plan);
+    const buyerUid = String(uid || guildCfg.ownerUid || '').trim();
+    const buyerGameId = String(guildCfg.referralOwnerGameId || '').trim();
+
+    tx.set(commissionRef, {
+      paymentId: String(paymentId),
+      guildId: String(guildId),
+      compradorUid: buyerUid,
+      compradorUserId: buyerGameId,
+      plano: normalizedPlan,
+      valorPago: roundMoney(amount),
+      comissao: commission,
+      percentual: commissionPercentForPlan(normalizedPlan),
+      tipo: normalizedPlan === 'vitalicio' ? 'fixa' : 'percentual',
+      status: 'aprovada',
+      regra: 'primeiro_pagamento_da_guilda_indicada',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAtMs: nowMs,
+    }, { merge: true });
+
+    tx.set(indicatedRef, {
+      uid: buyerUid,
+      gameId: buyerGameId,
+      guildId: String(guildId),
+      status: 'pagante',
+      comissaoCreditada: true,
+      primeiroPlanoPago: normalizedPlan,
+      primeiroPagamentoId: String(paymentId),
+      primeiraComissao: commission,
+      atualizadoEmMs: nowMs,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    tx.set(guildCfgRef, {
+      comissaoParceiroUsada: true,
+      comissaoParceiroCreditada: true,
+      comissaoParceiroId: partnerId,
+      comissaoParceiroPagamentoId: String(paymentId),
+      comissaoParceiroPlano: normalizedPlan,
+      comissaoParceiroValor: commission,
+      comissaoParceiroEmMs: nowMs,
+      comissaoParceiroEm: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAtMs: nowMs,
+    }, { merge: true });
+
+    tx.set(partnerRef, {
+      saldoAtual: admin.firestore.FieldValue.increment(commission),
+      totalPagantes: admin.firestore.FieldValue.increment(1),
+      totalComissaoGerada: admin.firestore.FieldValue.increment(commission),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAtMs: nowMs,
+    }, { merge: true });
+  });
 }
 
 module.exports = async (req, res) => {
@@ -134,6 +258,15 @@ module.exports = async (req, res) => {
           updatedAtMs: Date.now(),
         }, { merge: true });
       }
+
+      await creditPartnerCommissionIfNeeded({
+        db: admin.firestore(),
+        uid,
+        guildId,
+        paymentId: String(paymentId),
+        plan,
+        amount: Number(mpData.transaction_amount || mpData.transaction_details?.total_paid_amount || 0),
+      });
     }
 
     return res.status(200).send('ok');

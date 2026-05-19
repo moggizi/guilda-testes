@@ -39,6 +39,196 @@ const db = getFirestore(app);
 const qs = (id) => document.getElementById(id);
 const cleanEmail = (email) => String(email || '').trim().toLowerCase();
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
+
+function validateSignupEmailDomain(email) {
+  const clean = cleanEmail(email);
+  return /^[a-z0-9._%+-]+@(gmail\.com|yahoo\.com)$/.test(clean);
+}
+
+function validateSignupPasswordValue(password) {
+  const pass = String(password || '');
+  if (pass.length < 6) return 'A senha precisa ter pelo menos 6 caracteres.';
+  if (/\s/.test(pass)) return 'A senha não pode conter espaços.';
+  if (!/^[A-Za-z0-9?.!#@_]+$/.test(pass)) {
+    return 'A senha só pode usar letras, números e estes caracteres: ? . ! # @ _';
+  }
+  return '';
+}
+
+function normalizeSignupPasswordInput(value) {
+  return String(value || '').replace(/\s+/g, '').replace(/[^A-Za-z0-9?.!#@_]/g, '');
+}
+const PARTNER_REF_KEY = 'ghub_partner_ref';
+
+function safeStorageGet(key) {
+  try {
+    const value = localStorage.getItem(key);
+    if (value) return value;
+  } catch (_) {}
+
+  try {
+    return sessionStorage.getItem(key) || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function safeStorageSet(key, value) {
+  const clean = String(value || '').trim();
+  if (!clean) return;
+
+  try { localStorage.setItem(key, clean); } catch (_) {}
+  try { sessionStorage.setItem(key, clean); } catch (_) {}
+}
+
+function safeStorageRemove(key) {
+  try { localStorage.removeItem(key); } catch (_) {}
+  try { sessionStorage.removeItem(key); } catch (_) {}
+}
+
+function sanitizePartnerRef(value) {
+  return String(value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+}
+
+function getStoredPartnerRef() {
+  return sanitizePartnerRef(safeStorageGet(PARTNER_REF_KEY));
+}
+
+function capturePartnerRefFromUrl() {
+  try {
+    const ref = sanitizePartnerRef(new URLSearchParams(window.location.search || '').get('ref'));
+    if (ref) safeStorageSet(PARTNER_REF_KEY, ref);
+  } catch (_) {}
+}
+
+function decorateInternalLinksWithPartnerRef() {
+  try {
+    const ref = getStoredPartnerRef();
+    if (!ref) return;
+
+    document.querySelectorAll('a[href]').forEach((link) => {
+      const rawHref = String(link.getAttribute('href') || '').trim();
+      if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) return;
+      if (/^https?:\/\//i.test(rawHref) && !rawHref.startsWith(window.location.origin)) return;
+      if (rawHref.includes('/api/') || rawHref.match(/\.(png|jpg|jpeg|webp|gif|svg|css|js)(\?|$)/i)) return;
+
+      const url = new URL(rawHref, window.location.origin);
+      if (url.origin !== window.location.origin) return;
+      if (!url.searchParams.get('ref')) url.searchParams.set('ref', ref);
+
+      link.setAttribute('href', `${url.pathname}${url.search}${url.hash}`);
+    });
+  } catch (_) {}
+}
+
+function withStoredPartnerRef(urlValue) {
+  try {
+    const ref = getStoredPartnerRef();
+    const raw = String(urlValue || '').trim();
+    if (!raw || !ref) return raw;
+    const url = new URL(raw, window.location.origin);
+    if (url.origin !== window.location.origin) return raw;
+    if (!url.searchParams.get('ref')) url.searchParams.set('ref', ref);
+    return `${url.pathname.replace(/^\//, '')}${url.search}${url.hash}`;
+  } catch (_) {
+    return String(urlValue || '');
+  }
+}
+
+function getPartnerRefForOwnerSignup(user, gameId) {
+  const ref = getStoredPartnerRef();
+  const uid = String(user?.uid || '').trim();
+
+  if (!ref || !uid || !gameId) return '';
+  if (ref === uid || ref === gameId) return '';
+  return ref;
+}
+
+function buildConfigGuildReferralPayload(ref, user, gameId) {
+  const uid = String(user?.uid || '').trim();
+  if (!ref || !uid || !gameId) return {};
+
+  const nowMs = Date.now();
+  return {
+    indicadoPorParceiro: ref,
+    parceiroRef: ref,
+    indicadoPorEmMs: nowMs,
+    indicadoPorEm: serverTimestamp(),
+    referralGuildUid: uid,
+    referralOwnerUid: uid,
+    referralOwnerGameId: gameId,
+    comissaoParceiroUsada: false,
+    comissaoParceiroCreditada: false
+  };
+}
+
+async function bindPartnerReferralAfterSignup(user, gameId, guildId, explicitRef = '') {
+  const ref = sanitizePartnerRef(explicitRef) || getStoredPartnerRef();
+  if (!user || !gameId || !guildId || !ref) return { ok: true, skipped: true };
+
+  const idToken = await user.getIdToken(true);
+  const res = await fetch('/api/monetize_bind_referral', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${idToken}`
+    },
+    body: JSON.stringify({ ref, gameId, guildId })
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.ok !== true || (data?.linked !== true && data?.alreadyLinked !== true)) {
+    const err = new Error(data?.error || 'referral-bind-failed');
+    err.code = 'referral-bind-failed';
+    err.details = data;
+    throw err;
+  }
+
+  // Não removemos o ref do storage: isso preserva o rastreio se a pessoa for ao dashboard
+  // e depois voltar para a tela inicial durante o mesmo fluxo.
+  return data;
+}
+
+async function cleanupFailedSignup(user, { gameId = '', guildId = '', ref = '', reason = 'signup-failed' } = {}) {
+  try {
+    if (!user) return;
+    const idToken = await user.getIdToken(true);
+    await fetch('/api/signup_cleanup_failed', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ gameId, guildId: guildId || user.uid, ref, reason })
+    });
+  } catch (error) {
+    console.warn('[signup-cleanup]', error);
+  }
+}
+
+async function verifySignupCreation(user, { gameId = '', isOwner = false } = {}) {
+  const uid = String(user?.uid || '').trim();
+  const gid = String(gameId || '').trim();
+  if (!uid || !gid) throw new Error('signup-incomplete');
+
+  const userSnap = await getDoc(doc(db, 'users', gid));
+  if (!userSnap.exists()) throw new Error('signup-incomplete');
+
+  if (isOwner) {
+    const [guildSnap, cfgSnap] = await Promise.all([
+      getDoc(doc(db, 'guildas', uid)),
+      getDoc(doc(db, 'configGuilda', uid))
+    ]);
+    if (!guildSnap.exists() || !cfgSnap.exists()) throw new Error('signup-incomplete');
+
+    const cfg = cfgSnap.data() || {};
+    if (String(cfg.ownerUid || '').trim() !== uid) throw new Error('signup-incomplete');
+  }
+
+  return true;
+}
+
+capturePartnerRefFromUrl();
 const palavrasBloqueioDireto = [
   "arrombado",
   "arrombada",
@@ -329,6 +519,8 @@ async function createOwnerAccount(user, { gameId, guildName, nick }) {
   const userRef = await ensureGameIdAvailable(gameId);
   const promoDays = await getSignupPromoDays();
   const promoExpiresAtMs = promoDays > 0 ? Date.now() + (promoDays * 86400000) : null;
+  const partnerRef = getPartnerRefForOwnerSignup(user, gameId);
+  const partnerReferralPayload = buildConfigGuildReferralPayload(partnerRef, user, gameId);
 
   const batch = writeBatch(db);
 
@@ -369,12 +561,13 @@ async function createOwnerAccount(user, { gameId, guildName, nick }) {
     ...(promoDays > 0 ? {
       permissoesAtivas: true
     } : {}),
+    ...partnerReferralPayload,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   }, { merge: true });
 
   await batch.commit();
-  return { redirectTo: 'dashboard.html?login=1', promoDays };
+  return { redirectTo: 'dashboard.html?login=1', promoDays, partnerRef };
 }
 
 async function createPlayerAccount(user, { gameId, nick }) {
@@ -479,7 +672,7 @@ async function resolveLoginRedirect(user) {
     if (ownerCfg.exists()) return 'dashboard.html?login=1';
   } catch (_) {}
 
-  return 'dashboard.html?login=1';
+  throw new Error('incomplete-account');
 }
 
 function setupAuthForms() {
@@ -521,7 +714,7 @@ function setupAuthForms() {
       const cred = await signInWithEmailAndPassword(auth, email, pass);
       const redirectTo = await resolveLoginRedirect(cred.user);
       try { sessionStorage.setItem('hub_do_preload', '1'); } catch (_) {}
-      window.location.href = redirectTo;
+      window.location.href = withStoredPartnerRef(redirectTo);
     } catch (err) {
       console.error(err);
       let msg = 'Erro ao entrar.';
@@ -554,6 +747,15 @@ function setupAuthForms() {
     e.target.value = normalizeDigits(e.target.value);
   });
 
+  qs('signup-email')?.addEventListener('input', (e) => {
+    e.target.value = cleanEmail(e.target.value);
+  });
+
+  qs('signup-password')?.addEventListener('input', (e) => {
+    const clean = normalizeSignupPasswordInput(e.target.value);
+    if (e.target.value !== clean) e.target.value = clean;
+  });
+
   signupForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -564,6 +766,17 @@ function setupAuthForms() {
     const email = String(qs('signup-email')?.value || '').trim();
     const pass = String(qs('signup-password')?.value || '');
     const btn = qs('btn-signup');
+
+    if (!validateSignupEmailDomain(email)) {
+      showToast('error', 'Use apenas e-mail @gmail.com ou @yahoo.com.');
+      return;
+    }
+
+    const passwordError = validateSignupPasswordValue(pass);
+    if (passwordError) {
+      showToast('error', passwordError);
+      return;
+    }
 
     if (!gameId) {
       showToast('error', 'Digite o ID do usuário/personagem. Não use o ID da guilda.');
@@ -590,13 +803,27 @@ function setupAuthForms() {
 
     setButtonLoading(btn, true, 'Criar conta');
 
+    let createdUser = null;
+    let createdResult = null;
+    let createdRef = '';
+
     try {
       await ensureSignupAvailable(gameId, email);
 
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      createdUser = cred.user;
+
       const result = isOwner
         ? await createOwnerAccount(cred.user, { gameId, guildName, nick })
         : await createPlayerAccount(cred.user, { gameId, nick });
+      createdResult = result;
+      createdRef = result?.partnerRef || getStoredPartnerRef();
+
+      await verifySignupCreation(cred.user, { gameId, isOwner });
+
+      if (isOwner && createdRef) {
+        await bindPartnerReferralAfterSignup(cred.user, gameId, cred.user.uid, createdRef);
+      }
 
       if ((result?.promoDays || 0) > 0) {
         try {
@@ -606,18 +833,30 @@ function setupAuthForms() {
 
       showToast('success', 'Conta criada com sucesso!');
       try { sessionStorage.setItem('hub_do_preload', '1'); } catch (_) {}
-      window.location.href = result.redirectTo;
+      window.location.href = withStoredPartnerRef(result.redirectTo);
     } catch (err) {
       console.error(err);
+
+      if (createdUser) {
+        await cleanupFailedSignup(createdUser, {
+          gameId,
+          guildId: createdUser.uid,
+          ref: createdRef,
+          reason: String(err?.code || err?.message || 'signup-failed')
+        });
+      }
+
       try { await signOut(auth); } catch (_) {}
 
-      let msg = 'Não foi possível criar a conta.';
+      let msg = 'Não foi possível criar a conta. Tente novamente com os dados corretos.';
       if (err?.message === 'game-id-in-use') msg = 'Esse ID de usuário já está vinculado a outra conta.';
       if (err?.message === 'email-profile-in-use') msg = 'Esse e-mail já está vinculado a outra conta.';
       if (err.code === 'auth/email-already-in-use') msg = 'Esse e-mail já está em uso.';
       if (err.code === 'auth/weak-password') msg = 'Senha fraca (mínimo 6 caracteres).';
+      if (err?.message === 'signup-incomplete') msg = 'Não foi possível criar a conta. Tente novamente com os dados corretos.';
+      if (err?.code === 'referral-bind-failed') msg = 'Não foi possível concluir o vínculo do convite. Tente novamente pelo link de convite.';
       if (String(err?.code || '').includes('permission-denied') || String(err?.message || '').includes('permission')) {
-        msg = 'Não foi possível finalizar a criação da conta (permissões).';
+        msg = 'Não foi possível finalizar a criação da conta (permissões). Tente novamente com os dados corretos.';
       }
 
       showToast('error', msg);
@@ -631,9 +870,13 @@ function redirectIfAlreadyLogged() {
     if (!user) return;
     try {
       const redirectTo = await resolveLoginRedirect(user);
-      window.location.href = redirectTo;
-    } catch (_) {
-      window.location.href = 'dashboard.html?login=1';
+      window.location.href = withStoredPartnerRef(redirectTo);
+    } catch (error) {
+      console.warn('[redirectIfAlreadyLogged]', error);
+      if (String(error?.message || '') === 'incomplete-account') {
+        await cleanupFailedSignup(user, { guildId: user.uid, reason: 'incomplete-existing-session' });
+      }
+      try { await signOut(auth); } catch (_) {}
     }
   });
 }
@@ -643,6 +886,7 @@ function redirectIfAlreadyLogged() {
   setupSidebar();
   setupReveal();
   setupAuthForms();
+  decorateInternalLinksWithPartnerRef();
   initIcons();
   redirectIfAlreadyLogged();
 })();

@@ -96,17 +96,24 @@
             <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-lg hover:bg-gray-100">
               <i data-lucide="menu" class="w-5 h-5"></i>
             </button>
-            <h2 class="text-xl font-black text-gray-900 tracking-tight">Painel de Controlo Global</h2>
+            <h2 class="text-xl font-black text-gray-900 tracking-tight">Painel de Controle Global</h2>
           </div>
-          <button id="btn-reload" class="p-2 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
-             <i data-lucide="rotate-cw" class="w-5 h-5"></i>
-          </button>
+          <div class="flex items-center gap-2">
+            <button id="btn-reload-guilds" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-100 text-xs font-black transition" title="Recarregar somente guildas">
+              <i data-lucide="shield" class="w-4 h-4"></i>
+              <span class="hidden sm:inline">Recarregar guildas</span>
+            </button>
+            <button id="btn-reload-partners" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-100 text-xs font-black transition" title="Recarregar somente parceiros">
+              <i data-lucide="hand-coins" class="w-4 h-4"></i>
+              <span class="hidden sm:inline">Recarregar parceiros</span>
+            </button>
+          </div>
         </div>
       </header>
 
       <section class="max-w-6xl mx-auto px-4 py-6 space-y-6">
         <!-- Dashboard Stats -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
             <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Total de Guildas</p>
             <h3 id="stat-guilds" class="text-3xl font-black text-gray-900 mt-1">0</h3>
@@ -115,9 +122,22 @@
             <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Solicitações Pendentes</p>
             <h3 id="stat-solicita" class="text-3xl font-black text-emerald-600 mt-1">0</h3>
           </div>
+          <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Parceiros</p>
+            <h3 id="stat-partners" class="text-3xl font-black text-amber-600 mt-1">0</h3>
+          </div>
           <button id="btn-open-solicita" class="flex items-center justify-center gap-3 bg-emerald-600 text-white rounded-2xl p-5 hover:bg-emerald-700 transition shadow-lg shadow-emerald-100">
             <i data-lucide="bell" class="w-6 h-6"></i>
             <span class="font-bold">Gerir Solicitações</span>
+          </button>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-2xl p-2 shadow-sm flex flex-col sm:flex-row gap-2">
+          <button id="view-guildas" type="button" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-black transition">
+            <i data-lucide="shield" class="w-4 h-4"></i> Guildas
+          </button>
+          <button id="view-partners" type="button" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-50 text-gray-600 text-sm font-black hover:bg-gray-100 transition">
+            <i data-lucide="hand-coins" class="w-4 h-4"></i> Parceiros
           </button>
         </div>
 
@@ -158,6 +178,14 @@
           </div>
         </div>
 
+        <!-- Grid Parceiros -->
+        <div id="partners-grid" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div class="col-span-full py-20 text-center space-y-3">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-amber-500 border-t-transparent"></div>
+            <p class="text-gray-500 font-medium">A carregar parceiros...</p>
+          </div>
+        </div>
+
         <!-- Painel de Solicitações -->
         <div id="solicita-panel" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" id="solicita-overlay"></div>
@@ -194,7 +222,7 @@
 
   <script type="module">
     import { checkAuth, setupSidebar, initIcons, logout, db, ensureCeoStatus, applyCeoNavVisibility, showToast, getVipTier } from './logic.js';
-    import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, writeBatch, query, where, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, writeBatch, query, where, serverTimestamp, setDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
 
@@ -303,7 +331,10 @@
     }
 
     let allGuilds = [];
+    let allPartners = [];
+    let currentAdminView = 'guildas';
     window.allSolicita = [];
+    window.allPartners = [];
 
     // Boot
     checkAuth().then(async (user) => {
@@ -421,6 +452,572 @@
             if(badgeEl) badgeEl.textContent = pendentes;
         } catch(e) {}
     }
+
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function safeJsString(value) {
+      return String(value ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '');
+    }
+
+    function toMoneyNumber(value) {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      const clean = String(value ?? '')
+        .replace(/[^0-9,.-]/g, '')
+        .replace(/\.(?=\d{3}(\D|$))/g, '')
+        .replace(',', '.');
+      const parsed = Number(clean);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function roundMoney(value) {
+      return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+    }
+
+    function formatMoney(value) {
+      return toMoneyNumber(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function normalizePartnerType(p = {}) {
+      const raw = String(p.tipoParceiro || p.tipo || '').toLowerCase().trim();
+      if (raw === 'verificado' || p.verificado === true || p.beneficiosLiberados === true) return 'verificado';
+      return 'normal';
+    }
+
+    function partnerTypeBadge(p = {}) {
+      const type = normalizePartnerType(p);
+      return type === 'verificado'
+        ? '<span class="px-3 py-1 rounded-xl bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-wider border border-amber-200">Verificado</span>'
+        : '<span class="px-3 py-1 rounded-xl bg-gray-100 text-gray-600 text-[10px] font-black uppercase tracking-wider border border-gray-200">Normal</span>';
+    }
+
+    function getPendingWithdraw(partner = {}) {
+      const saque = partner.saque || {};
+      const pending = saque.status === 'pendente' || partner.saquePendente === true;
+      if (!pending) return null;
+      const valor = toMoneyNumber(saque.valor || partner.valorSaqueSolicitado || partner.saldoEmSaque || 0);
+      return {
+        valor,
+        pix: saque.pix || partner.pix || '',
+        solicitadoEm: saque.solicitadoEm || saque.solicitadoEmMs || partner.updatedAt || null,
+        solicitadoPorEmail: saque.solicitadoPorEmail || partner.email || ''
+      };
+    }
+
+    function getConfigByGuildId(gid) {
+      const id = String(gid || '').trim();
+      if (!id) return null;
+      return (window.allConfigGuilda || []).find((g) => String(g.id || '') === id) || null;
+    }
+
+    function findGuildForPartner(partner = {}, configArr = [], guildsArr = []) {
+      const pid = String(partner.id || partner.userId || partner.gameId || '').trim();
+      const uid = String(partner.uid || '').trim();
+      const email = String(partner.email || '').trim().toLowerCase();
+
+      // Sem leitura extra em /users: usa somente o que já veio de /monetize
+      // e o cache/lista já carregada de /configGuilda e /guildas.
+      let guildId = String(
+        partner.guildId ||
+        partner.guild ||
+        partner.referralGuildUid ||
+        partner.guildUid ||
+        ''
+      ).trim();
+
+      let cfg = guildId ? (configArr || []).find((c) => String(c.id || '') === guildId) : null;
+
+      if (!cfg && (uid || email || pid)) {
+        cfg = (configArr || []).find((c) => {
+          const leaders = Array.isArray(c.leaders) ? c.leaders.map((x) => String(x || '').toLowerCase().trim()) : [];
+          const admins = Array.isArray(c.admins) ? c.admins.map((x) => String(x || '').toLowerCase().trim()) : [];
+          return (!!uid && String(c.ownerUid || c.uid || '').trim() === uid)
+            || (!!email && String(c.ownerEmail || c.playerEmail || '').trim().toLowerCase() === email)
+            || (!!email && leaders.includes(email))
+            || (!!email && admins.includes(email))
+            || (!!pid && String(c.referralOwnerGameId || '').trim() === pid);
+        }) || null;
+        if (cfg) guildId = String(cfg.id || '').trim();
+      }
+
+      const guild = guildId ? ((guildsArr || []).find((g) => String(g.id || '') === guildId) || {}) : {};
+      const guildName = partner.guildName || guild.name || cfg?.name || '';
+
+      return {
+        guildId,
+        guildName,
+        guildVip: cfg?.vipTier || guild.vipTier || guild.vip || 'free',
+        guildVipExpiresAt: cfg?.vipExpiresAt || guild.vipExpiresAt || null,
+        userDocIds: []
+      };
+    }
+
+    function setActiveView(view) {
+      currentAdminView = view === 'partners' ? 'partners' : 'guildas';
+      const isPartners = currentAdminView === 'partners';
+      document.getElementById('guilds-grid')?.classList.toggle('hidden', isPartners);
+      document.getElementById('partners-grid')?.classList.toggle('hidden', !isPartners);
+
+      const btnGuildas = document.getElementById('view-guildas');
+      const btnPartners = document.getElementById('view-partners');
+      if (btnGuildas && btnPartners) {
+        btnGuildas.className = isPartners
+          ? 'flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-50 text-gray-600 text-sm font-black hover:bg-gray-100 transition'
+          : 'flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-black transition';
+        btnPartners.className = isPartners
+          ? 'flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-amber-500 text-white text-sm font-black transition'
+          : 'flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-50 text-gray-600 text-sm font-black hover:bg-gray-100 transition';
+      }
+
+      const search = document.getElementById('guild-search');
+      if (search) {
+        search.placeholder = isPartners
+          ? 'Procurar parceiro por nick, ID, e-mail, Pix ou guilda...'
+          : 'Procurar por nome, ID ou e-mail de líder...';
+      }
+
+      if (isPartners) {
+        if (!allPartners.length) loadPartners(false);
+        else renderPartners();
+      } else {
+        renderGuilds();
+      }
+      initIcons();
+    }
+
+    async function loadPartners(force = false) {
+      const grid = document.getElementById('partners-grid');
+      if (grid) {
+        grid.innerHTML = `<div class="col-span-full py-20 text-center space-y-3"><div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-amber-500 border-t-transparent"></div><p class="text-gray-500 font-medium">A carregar parceiros...</p></div>`;
+      }
+
+      if (force) {
+        try { localStorage.removeItem('hub_ceo_partners_v1'); } catch (_) {}
+      }
+
+      const cached = localStorage.getItem('hub_ceo_partners_v1');
+      if (!force && cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed?.items && (Date.now() - Number(parsed.ts || 0)) < 10 * 60 * 1000) {
+            allPartners = parsed.items;
+            window.allPartners = allPartners;
+            const statPartners = document.getElementById('stat-partners');
+            if (statPartners) statPartners.textContent = allPartners.length;
+            renderPartners();
+            return;
+          }
+        } catch (_) {}
+      }
+
+      try {
+        // Leitura mínima: a aba Parceiros busca apenas /monetize.
+        // Não relê /guildas, /configGuilda nem /users ao trocar de aba.
+        // Para mostrar a guilda vinculada, reaproveita o que já estiver em memória/cache.
+        const monetizeSnap = await getDocs(collection(db, 'monetize'));
+
+        let configArr = window.allConfigGuilda || [];
+        let guildsArr = window.allGuildas || [];
+        if (!configArr.length || !guildsArr.length) {
+          try {
+            const cachedGuildas = localStorage.getItem('hub_ceo_guildas_v1');
+            const cachedConfig = localStorage.getItem('hub_ceo_config_v1');
+            if (cachedGuildas) guildsArr = JSON.parse(cachedGuildas)?.items || guildsArr;
+            if (cachedConfig) configArr = JSON.parse(cachedConfig)?.items || configArr;
+          } catch (_) {}
+        }
+
+        allPartners = monetizeSnap.docs.map((d) => {
+          const data = { id: d.id, ...d.data() };
+          const guildInfo = findGuildForPartner(data, configArr, guildsArr);
+          return { ...data, ...guildInfo };
+        }).sort((a, b) => {
+          const pA = getPendingWithdraw(a) ? 1 : 0;
+          const pB = getPendingWithdraw(b) ? 1 : 0;
+          if (pA !== pB) return pB - pA;
+          return toMoneyNumber(b.saldoAtual || 0) - toMoneyNumber(a.saldoAtual || 0);
+        });
+
+        window.allPartners = allPartners;
+        localStorage.setItem('hub_ceo_partners_v1', JSON.stringify({ ts: Date.now(), items: allPartners }));
+        const statPartners = document.getElementById('stat-partners');
+        if (statPartners) statPartners.textContent = allPartners.length;
+        renderPartners();
+        if (force) showToast('success', 'Parceiros atualizados.');
+      } catch (e) {
+        console.error(e);
+        if (grid) grid.innerHTML = `<div class="col-span-full py-10 text-center text-red-500">Erro ao carregar parceiros.</div>`;
+        showToast('error', 'Falha ao carregar parceiros.');
+      }
+    }
+
+    function renderPartners() {
+      const q = document.getElementById('guild-search').value.toLowerCase().trim();
+      const filtered = allPartners.filter((p) => {
+        const fields = [p.id, p.userId, p.gameId, p.uid, p.email, p.nick, p.pix, p.guildId, p.guildName, p.redesSociais].map((v) => String(v || '').toLowerCase());
+        return !q || fields.some((x) => x.includes(q));
+      });
+
+      const grid = document.getElementById('partners-grid');
+      if (!grid) return;
+      if (!filtered.length) {
+        grid.innerHTML = `<div class="col-span-full py-10 text-center text-gray-400">Nenhum parceiro encontrado.</div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map((p) => {
+        const pending = getPendingWithdraw(p);
+        const saldo = toMoneyNumber(p.saldoAtual || p.saldoDisponivel || 0);
+        const sacado = toMoneyNumber(p.saldoSacado || p.totalSacado || 0);
+        const type = normalizePartnerType(p);
+        const guildVip = prettyVipName(p.guildVip || 'free');
+        const guildLabel = p.guildId ? `${escapeHtml(p.guildName || 'Guilda sem nome')} <span class="text-gray-400 font-mono">${escapeHtml(p.guildId)}</span>` : '<span class="text-red-500">Guilda não localizada</span>';
+        return `
+          <div class="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm hover:shadow-xl transition-all duration-300">
+            <div class="flex items-start justify-between gap-3 mb-4">
+              <div class="min-w-0">
+                <h4 class="font-black text-gray-900 truncate text-lg">${escapeHtml(p.nick || p.email || p.id)}</h4>
+                <p class="text-[10px] text-gray-400 font-mono tracking-tighter break-all">${escapeHtml(p.id)}</p>
+              </div>
+              ${partnerTypeBadge(p)}
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mb-4">
+              <div class="p-3 rounded-2xl bg-emerald-50 border border-emerald-100">
+                <p class="text-[10px] font-black text-emerald-700 uppercase">Saldo</p>
+                <p class="text-lg font-black text-emerald-900">${formatMoney(saldo)}</p>
+              </div>
+              <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                <p class="text-[10px] font-black text-slate-500 uppercase">Sacado</p>
+                <p class="text-lg font-black text-slate-900">${formatMoney(sacado)}</p>
+              </div>
+            </div>
+
+            <div class="space-y-2 mb-4 text-[11px] text-gray-500">
+              <div class="flex items-start gap-2"><i data-lucide="mail" class="w-3.5 h-3.5 text-blue-500 mt-0.5"></i><span class="break-all"><b>Email:</b> ${escapeHtml(p.email || '—')}</span></div>
+              <div class="flex items-start gap-2"><i data-lucide="shield" class="w-3.5 h-3.5 text-amber-500 mt-0.5"></i><span><b>Guilda:</b> ${guildLabel}</span></div>
+              <div class="flex items-center gap-2"><i data-lucide="sparkles" class="w-3.5 h-3.5 text-purple-500"></i><span><b>Plano guilda:</b> ${guildVip}</span></div>
+              <div class="flex items-center gap-2"><i data-lucide="users" class="w-3.5 h-3.5 text-emerald-500"></i><span><b>Convidados:</b> ${Number(p.totalConvidados || 0) || 0} • <b>Pagantes:</b> ${Number(p.totalPagantes || 0) || 0}</span></div>
+            </div>
+
+            ${pending ? `
+              <div class="rounded-2xl bg-amber-50 border border-amber-100 p-3 mb-4">
+                <p class="text-[10px] font-black text-amber-700 uppercase">Saque pendente</p>
+                <p class="text-sm font-black text-amber-900">${formatMoney(pending.valor)}</p>
+                <p class="text-[11px] text-amber-700 break-all">Pix: ${escapeHtml(pending.pix || '—')}</p>
+              </div>
+            ` : `<div class="rounded-2xl bg-gray-50 border border-gray-100 p-3 mb-4 text-[11px] text-gray-500 font-bold">Sem saque pendente.</div>`}
+
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="window.openPartnerDetails('${safeJsString(p.id)}')" class="py-2.5 rounded-xl bg-gray-50 text-gray-900 text-[11px] font-bold hover:bg-gray-100 transition border border-gray-100">DETALHES</button>
+              ${type === 'verificado'
+                ? `<button onclick="window.setPartnerNormal('${safeJsString(p.id)}')" class="py-2.5 rounded-xl bg-slate-900 text-white text-[11px] font-bold hover:bg-black transition">TORNAR NORMAL</button>`
+                : `<button onclick="window.setPartnerVerified('${safeJsString(p.id)}')" class="py-2.5 rounded-xl bg-amber-500 text-white text-[11px] font-bold hover:bg-amber-600 transition">VERIFICAR</button>`}
+              ${pending ? `<button onclick="window.approvePartnerWithdraw('${safeJsString(p.id)}')" class="col-span-1 py-2.5 rounded-xl bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition">APROVAR SAQUE</button>
+              <button onclick="window.rejectPartnerWithdraw('${safeJsString(p.id)}')" class="col-span-1 py-2.5 rounded-xl bg-red-50 text-red-600 text-[11px] font-bold hover:bg-red-100 transition border border-red-100">RECUSAR SAQUE</button>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+      initIcons();
+    }
+
+    async function applyVipToGuild(guildId, tier) {
+      const gid = String(guildId || '').trim();
+      if (!gid) throw new Error('Guilda não localizada para alterar VIP.');
+      const normalized = normalizeVip(tier);
+      const expiresAtMs = buildVipExpiresAt(normalized);
+      const patch = {
+        vipTier: normalized,
+        vipExpiresAt: expiresAtMs,
+        permissoesAtivas: normalized !== 'free',
+        updatedAt: serverTimestamp(),
+        updatedAtMs: Date.now()
+      };
+
+      await Promise.all([
+        setDoc(doc(db, 'configGuilda', gid), patch, { merge: true }),
+        setDoc(doc(db, 'guildas', gid), patch, { merge: true })
+      ]);
+
+      try {
+        const gx = (window.allGuildas || []).find((x) => String(x.id) === gid);
+        if (gx) {
+          gx.vip = normalized;
+          gx.vipTier = normalized;
+          gx.vipExpiresAt = expiresAtMs;
+          gx.configUpdatedAt = Date.now();
+        }
+        localStorage.setItem('hub_ceo_guildas_v1', JSON.stringify({ ts: Date.now(), items: window.allGuildas || [] }));
+      } catch (_) {}
+      return { tier: normalized, expiresAtMs };
+    }
+
+    async function updatePartnerLocalAndCache(partnerId, patch = {}) {
+      const p = allPartners.find((x) => String(x.id) === String(partnerId));
+      if (p) Object.assign(p, patch);
+      window.allPartners = allPartners;
+      try { localStorage.setItem('hub_ceo_partners_v1', JSON.stringify({ ts: Date.now(), items: allPartners })); } catch (_) {}
+      renderPartners();
+    }
+
+    async function syncPartnerUserFlags(partner = {}, patch = {}) {
+      const ids = new Set([partner.userId, partner.gameId, ...(partner.userDocIds || [])].map((x) => String(x || '').trim()).filter(Boolean));
+      if (!ids.size) return;
+      await Promise.all(Array.from(ids).map((id) => setDoc(doc(db, 'users', id), patch, { merge: true }).catch(() => null)));
+    }
+
+    window.setPartnerVerified = async (partnerId) => {
+      const p = allPartners.find((x) => String(x.id) === String(partnerId));
+      if (!p) return showToast('error', 'Parceiro não encontrado.');
+      if (!p.guildId) return showToast('error', 'Não encontrei a guilda vinculada a este parceiro.');
+      if (!confirm(`Tornar ${p.nick || p.email || p.id} parceiro verificado e liberar vitalício na guilda ${p.guildName || p.guildId}?`)) return;
+
+      try {
+        const patch = {
+          tipoParceiro: 'verificado',
+          verificado: true,
+          beneficiosLiberados: true,
+          updatedAt: serverTimestamp(),
+          updatedAtMs: Date.now()
+        };
+        await setDoc(doc(db, 'monetize', partnerId), patch, { merge: true });
+        await syncPartnerUserFlags(p, {
+          parceiroTipo: 'verificado',
+          parceiroVerificado: true,
+          updatedAt: serverTimestamp()
+        });
+        await applyVipToGuild(p.guildId, 'vitalicio');
+        await updatePartnerLocalAndCache(partnerId, { ...patch, guildVip: 'vitalicio', guildVipExpiresAt: buildVipExpiresAt('vitalicio') });
+        showToast('success', 'Parceiro verificado e guilda liberada como vitalício.');
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Erro ao verificar parceiro.');
+      }
+    };
+
+    window.setPartnerNormal = async (partnerId) => {
+      const p = allPartners.find((x) => String(x.id) === String(partnerId));
+      if (!p) return showToast('error', 'Parceiro não encontrado.');
+      const shouldFree = p.guildId ? confirm('Deseja também voltar a guilda deste parceiro para FREE?\n\nOK = mudar para FREE\nCancelar = manter o plano atual da guilda') : false;
+
+      try {
+        const patch = {
+          tipoParceiro: 'normal',
+          verificado: false,
+          beneficiosLiberados: false,
+          updatedAt: serverTimestamp(),
+          updatedAtMs: Date.now()
+        };
+        await setDoc(doc(db, 'monetize', partnerId), patch, { merge: true });
+        await syncPartnerUserFlags(p, {
+          parceiroTipo: 'normal',
+          parceiroVerificado: false,
+          updatedAt: serverTimestamp()
+        });
+        if (shouldFree && p.guildId) {
+          await applyVipToGuild(p.guildId, 'free');
+          await updatePartnerLocalAndCache(partnerId, { ...patch, guildVip: 'free', guildVipExpiresAt: null });
+        } else {
+          await updatePartnerLocalAndCache(partnerId, patch);
+        }
+        showToast('success', shouldFree ? 'Parceiro normal e guilda alterada para FREE.' : 'Parceiro alterado para normal.');
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Erro ao alterar parceiro.');
+      }
+    };
+
+    window.approvePartnerWithdraw = async (partnerId) => {
+      const p = allPartners.find((x) => String(x.id) === String(partnerId));
+      if (!p) return showToast('error', 'Parceiro não encontrado.');
+      const pending = getPendingWithdraw(p);
+      if (!pending) return showToast('error', 'Não existe saque pendente.');
+      if (!confirm(`Confirmar que o saque de ${formatMoney(pending.valor)} foi pago para este parceiro?`)) return;
+
+      try {
+        const ref = doc(db, 'monetize', partnerId);
+        let updated = null;
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(ref);
+          if (!snap.exists()) throw new Error('Parceiro não encontrado.');
+          const data = snap.data() || {};
+          const saque = data.saque || {};
+          if (saque.status !== 'pendente' && data.saquePendente !== true) throw new Error('Não existe saque pendente.');
+          const amount = roundMoney(toMoneyNumber(saque.valor || data.valorSaqueSolicitado || data.saldoEmSaque || 0));
+          const saldoAtual = roundMoney(toMoneyNumber(data.saldoAtual || data.saldoDisponivel || 0));
+          const saldoSacado = roundMoney(toMoneyNumber(data.saldoSacado || data.totalSacado || 0));
+          if (!amount || amount < 10) throw new Error('Valor de saque inválido.');
+          if (amount > saldoAtual) throw new Error('Saldo insuficiente para aprovar este saque.');
+
+          updated = {
+            saldoAtual: roundMoney(saldoAtual - amount),
+            saldoSacado: roundMoney(saldoSacado + amount),
+            totalSacado: roundMoney(saldoSacado + amount),
+            saque: {
+              ...saque,
+              status: 'aprovado',
+              aprovadoEm: serverTimestamp(),
+              aprovadoEmMs: Date.now()
+            },
+            saquePendente: false,
+            valorSaqueSolicitado: 0,
+            saldoEmSaque: 0,
+            ultimoSaqueAprovado: {
+              valor: amount,
+              pix: saque.pix || data.pix || '',
+              aprovadoEm: serverTimestamp(),
+              aprovadoEmMs: Date.now()
+            },
+            updatedAt: serverTimestamp(),
+            updatedAtMs: Date.now()
+          };
+          tx.set(ref, updated, { merge: true });
+        });
+
+        await updatePartnerLocalAndCache(partnerId, updated || {});
+        showToast('success', 'Saque marcado como aprovado.');
+      } catch (e) {
+        console.error(e);
+        showToast('error', e?.message || 'Erro ao aprovar saque.');
+      }
+    };
+
+    window.rejectPartnerWithdraw = async (partnerId) => {
+      const p = allPartners.find((x) => String(x.id) === String(partnerId));
+      if (!p) return showToast('error', 'Parceiro não encontrado.');
+      const pending = getPendingWithdraw(p);
+      if (!pending) return showToast('error', 'Não existe saque pendente.');
+      const reason = prompt('Motivo da recusa do saque:', 'Dados Pix inválidos ou revisão interna.');
+      if (reason === null) return;
+      try {
+        const patch = {
+          saque: {
+            ...(p.saque || {}),
+            status: 'recusado',
+            recusadoEm: serverTimestamp(),
+            recusadoEmMs: Date.now(),
+            motivoRecusa: String(reason || '').trim()
+          },
+          saquePendente: false,
+          saldoEmSaque: 0,
+          updatedAt: serverTimestamp(),
+          updatedAtMs: Date.now()
+        };
+        await setDoc(doc(db, 'monetize', partnerId), patch, { merge: true });
+        await updatePartnerLocalAndCache(partnerId, patch);
+        showToast('info', 'Saque recusado.');
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Erro ao recusar saque.');
+      }
+    };
+
+    window.openPartnerDetails = async (partnerId) => {
+      const p = allPartners.find((x) => String(x.id) === String(partnerId));
+      if (!p) return;
+      const body = document.getElementById('drawer-body');
+      const pending = getPendingWithdraw(p);
+      document.getElementById('drawer-title').textContent = p.nick || p.email || 'Parceiro';
+      document.getElementById('drawer-content').innerHTML = `<div class="py-10 text-center text-gray-400">Carregando detalhes do parceiro...</div>`;
+      document.getElementById('drawer').classList.remove('hidden');
+      setTimeout(() => body.classList.remove('translate-x-full'), 10);
+
+      let indicados = [];
+      let comissoes = [];
+      try {
+        const [iSnap, cSnap] = await Promise.all([
+          getDocs(collection(db, 'monetize', partnerId, 'indicados')).catch(() => ({ docs: [] })),
+          getDocs(collection(db, 'monetize', partnerId, 'comissoes')).catch(() => ({ docs: [] }))
+        ]);
+        indicados = iSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        comissoes = cSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      } catch (_) {}
+
+      const raw = JSON.stringify(p, (key, value) => {
+        if (value && typeof value.toDate === 'function') return value.toDate().toISOString();
+        if (value && typeof value.seconds === 'number') return new Date(value.seconds * 1000).toISOString();
+        return value;
+      }, 2);
+
+      document.getElementById('drawer-content').innerHTML = `
+        <div class="space-y-5 animate-in slide-in-from-right duration-300">
+          <div class="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <p class="text-[10px] font-black text-gray-400 uppercase">Tipo</p>
+                ${partnerTypeBadge(p)}
+              </div>
+              <div class="text-right">
+                <p class="text-[10px] font-black text-gray-400 uppercase">ID</p>
+                <p class="text-xs font-mono text-gray-500 break-all">${escapeHtml(p.id)}</p>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="p-3 rounded-xl bg-white border border-gray-100"><p class="text-[10px] font-black text-gray-400 uppercase">Saldo</p><p class="text-lg font-black text-emerald-700">${formatMoney(p.saldoAtual || 0)}</p></div>
+              <div class="p-3 rounded-xl bg-white border border-gray-100"><p class="text-[10px] font-black text-gray-400 uppercase">Sacado</p><p class="text-lg font-black text-slate-900">${formatMoney(p.saldoSacado || p.totalSacado || 0)}</p></div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-gray-100 bg-white p-4 text-sm text-gray-600 space-y-2">
+            <p><b>Email:</b> ${escapeHtml(p.email || '—')}</p>
+            <p><b>UID Auth:</b> <span class="font-mono text-xs break-all">${escapeHtml(p.uid || '—')}</span></p>
+            <p><b>Game ID:</b> <span class="font-mono text-xs break-all">${escapeHtml(p.gameId || p.userId || p.id || '—')}</span></p>
+            <p><b>Guilda vinculada:</b> ${p.guildId ? `${escapeHtml(p.guildName || 'Sem nome')} <span class="font-mono text-xs text-gray-400">${escapeHtml(p.guildId)}</span>` : '<span class="text-red-500">não localizada</span>'}</p>
+            <p><b>Plano da guilda:</b> ${prettyVipName(p.guildVip || 'free')}</p>
+            <p><b>Pix:</b> <span class="break-all">${escapeHtml(p.pix || '—')}</span></p>
+            <p><b>Redes sociais:</b><br><span class="whitespace-pre-wrap">${escapeHtml(p.redesSociais || '—')}</span></p>
+            <p><b>Link de indicação:</b><br><span class="break-all text-xs">${escapeHtml(p.linkIndicacao || '—')}</span></p>
+          </div>
+
+          ${pending ? `<div class="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+            <p class="text-[10px] font-black text-amber-700 uppercase mb-1">Saque pendente</p>
+            <p class="text-xl font-black text-amber-900">${formatMoney(pending.valor)}</p>
+            <p class="text-xs text-amber-700 break-all mt-1">Pix: ${escapeHtml(pending.pix || '—')}</p>
+            <div class="grid grid-cols-2 gap-2 mt-3">
+              <button onclick="window.approvePartnerWithdraw('${safeJsString(p.id)}')" class="py-2.5 rounded-xl bg-emerald-600 text-white text-[11px] font-black hover:bg-emerald-700 transition">APROVAR</button>
+              <button onclick="window.rejectPartnerWithdraw('${safeJsString(p.id)}')" class="py-2.5 rounded-xl bg-red-50 text-red-600 text-[11px] font-black hover:bg-red-100 transition border border-red-100">RECUSAR</button>
+            </div>
+          </div>` : ''}
+
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="window.setPartnerVerified('${safeJsString(p.id)}')" class="py-3 rounded-xl bg-amber-500 text-white text-xs font-black hover:bg-amber-600 transition">MARCAR VERIFICADO</button>
+            <button onclick="window.setPartnerNormal('${safeJsString(p.id)}')" class="py-3 rounded-xl bg-slate-900 text-white text-xs font-black hover:bg-black transition">MARCAR NORMAL</button>
+          </div>
+
+          <div class="rounded-2xl border border-gray-100 bg-white p-4">
+            <p class="text-[10px] font-black text-gray-400 uppercase mb-2">Indicados (${indicados.length})</p>
+            <div class="space-y-2 max-h-40 overflow-y-auto">
+              ${indicados.length ? indicados.map((i) => `<div class="p-2 rounded-xl bg-gray-50 border border-gray-100 text-[11px] text-gray-600"><b>${escapeHtml(i.guildId || i.id)}</b> • ${escapeHtml(i.status || 'convidado')} • ${escapeHtml(i.email || '')}</div>`).join('') : '<p class="text-xs text-gray-400">Nenhum indicado listado.</p>'}
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-gray-100 bg-white p-4">
+            <p class="text-[10px] font-black text-gray-400 uppercase mb-2">Comissões (${comissoes.length})</p>
+            <div class="space-y-2 max-h-40 overflow-y-auto">
+              ${comissoes.length ? comissoes.map((c) => `<div class="p-2 rounded-xl bg-gray-50 border border-gray-100 text-[11px] text-gray-600"><b>${formatMoney(c.comissao || 0)}</b> • ${escapeHtml(c.plano || '—')} • ${escapeHtml(c.status || '—')}</div>`).join('') : '<p class="text-xs text-gray-400">Nenhuma comissão listada.</p>'}
+            </div>
+          </div>
+
+          <details class="rounded-2xl border border-gray-100 bg-gray-950 text-gray-100 p-4">
+            <summary class="cursor-pointer text-xs font-black uppercase tracking-wider">Dados brutos</summary>
+            <pre class="mt-3 text-[10px] whitespace-pre-wrap break-words">${escapeHtml(raw)}</pre>
+          </details>
+        </div>
+      `;
+      initIcons();
+    };
 
     function renderGuilds() {
       const q = document.getElementById('guild-search').value.toLowerCase().trim();
@@ -782,10 +1379,13 @@
     // Eventos
     document.getElementById('drawer-close').onclick = closeDrawer;
     document.getElementById('drawer-backdrop').onclick = closeDrawer;
-    document.getElementById('btn-reload').onclick = () => loadData(true); // O "true" Força a carregar do Firebase
-    document.getElementById('guild-search').oninput = renderGuilds;
-    document.getElementById('vip-filter').onchange = renderGuilds;
-    document.getElementById('updated-filter').onchange = renderGuilds;
+    document.getElementById('btn-reload-guilds').onclick = () => loadData(true); // recarrega somente guildas/configGuilda
+    document.getElementById('btn-reload-partners').onclick = () => loadPartners(true); // recarrega somente monetize/parceiros
+    document.getElementById('guild-search').oninput = () => currentAdminView === 'partners' ? renderPartners() : renderGuilds();
+    document.getElementById('vip-filter').onchange = () => currentAdminView === 'partners' ? renderPartners() : renderGuilds();
+    document.getElementById('updated-filter').onchange = () => currentAdminView === 'partners' ? renderPartners() : renderGuilds();
+    document.getElementById('view-guildas').onclick = () => setActiveView('guildas');
+    document.getElementById('view-partners').onclick = () => setActiveView('partners');
     document.getElementById('btn-open-solicita').onclick = () => { 
       document.getElementById('solicita-panel').classList.remove('hidden'); 
       loadSolicita(); 

@@ -59,7 +59,7 @@
       <i data-lucide="sparkles" class="w-5 h-5"></i> Assinatura
     </a>
 
-    <a href="camp.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+    <a href="recrutar.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
       <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
     </a>
 
@@ -243,15 +243,20 @@
                     <i data-lucide="copy" class="w-4 h-4"></i> Copiar
                   </button>
                 </div>
-                <p class="mt-2 text-xs font-semibold text-gray-400">Comissão: 20% nos planos Plus, Pro e Business • R$ 40,00 fixo no Vitalício.</p>
+                <p class="mt-2 text-xs font-semibold text-gray-400">Comissão: 20% nos planos Plus e Pro • 10% no Business • R$ 40,00 fixo no Vitalício.</p>
               </div>
 
-              <div class="grid grid-cols-1 lg:grid-cols-[1fr,auto] gap-3 items-end">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 items-end">
                 <div>
                   <label class="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Chave Pix para receber</label>
                   <input type="text" id="input-partner-pix" maxlength="120" placeholder="CPF, e-mail, telefone ou chave aleatória" class="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 transition-all">
                 </div>
-                <div class="flex flex-col sm:flex-row gap-2">
+                <div>
+                  <label class="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Valor do saque</label>
+                  <input type="text" id="input-partner-withdraw-amount" inputmode="decimal" maxlength="20" placeholder="Ex: 10,00" class="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 transition-all">
+                  <p class="mt-1.5 text-[11px] font-semibold text-gray-400">Você só pode solicitar até o saldo disponível. Mínimo: R$ 10,00.</p>
+                </div>
+                <div class="lg:col-span-2 flex flex-col sm:flex-row sm:justify-end gap-2">
                   <button type="button" id="btn-save-partner-pix" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm font-black hover:bg-gray-50 transition-colors">
                     <i data-lucide="save" class="w-4 h-4"></i> Salvar Pix
                   </button>
@@ -354,7 +359,7 @@
         <div class="rounded-2xl border border-slate-100 bg-white p-4 mb-5">
           <h4 class="text-sm font-black text-gray-900 mb-3">Regras principais</h4>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
-            <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> 20% de comissão nos planos Plus, Pro e Business.</p>
+            <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> 20% de comissão nos planos Plus e Pro, 10% no Business.</p>
             <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> R$ 40,00 fixo para venda do plano Vitalício.</p>
             <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> Saque disponível a partir de R$ 10,00.</p>
             <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> A plataforma decide quem sobe ou desce de categoria.</p>
@@ -414,6 +419,6 @@
     </div>
   </div>
 
-  <script type="module" src="./perfill.js"></script>
+  <script type="module" src="./perfill.js?v=profile-all-20260517"></script>
 </body>
 </html>

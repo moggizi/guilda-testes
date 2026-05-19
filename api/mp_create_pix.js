@@ -71,16 +71,47 @@ function cors(res) {
 }
 
 function absoluteUrl(req, path) {
-  const proto = (req.headers["x-forwarded-proto"] || "https").toString();
-  const host = (req.headers["x-forwarded-host"] || req.headers.host || "").toString();
-  return `${proto}://${host}${path}`;
+  const envBase = getEnv("APP_BASE_URL") || getEnv("NEXT_PUBLIC_APP_BASE_URL") || getEnv("VERCEL_PROJECT_PRODUCTION_URL");
+  if (envBase) {
+    const base = envBase.startsWith("http") ? envBase : `https://${envBase}`;
+    return `${base.replace(/\/+$/g, "")}${path}`;
+  }
+
+  const protoRaw = (req.headers["x-forwarded-proto"] || "https").toString().split(",")[0].trim() || "https";
+  const hostRaw = (req.headers["x-forwarded-host"] || req.headers.host || "").toString().split(",")[0].trim();
+  if (!hostRaw) return "";
+  const proto = protoRaw === "http" ? "https" : protoRaw;
+  return `${proto}://${hostRaw}${path}`;
 }
 
-// Ajuste de preços (troque se quiser)
+function maskEmail(email) {
+  const e = String(email || "").trim();
+  const [name, domain] = e.split("@");
+  if (!name || !domain) return "";
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
+function extractMercadoPagoError(data, fallbackStatus) {
+  const cause = Array.isArray(data?.cause) ? data.cause : [];
+  const causeText = cause
+    .map((c) => [c?.code, c?.description].filter(Boolean).join(" - "))
+    .filter(Boolean)
+    .join(" | ");
+
+  return (
+    causeText ||
+    data?.message ||
+    data?.error ||
+    data?.status_detail ||
+    `HTTP ${fallbackStatus || "desconhecido"}`
+  );
+}
+
+// Ajuste de preços
 const PLAN_PRICES = {
-  plus: 5.99,
-  pro: 8.99,
-  business: 89.90,
+  plus: 6.99,
+  pro: 9.99,
+  business: 99.90,
   vitalicio: 599.99,
 };
 
@@ -238,6 +269,7 @@ module.exports = async (req, res) => {
     const uid = tokenUid || String(body.uid || "");
     const email = tokenEmail || String(body.email || "");
     const guildId = String(body.guildId || "");
+    const cpf = String(body.cpf || "").replace(/\D/g, ""); // Pega o CPF limpo (só números)
 
     if (!plano || !PLAN_PRICES[plano]) {
       return json(res, 400, { ok: false, error: `Plano inválido: ${planoRaw}` });
@@ -247,6 +279,9 @@ module.exports = async (req, res) => {
     }
     if (!email.includes("@")) {
       return json(res, 400, { ok: false, error: "Email inválido para pagamento." });
+    }
+    if (!cpf) {
+      return json(res, 400, { ok: false, error: "CPF obrigatório para gerar o PIX." });
     }
 
     // ✅ Anti-flood HTTP leve (sem atrapalhar usuário normal)
@@ -313,15 +348,36 @@ module.exports = async (req, res) => {
 
     // Webhook URL (no seu domínio)
     const notification_url = absoluteUrl(req, "/api/mp_webhook");
+    if (!notification_url || !notification_url.startsWith("https://")) {
+      return json(res, 500, {
+        ok: false,
+        error: "URL do webhook inválida. Configure APP_BASE_URL com https://seu-dominio.",
+        notification_url,
+      });
+    }
 
     // Cria pagamento PIX (Mercado Pago)
     const payload = {
-      transaction_amount: amount,
+      transaction_amount: Number(amount.toFixed(2)),
       description: `Guilda HUB - ${plano.toUpperCase()}`,
       payment_method_id: "pix",
-      payer: { email },
+      payer: {
+        email: email.toLowerCase().trim(),
+        first_name: "Cliente",
+        last_name: "Guilda HUB",
+        identification: {
+          type: "CPF",
+          number: cpf
+        }
+      },
       notification_url,
       external_reference: `guilda:${guildId}|uid:${uid}|plano:${plano}`,
+      metadata: {
+        guild_id: guildId,
+        uid,
+        plano,
+        source: "guildahub_upgrade",
+      },
     };
 
     const idemKey = makeIdempotencyKey();
@@ -330,6 +386,7 @@ module.exports = async (req, res) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: `Bearer ${mpToken}`,
         "X-Idempotency-Key": idemKey,
       },
@@ -339,16 +396,27 @@ module.exports = async (req, res) => {
     const data = await r.json().catch(() => ({}));
 
     if (!r.ok) {
+      const mpMessage = extractMercadoPagoError(data, r.status);
+
       console.error("[MP_CREATE_PIX] Mercado Pago recusou", {
         mp_status: r.status,
+        mp_message: mpMessage,
         mp_response: data,
         idemKey,
+        payload_debug: {
+          transaction_amount: payload.transaction_amount,
+          payment_method_id: payload.payment_method_id,
+          payer_email: maskEmail(email),
+          notification_url,
+          external_reference: payload.external_reference,
+        },
       });
 
       return json(res, 400, {
         ok: false,
-        error: "Mercado Pago recusou a criação do pagamento.",
+        error: `Mercado Pago recusou a criação do pagamento: ${mpMessage}`,
         mp_status: r.status,
+        mp_message: mpMessage,
         mp_response: data,
       });
     }

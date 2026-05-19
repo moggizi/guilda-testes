@@ -8,7 +8,8 @@ import {
   getDocs,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, showToast, auth, db } from './logic.js';
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { setupSidebar, initIcons, logout, getGuildContext, showToast, auth, db } from './logic.js';
 
 const qs = (id) => document.getElementById(id);
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
@@ -133,6 +134,104 @@ function sameEmail(a, b) {
   const ea = normalizeEmail(a);
   const eb = normalizeEmail(b);
   return !!ea && !!eb && ea === eb;
+}
+
+function normalizeRoleKey(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function normalizeRoleLabel(value = '') {
+  const key = normalizeRoleKey(value);
+  if (key === 'lider' || key === 'leader' || key === 'chefe' || key === 'dono' || key === 'owner') return 'Líder';
+  if (key === 'admin' || key === 'administrador' || key.includes('admin')) return 'Admin';
+  if (key === 'jogador' || key === 'player') return 'Jogador';
+  return String(value || '').trim() || 'Membro';
+}
+
+function getProfileAccessContext() {
+  return profileAccessContext || getGuildContext() || {};
+}
+
+function applyProfileSidebarContext(ctx = {}, user = auth.currentUser) {
+  const role = normalizeRoleLabel(ctx.role || getGuildContext()?.role || 'Membro');
+  const email = String(user?.email || ctx.email || '').trim();
+  const roleEl = document.getElementById('user-role');
+  const emailEl = document.getElementById('user-email');
+
+  if (roleEl) roleEl.textContent = role;
+  if (emailEl) emailEl.textContent = email;
+
+  // Importante: isso só controla links do menu. Não bloqueia acesso ao perfil.
+  const canManage = ['lider', 'leader', 'admin', 'administrador'].includes(normalizeRoleKey(role));
+  document.querySelectorAll('.only-leader, [data-rec-admin-leader-only="true"]').forEach((el) => {
+    el.classList.toggle('hidden', !canManage);
+  });
+}
+
+async function resolveProfileAccessContext(user) {
+  const uid = String(user?.uid || '').trim();
+  const email = normalizeEmail(user?.email || '');
+  const ctx = getGuildContext() || {};
+
+  let userProfile = null;
+  try {
+    const userSnap = await getDoc(doc(db, 'users', uid));
+    userProfile = userSnap.exists() ? (userSnap.data() || {}) : null;
+  } catch (_) {
+    // Se as regras bloquearem alguma leitura extra, a tela continua funcionando com o usuário autenticado.
+  }
+
+  const guildId = String(userProfile?.guildId || ctx.guildId || '').trim();
+  const guildName = String(
+    userProfile?.guilda ||
+    userProfile?.guildName ||
+    ctx.guildName ||
+    ''
+  ).trim();
+  const role = normalizeRoleLabel(userProfile?.role || ctx.role || 'Membro');
+
+  return {
+    guildId,
+    guildName: guildName || 'Sem guilda',
+    role,
+    email,
+    uid
+  };
+}
+
+function waitForProfileAuth() {
+  return new Promise((resolve) => {
+    let unsubscribe = () => {};
+    unsubscribe = onAuthStateChanged(auth, async (user) => {
+      try { unsubscribe(); } catch (_) {}
+
+      if (!user) {
+        window.location.href = 'index.html';
+        resolve(null);
+        return;
+      }
+
+      try {
+        profileAccessContext = await resolveProfileAccessContext(user);
+      } catch (error) {
+        console.error('Erro ao carregar contexto do perfil:', error);
+        profileAccessContext = {
+          uid: user.uid,
+          email: normalizeEmail(user.email || ''),
+          role: 'Membro',
+          guildId: '',
+          guildName: 'Sem guilda'
+        };
+      }
+
+      applyProfileSidebarContext(profileAccessContext, user);
+      resolve(user);
+    });
+  });
 }
 
 function snapToProfile(snap) {
@@ -291,6 +390,7 @@ const els = {
   partnerRefLink: qs('partner-ref-link'),
   btnCopyPartnerLink: qs('btn-copy-partner-link'),
   inputPartnerPix: qs('input-partner-pix'),
+  inputPartnerWithdrawAmount: qs('input-partner-withdraw-amount'),
   btnSavePartnerPix: qs('btn-save-partner-pix'),
   btnRequestPartnerWithdraw: qs('btn-request-partner-withdraw'),
   partnerWithdrawStatus: qs('partner-withdraw-status'),
@@ -309,6 +409,7 @@ let currentBase64Photo = '';
 let currentProfileData = null;
 let currentMonetizeData = null;
 let isPartnerPanelCollapsed = false;
+let profileAccessContext = null;
 
 // --- Helpers de Imagem (Compressão < 1MB) ---
 function dataUrlSizeBytes(dataUrl = '') {
@@ -519,6 +620,12 @@ function getPartnerSocialsInput() {
   return String(els.inputPartnerSocials?.value || '').trim().slice(0, 600);
 }
 
+function formatMoneyInputBR(value) {
+  const n = toMoneyNumber(value);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function setPartnerModalVisible(isVisible) {
   els.modalPartner?.classList.toggle('hidden', !isVisible);
   els.modalPartner?.classList.toggle('flex', isVisible);
@@ -546,12 +653,10 @@ function getPartnerType(profile = currentProfileData, monetize = currentMonetize
   const rawType = String(
     monetize?.tipoParceiro ||
     monetize?.tipo ||
-    profile?.parceiroTipo ||
-    profile?.partnerType ||
     ''
   ).trim().toLowerCase();
 
-  if (rawType === 'verificado' || monetize?.verificado === true || profile?.parceiroVerificado === true) {
+  if (rawType === 'verificado' || monetize?.verificado === true) {
     return 'verificado';
   }
 
@@ -610,6 +715,9 @@ function renderPartnerState(profile = currentProfileData, monetize = currentMone
   if (els.partnerPaidCount) els.partnerPaidCount.textContent = String(pagantes);
   if (els.partnerRefLink) els.partnerRefLink.value = monetize?.linkIndicacao || buildPartnerReferralLink();
   if (els.inputPartnerPix) els.inputPartnerPix.value = monetize?.pix || '';
+  if (els.inputPartnerWithdrawAmount && !String(els.inputPartnerWithdrawAmount.value || '').trim()) {
+    els.inputPartnerWithdrawAmount.value = saldoAtual >= 10 ? formatMoneyInputBR(saldoAtual) : '';
+  }
 
   if (els.btnRequestPartnerWithdraw) {
     els.btnRequestPartnerWithdraw.disabled = saldoAtual < 10 || hasPendingWithdraw;
@@ -636,10 +744,10 @@ async function getMonetizeDocData() {
 function buildPartnerDocPayload(profile = currentProfileData, existing = currentMonetizeData) {
   const uid = auth.currentUser?.uid || '';
   const email = auth.currentUser?.email || profile?.email || '';
-  const type = getPartnerType(profile, existing);
-  const isVerified = type === 'verificado';
   const redesSociais = getPartnerSocialsInput() || String(existing?.redesSociais || existing?.redes || '').trim().slice(0, 600);
 
+  // Importante: este payload é seguro para o front-end.
+  // Saldo, convidados, pagantes, comissões, verificação e benefícios NÃO são gravados pelo navegador.
   return {
     uid,
     email,
@@ -647,16 +755,6 @@ function buildPartnerDocPayload(profile = currentProfileData, existing = current
     gameId: currentUserProfileId,
     nick: String(els.inputNick?.value || profile?.nick || '').trim(),
     parceiro: true,
-    tipoParceiro: type,
-    verificado: isVerified,
-    beneficiosLiberados: existing?.beneficiosLiberados === true || isVerified,
-
-    comissaoPercentual: 20,
-    comissaoVitalicio: 40,
-    saldoAtual: toMoneyNumber(existing?.saldoAtual ?? existing?.saldoDisponivel ?? 0),
-    saldoSacado: toMoneyNumber(existing?.saldoSacado ?? existing?.totalSacado ?? 0),
-    totalConvidados: Number(existing?.totalConvidados ?? existing?.convidados ?? 0) || 0,
-    totalPagantes: Number(existing?.totalPagantes ?? existing?.pagantes ?? existing?.convertidos ?? 0) || 0,
     pix: existing?.pix || '',
     redesSociais,
     linkIndicacao: existing?.linkIndicacao || buildPartnerReferralLink(),
@@ -703,8 +801,6 @@ async function handleAcceptPartner() {
   try {
     const userPayload = {
       parceiro: true,
-      parceiroTipo: getPartnerType(currentProfileData, currentMonetizeData),
-      parceiroVerificado: getPartnerType(currentProfileData, currentMonetizeData) === 'verificado',
       monetizeId: currentUserProfileId,
       redesSociaisParceiro: partnerSocials,
       updatedAt: serverTimestamp()
@@ -818,10 +914,26 @@ async function handleRequestPartnerWithdraw() {
 
   const saldoAtual = toMoneyNumber(currentMonetizeData?.saldoAtual ?? currentMonetizeData?.saldoDisponivel ?? 0);
   const pix = String(els.inputPartnerPix?.value || currentMonetizeData?.pix || '').trim();
+  const amount = toMoneyNumber(els.inputPartnerWithdrawAmount?.value || 0);
   const hasPendingWithdraw = currentMonetizeData?.saque?.status === 'pendente' || currentMonetizeData?.saquePendente === true;
 
   if (saldoAtual < 10) {
     showToast('error', 'O saque mínimo é de R$ 10,00.');
+    return;
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showToast('error', 'Informe o valor que deseja sacar.');
+    return;
+  }
+
+  if (amount < 10) {
+    showToast('error', 'O valor mínimo de saque é R$ 10,00.');
+    return;
+  }
+
+  if (amount > saldoAtual) {
+    showToast('error', 'O valor solicitado não pode ser maior que seu saldo disponível.');
     return;
   }
 
@@ -843,34 +955,39 @@ async function handleRequestPartnerWithdraw() {
   }
 
   try {
-    const saque = {
-      status: 'pendente',
-      valor: saldoAtual,
-      pix,
-      solicitadoEm: serverTimestamp()
-    };
+    const idToken = await auth.currentUser.getIdToken(true);
+    const res = await fetch('/api/monetize_request_withdraw', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        userId: currentUserProfileId,
+        amount,
+        pix
+      })
+    });
 
-    await setDoc(doc(db, 'monetize', currentUserProfileId), {
-      pix,
-      saque,
-      saquePendente: true,
-      valorSaqueSolicitado: saldoAtual,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) {
+      throw new Error(data?.error || 'Não foi possível solicitar o saque.');
+    }
 
     currentMonetizeData = {
       ...(currentMonetizeData || {}),
+      ...(data.monetize || {}),
       pix,
-      saque: { ...saque, solicitadoEm: new Date() },
+      saque: data.saque || { status: 'pendente', valor: amount, pix, solicitadoEm: new Date() },
       saquePendente: true,
-      valorSaqueSolicitado: saldoAtual
+      valorSaqueSolicitado: amount
     };
 
     renderPartnerState(currentProfileData, currentMonetizeData);
     showToast('success', 'Saque solicitado. Aguarde a análise da equipe.');
   } catch (error) {
     console.error(error);
-    showToast('error', 'Não foi possível solicitar o saque.');
+    showToast('error', error?.message || 'Não foi possível solicitar o saque.');
   } finally {
     if (els.btnRequestPartnerWithdraw) {
       els.btnRequestPartnerWithdraw.innerHTML = originalHtml || '<i data-lucide="wallet" class="w-4 h-4"></i> Solicitar saque';
@@ -959,7 +1076,7 @@ async function loadProfile() {
 
 function fillProfileForm(data) {
   currentProfileData = { ...(data || {}) };
-  const ctx = getGuildContext() || {};
+  const ctx = getProfileAccessContext();
   
   const actualGuildName = ctx.guildName || data.guilda || 'Sem guilda';
   const actualRole = ctx.role || data.role || 'Membro';
@@ -1018,7 +1135,7 @@ async function handleCreateProfile(e) {
     }
 
     const oldData = getOldDataFromModal();
-    const ctx = getGuildContext() || {};
+    const ctx = getProfileAccessContext();
     const baseData = {
       ...oldData,
       ...(existingData || {})
@@ -1178,6 +1295,15 @@ function bindEvents() {
     if (event.key === 'Enter') event.preventDefault();
   });
 
+  els.inputPartnerWithdrawAmount?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') event.preventDefault();
+  });
+
+  els.inputPartnerWithdrawAmount?.addEventListener('blur', () => {
+    const formatted = formatMoneyInputBR(els.inputPartnerWithdrawAmount.value);
+    if (formatted) els.inputPartnerWithdrawAmount.value = formatted;
+  });
+
   els.modalPartner?.addEventListener('click', (event) => {
     if (event.target === els.modalPartner) setPartnerModalVisible(false);
   });
@@ -1191,7 +1317,7 @@ function bindEvents() {
   bindEvents();
   initIcons();
 
-  const user = await checkAuth(true);
+  const user = await waitForProfileAuth();
   if (!user) return;
   
   await loadProfile();

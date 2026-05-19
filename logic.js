@@ -1538,9 +1538,11 @@ try {
       const isDashboardPage = path.endsWith("/dashboard") || path.endsWith("/dashboard.html") || path.includes("dashboard.html");
       const isSettingsPage = path.endsWith("/ajustes") || path.endsWith("/ajustes.html") || path.includes("ajustes.html");
       const isLinesPage = path.endsWith("/lines") || path.endsWith("/lines.html") || path.includes("lines.html");
+      const isUpgradePage = path.endsWith("/upgrade") || path.endsWith("/upgrade.html") || path.includes("upgrade.html");
       const isChefePage = path.endsWith("/chefe") || path.endsWith("/chefe.html") || path.includes("chefe.html");
       const isRecruitmentPage =
         path.endsWith("/eventos") || path.endsWith("/eventos.html") || path.includes("eventos.html") ||
+        path.endsWith("/recrutar") || path.endsWith("/recrutar.html") || path.includes("recrutar.html") ||
         path.endsWith("/recrutamento") || path.endsWith("/recrutamento.html") || path.includes("recrutamento.html") ||
         path.endsWith("/rec") || path.endsWith("/rec.html") || path.includes("rec.html") ||
         path.endsWith("/camp") || path.endsWith("/camp.html") || path.includes("camp.html");
@@ -1586,7 +1588,7 @@ try {
           resolve(null);
           return;
         }
-        if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage && !isRecruitmentPage) {
+        if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage && !isRecruitmentPage && !isUpgradePage) {
           window.location.href = "dashboard.html";
           resolve(null);
           return;

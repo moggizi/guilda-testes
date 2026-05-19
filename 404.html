@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Página não encontrada - GuildaHUB</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="./style.css" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            emerald: {
+              50:'#ecfdf5',
+              100:'#d1fae5',
+              200:'#a7f3d0',
+              400:'#34d399',
+              500:'#10b981',
+              600:'#059669',
+              700:'#047857'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <meta name="robots" content="noindex, nofollow" />
+</head>
+
+<body class="min-h-screen bg-gray-50 text-gray-800 flex flex-col">
+
+  <main class="flex-1 flex items-center justify-center px-4 py-10">
+    <section class="w-full max-w-2xl bg-white border border-gray-200 rounded-3xl shadow-sm p-6 sm:p-10 text-center">
+
+      <!-- Logo grande -->
+      <div class="flex justify-center mb-6">
+        <div class="w-36 h-36 sm:w-44 sm:h-44 rounded-3xl bg-emerald-50 border border-emerald-100 flex items-center justify-center overflow-hidden shadow-sm">
+          <img
+            src="/assets/logo.png"
+            alt="Logo GuildaHUB"
+            class="w-28 h-28 sm:w-36 sm:h-36 object-contain"
+          >
+        </div>
+      </div>
+
+      <!-- Selo 404 -->
+      <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-50 border border-red-100 text-red-600 text-sm font-bold mb-5">
+        <i data-lucide="triangle-alert" class="w-4 h-4"></i>
+        Erro 404
+      </div>
+
+      <!-- Título -->
+      <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-900 leading-tight mb-4">
+        Desculpa, essa página não existe
+      </h1>
+
+      <!-- Texto -->
+      <p class="text-gray-600 leading-7 max-w-xl mx-auto mb-8">
+        O link pode estar errado, a página pode ter sido removida
+        ou talvez ela nunca tenha existido.
+        Se quiser, volte para o início ou acesse seu painel.
+      </p>
+
+      <!-- Botões -->
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+        <a
+          href="/dashboard.html"
+          class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold transition-colors"
+        >
+          <i data-lucide="house" class="w-5 h-5"></i>
+          Ir para o painel
+        </a>
+
+        <a
+          href="/index.html"
+          class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold border border-gray-200 transition-colors"
+        >
+          <i data-lucide="arrow-left" class="w-5 h-5"></i>
+          Voltar ao início
+        </a>
+      </div>
+
+      <div class="mt-8 text-sm text-gray-500">
+        Se isso for um erro, entre em contato com o suporte da GuildaHUB.
+      </div>
+    </section>
+  </main>
+
+  <footer class="bg-white border-t border-gray-200 py-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <div class="flex justify-center items-center gap-2 mb-8">
+        <img src="/assets/logo.png" alt="Logo" class="w-10 h-10 object-contain">
+        <span class="text-xl font-bold tracking-wider text-slate-900">
+          GUILDA<span class="text-green-500">HUB</span>
+        </span>
+      </div>
+
+      <div class="flex flex-wrap justify-center items-center gap-5 text-sm text-slate-500">
+        <a href="/index.html" class="hover:text-green-500 transition-colors">Início</a>
+        <a href="/upgrade.html" class="hover:text-green-500 transition-colors">Planos</a>
+        <a href="https://instagram.com/guildahub" target="_blank" rel="noopener noreferrer" class="hover:text-green-500 transition-colors">@guildahub</a>
+        <a href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="hover:text-green-500 transition-colors">Suporte</a>
+      </div>
+
+      <p class="text-center text-xs text-slate-400 mt-6">
+        © GUILDA • HUB — Administração de guildas mais prática.
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    try { lucide.createIcons(); } catch (_) {}
+  </script>
+</body>
+</html>

@@ -3,7 +3,11 @@ const admin = require('firebase-admin');
 function getServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) throw new Error('Missing FIREBASE_SERVICE_ACCOUNT');
-  return JSON.parse(raw);
+  const sa = JSON.parse(raw);
+  if (sa.private_key && typeof sa.private_key === 'string') {
+    sa.private_key = sa.private_key.replace(/\\n/g, '\n');
+  }
+  return sa;
 }
 
 function initAdmin() {

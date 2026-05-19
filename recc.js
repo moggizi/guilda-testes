@@ -1,4 +1,5 @@
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore,
   doc,
@@ -7,9 +8,12 @@ import {
   deleteDoc,
   serverTimestamp,
   collection,
-  getDocs
+  getDocs,
+  query,
+  where,
+  limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { checkAuth, setupSidebar, initIcons, logout, getGuildContext, getGuildAccessKeyConfig, getGuildMultiConfig, showToast, auth, db } from './logic.js';
+import { setupSidebar, initIcons, logout, getGuildContext, getGuildAccessKeyConfig, getGuildMultiConfig, showToast, auth, db } from './logic.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA6CETOXLO6yp4Gm1JY7fwiWlWo0pKqzqw",
@@ -27,6 +31,200 @@ setupSidebar();
 initIcons();
 
 const qs = (id) => document.getElementById(id);
+
+const RECRUITMENT_GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
+const cleanRecruitmentEmail = (email = '') => String(email || '').toLowerCase().trim();
+const normalizeRecruitmentRole = (value = '') => String(value || '')
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim();
+const isRecruitmentManagerRole = (value = '') => {
+  const role = normalizeRecruitmentRole(value);
+  return role === 'lider' || role === 'leader' || role === 'admin' || role === 'administrador';
+};
+const canonicalRecruitmentRole = (value = '') => {
+  const role = normalizeRecruitmentRole(value);
+  if (role === 'lider' || role === 'leader') return 'Líder';
+  if (role === 'admin' || role === 'administrador') return 'Admin';
+  if (role === 'jogador' || role === 'player') return 'Jogador';
+  return String(value || '').trim() || 'Membro';
+};
+const normalizeRecruitmentVipTier = (value = '') => {
+  const raw = String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (!raw) return 'free';
+  if (raw.includes('vital') || raw.includes('life')) return 'vitalicio';
+  if (raw.includes('business') || raw.includes('buss')) return 'business';
+  if (raw.includes('pro')) return 'pro';
+  if (raw.includes('plus')) return 'plus';
+  return raw === 'free' ? 'free' : raw;
+};
+const pickRecruitmentVipTier = (...sources) => {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    const raw = source.vipTier ?? source.vip ?? source.planoVip ?? source.planoVIP ?? source.vipLevel ?? source.vipPlano ?? source.vipName ?? source.plano ?? source.plan ?? source.tier;
+    const tier = normalizeRecruitmentVipTier(raw);
+    if (tier && tier !== 'free') return tier;
+  }
+  return 'free';
+};
+const readRecruitmentCachedCtx = () => {
+  try {
+    const raw = localStorage.getItem(RECRUITMENT_GUILDCTX_LS_KEY);
+    if (!raw) return null;
+    const ctx = JSON.parse(raw);
+    return ctx && ctx.guildId ? ctx : null;
+  } catch (_) {
+    return null;
+  }
+};
+const writeRecruitmentCachedCtx = (ctx = {}) => {
+  try {
+    if (!ctx?.guildId) return;
+    localStorage.setItem(RECRUITMENT_GUILDCTX_LS_KEY, JSON.stringify({
+      guildId: ctx.guildId,
+      guildName: ctx.guildName || null,
+      role: ctx.role || 'Membro',
+      vipTier: ctx.vipTier || 'free',
+      vipExpiresAtMs: ctx.vipExpiresAtMs ?? null,
+      email: ctx.email || '',
+      uid: ctx.uid || '',
+      ts: Date.now()
+    }));
+  } catch (_) {}
+};
+const waitRecruitmentAuthUser = () => new Promise((resolve) => {
+  try {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      try { unsubscribe(); } catch (_) {}
+      resolve(user || null);
+    });
+  } catch (_) {
+    resolve(auth.currentUser || null);
+  }
+});
+async function findRecruitmentGuildByEmail(emailLower) {
+  if (!emailLower) return null;
+  const attempts = [
+    { field: 'leaders', role: 'Líder' },
+    { field: 'admins', role: 'Admin' }
+  ];
+  for (const item of attempts) {
+    try {
+      const snap = await getDocs(query(collection(db, 'configGuilda'), where(item.field, 'array-contains', emailLower), limit(1)));
+      if (!snap.empty) {
+        const first = snap.docs[0];
+        return { guildId: first.id, role: item.role, configGuilda: first.data() || {} };
+      }
+    } catch (_) {}
+  }
+  try {
+    const snap = await getDocs(query(collection(db, 'configGuilda'), limit(300)));
+    for (const item of snap.docs) {
+      const data = item.data() || {};
+      const leaders = Array.isArray(data.leaders) ? data.leaders.map(cleanRecruitmentEmail) : [];
+      const admins = Array.isArray(data.admins) ? data.admins.map(cleanRecruitmentEmail) : [];
+      const ownerEmail = cleanRecruitmentEmail(data.ownerEmail);
+      if (leaders.includes(emailLower) || ownerEmail === emailLower) return { guildId: item.id, role: 'Líder', configGuilda: data };
+      if (admins.includes(emailLower)) return { guildId: item.id, role: 'Admin', configGuilda: data };
+    }
+  } catch (_) {}
+  return null;
+}
+function resolveRecruitmentRoleFromConfig(cfg = {}, emailLower = '', uid = '') {
+  const leaders = Array.isArray(cfg.leaders) ? cfg.leaders.map(cleanRecruitmentEmail) : [];
+  const admins = Array.isArray(cfg.admins) ? cfg.admins.map(cleanRecruitmentEmail) : [];
+  const ownerEmail = cleanRecruitmentEmail(cfg.ownerEmail);
+  const ownerUid = String(cfg.ownerUid || '').trim();
+  if ((uid && ownerUid === uid) || (ownerEmail && ownerEmail === emailLower) || leaders.includes(emailLower)) return 'Líder';
+  if (admins.includes(emailLower)) return 'Admin';
+  return '';
+}
+async function resolveRecruitmentAccessContext() {
+  const user = await waitRecruitmentAuthUser();
+  if (!user) {
+    window.location.href = 'index.html';
+    return null;
+  }
+
+  const emailLower = cleanRecruitmentEmail(user.email);
+  let profile = {};
+  let guildId = '';
+  let role = '';
+  let configGuilda = {};
+  let guildData = {};
+
+  try {
+    const userSnap = await getDoc(doc(db, 'users', user.uid));
+    if (userSnap.exists()) {
+      profile = userSnap.data() || {};
+      guildId = String(profile.guildId || '').trim();
+      role = canonicalRecruitmentRole(profile.role || '');
+    }
+  } catch (_) {}
+
+  if (!guildId) {
+    const found = await findRecruitmentGuildByEmail(emailLower);
+    if (found?.guildId) {
+      guildId = String(found.guildId || '').trim();
+      role = found.role || role;
+      configGuilda = found.configGuilda || {};
+    }
+  }
+
+  if (!guildId) {
+    showToast('error', 'Essa conta não está vinculada a uma guilda.');
+    window.location.href = 'index.html';
+    return null;
+  }
+
+  try {
+    if (!Object.keys(configGuilda || {}).length) {
+      const cfgSnap = await getDoc(doc(db, 'configGuilda', guildId));
+      configGuilda = cfgSnap.exists() ? (cfgSnap.data() || {}) : {};
+    }
+  } catch (_) {}
+
+  const roleFromConfig = resolveRecruitmentRoleFromConfig(configGuilda, emailLower, user.uid);
+  if (roleFromConfig) role = roleFromConfig;
+  role = canonicalRecruitmentRole(role || profile.role || '');
+
+  try {
+    const guildSnap = await getDoc(doc(db, 'guildas', guildId));
+    guildData = guildSnap.exists() ? (guildSnap.data() || {}) : {};
+    const ownerEmail = cleanRecruitmentEmail(guildData.ownerEmail);
+    const ownerUid = String(guildData.ownerUid || '').trim();
+    if ((ownerUid && ownerUid === user.uid) || (ownerEmail && ownerEmail === emailLower)) role = 'Líder';
+  } catch (_) {}
+
+  if (!isRecruitmentManagerRole(role)) {
+    showToast('error', 'Apenas Líder ou Admin podem acessar o recrutamento.');
+    window.location.href = 'dashboard.html';
+    return null;
+  }
+
+  const guildName = String(configGuilda.name || guildData.name || profile.guildName || '').trim() || null;
+  const vipTier = pickRecruitmentVipTier(configGuilda, guildData, profile);
+  const ctx = {
+    guildId,
+    guildName,
+    role,
+    vipTier,
+    vipExpiresAtMs: null,
+    email: emailLower,
+    uid: user.uid,
+    configGuilda
+  };
+
+  writeRecruitmentCachedCtx(ctx);
+  const emailEl = document.getElementById('user-email');
+  if (emailEl) emailEl.textContent = user.email || emailLower;
+  const roleEl = document.getElementById('user-role');
+  if (roleEl) roleEl.textContent = role;
+
+  return { user, ctx };
+}
+
 const normalizeTimestamp = (value) => {
   if (!value) return null;
   if (value instanceof Date) return value;
@@ -305,17 +503,19 @@ function bootManagementMode() {
   };
   let linkedUid = null, openedKey = '', currentRecruitment = null, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [], activeRequest = null;
   let managementGuildSlotsCache = [];
+  let recruitmentGuildCtx = readRecruitmentCachedCtx() || getGuildContext() || null;
 
-  const ctxGuildId = () => String(getGuildContext()?.guildId || '').trim();
-  const ctxGuildName = () => String(getGuildContext()?.guildName || '').trim();
+  const activeGuildContext = () => recruitmentGuildCtx || getGuildContext() || readRecruitmentCachedCtx() || {};
+
+  const ctxGuildId = () => String(activeGuildContext()?.guildId || '').trim();
+  const ctxGuildName = () => String(activeGuildContext()?.guildName || '').trim();
   const normalizeAccessRole = (value = '') => String(value || '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim();
   const canManageRecruitmentRole = () => {
-    const role = normalizeAccessRole(getGuildContext()?.role);
-    return role === 'lider' || role === 'leader' || role === 'admin' || role === 'administrador';
+    return isRecruitmentManagerRole(activeGuildContext()?.role);
   };
   const syncRecruitmentRoleUi = () => {
     const allowed = canManageRecruitmentRole();
@@ -324,7 +524,7 @@ function bootManagementMode() {
     });
     return allowed;
   };
-  const getGuildContextData = () => getGuildContext() || {};
+  const getGuildContextData = () => activeGuildContext() || {};
   const getGuildConfigData = () => {
     const ctx = getGuildContextData();
     const nested = ctx?.configGuilda;
@@ -365,7 +565,7 @@ function bootManagementMode() {
   };
   const refreshManagementGuildSlots = async () => {
     try {
-      const slots = await getGuildMultiConfig(4);
+      const slots = await getRecruitmentGuildMultiConfig(4);
       const normalized = normalizeManagementGuildSlots(slots);
       managementGuildSlotsCache = normalized.length ? normalized : buildFallbackManagementGuildSlots();
     } catch (_) {
@@ -411,8 +611,51 @@ function bootManagementMode() {
     select.value = hasPreferred ? String(preferredValue || '1') : String(slots[0]?.value || '1');
     refreshManagementCustomSelect(select);
   };
+  const getRecruitmentGuildAccessKeyConfig = async () => {
+    const ctx = activeGuildContext();
+    const cachedValue = String(ctx?.configGuilda?.guildAccessKey || ctx?.guildAccessKey || '').trim();
+    if (cachedValue) return cachedValue;
+    const guildId = ctxGuildId();
+    if (guildId) {
+      try {
+        const snap = await getDoc(doc(db, 'configGuilda', guildId));
+        const data = snap.exists() ? (snap.data() || {}) : {};
+        const value = String(data.guildAccessKey || '').trim();
+        if (value) return value;
+      } catch (_) {}
+    }
+    try { return await getGuildAccessKeyConfig(); } catch (_) { return null; }
+  };
+  const getRecruitmentGuildMultiConfig = async (maxSlots = 4) => {
+    const safeMax = Math.max(1, Math.min(4, Math.floor(Number(maxSlots) || 4)));
+    const ctx = activeGuildContext();
+    const guildId = ctxGuildId();
+    let cfg = ctx?.configGuilda && typeof ctx.configGuilda === 'object' ? ctx.configGuilda : {};
+    if (guildId && !Object.keys(cfg || {}).length) {
+      try {
+        const snap = await getDoc(doc(db, 'configGuilda', guildId));
+        cfg = snap.exists() ? (snap.data() || {}) : {};
+      } catch (_) {}
+    }
+    let primaryName = String(cfg.name || ctx.guildName || '').trim();
+    if (!primaryName && guildId) {
+      try {
+        const guildSnap = await getDoc(doc(db, 'guildas', guildId));
+        const guildData = guildSnap.exists() ? (guildSnap.data() || {}) : {};
+        primaryName = String(guildData.name || '').trim();
+      } catch (_) {}
+    }
+    const slots = [];
+    for (let slot = 1; slot <= safeMax; slot += 1) {
+      const nameField = slot === 1 ? 'name' : `name${slot}`;
+      const tagField = slot === 1 ? 'tagMembros' : `tagMembros${slot}`;
+      const name = slot === 1 ? (primaryName || ctxGuildName() || 'Guilda principal') : String(cfg[nameField] || '').trim();
+      slots.push({ slot, nameField, tagField, name, tag: String(cfg[tagField] || '').trim(), exists: slot === 1 ? true : !!name });
+    }
+    return slots;
+  };
   const getNormalizedVipTier = () => {
-    const raw = String(getGuildContext()?.vipTier || 'free').toLowerCase().trim();
+    const raw = String(activeGuildContext()?.vipTier || 'free').toLowerCase().trim();
     if (!raw) return 'free';
     if (raw.includes('vital') || raw.includes('life')) return 'vitalicio';
     if (raw.includes('business') || raw.includes('buss')) return 'business';
@@ -902,7 +1145,7 @@ function bootManagementMode() {
 
     let savedKey = '';
     try {
-      savedKey = normalizeGuildAccessKey(await getGuildAccessKeyConfig() || '');
+      savedKey = normalizeGuildAccessKey(await getRecruitmentGuildAccessKeyConfig() || '');
     } catch (_) {
       savedKey = '';
     }
@@ -1021,7 +1264,7 @@ function bootManagementMode() {
     els.copyBtn?.addEventListener('click', copyRecruitmentLink);
     els.loadBtn?.addEventListener('click', () => resolveKeyAndLoad(true));
     els.reloadBtn?.addEventListener('click', async () => {
-      const keyToReload = normalizeGuildAccessKey(openedKey || els.keyInput?.value || await getGuildAccessKeyConfig() || '');
+      const keyToReload = normalizeGuildAccessKey(openedKey || els.keyInput?.value || await getRecruitmentGuildAccessKeyConfig() || '');
       if (!isValidGuildAccessKey(keyToReload)) {
         setStatus(invalidGuildKeyMessage, 'error');
         showToast('error', invalidGuildKeyMessage);
@@ -1053,15 +1296,17 @@ function bootManagementMode() {
   }
   (async function boot(){
     bindEvents();
-    const user = await checkAuth(true);
-    if (!user) return;
+    const authResult = await resolveRecruitmentAccessContext();
+    if (!authResult?.user) return;
+    recruitmentGuildCtx = authResult.ctx || recruitmentGuildCtx;
+    const user = authResult.user;
     const roleAllowed = syncRecruitmentRoleUi();
     if (!roleAllowed) {
       showToast('error', 'Apenas Líder ou Admin podem acessar o recrutamento.');
       window.location.href = 'dashboard.html';
       return;
     }
-    const ctx = getGuildContext() || {};
+    const ctx = activeGuildContext() || {};
     if (els.currentUid) els.currentUid.textContent = String(ctx.guildId || '-');
     await refreshManagementGuildSlots();
     renderManagementGuildCard();
