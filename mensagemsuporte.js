@@ -1,4 +1,4 @@
-// mensagemsuporte.js — botão flutuante + chat de suporte do usuário
+// mensagemsuporte.js — botão flutuante + chamado/chat de suporte do usuário
 // Funciona separado da tela principal para não misturar com dashboard/perfil.
 
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -20,6 +20,7 @@ import { auth, db, getGuildContext, showToast, initIcons } from "./logic.js";
 
 const PROFILE_CACHE_TTL_MS = 10 * 60 * 1000;
 const CHAT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const SUPPORT_WELCOME_TEXT = "Olá! Aqui é o GUILDAHUB SUPORTE. Para conseguirmos te ajudar melhor, conte sua dúvida com o máximo de detalhes possível. Se puder, informe o que você estava tentando fazer, em qual tela aconteceu, se apareceu algum erro e qualquer detalhe que ajude nossa equipe a entender o problema. Nosso tempo de resposta pode variar, pois ainda somos uma equipe pequena, mas vamos responder assim que possível.";
 
 const state = {
   user: null,
@@ -116,7 +117,7 @@ function writeChatCache(partial = {}) {
   }));
 }
 
-function formatDate(value) {
+function formatDate(value, withTime = true) {
   try {
     let date = null;
 
@@ -133,12 +134,16 @@ function formatDate(value) {
 
     if (!date || Number.isNaN(date.getTime())) return "--";
 
-    return date.toLocaleString("pt-BR", {
+    return date.toLocaleString("pt-BR", withTime ? {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit"
+    } : {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
     });
   } catch (_) {
     return "--";
@@ -225,8 +230,7 @@ async function resolveProfile(forceRefresh = false) {
     authData = authSnap.exists() ? (authSnap.data() || {}) : {};
     profileId = getLikelyProfileId(authData, authSnap.id);
 
-    // Se existir ID oficial de jogo, tenta pegar o doc numérico para dados mais completos.
-    // Essa é a única leitura extra e só acontece quando necessário.
+    // Só faz a segunda leitura quando já existe um ID de jogo para buscar dados completos.
     if (profileId && profileId !== uid) {
       try {
         const profileSnap = await getDoc(doc(db, "users", profileId));
@@ -243,7 +247,6 @@ async function resolveProfile(forceRefresh = false) {
       } catch (_) {}
     }
   } catch (_) {
-    // Se regras bloquearem ou falhar internet, tenta pelo contexto/cache mínimo.
     authData = {};
   }
 
@@ -269,25 +272,25 @@ function ensureShell() {
   wrapper.id = "ghub-support-root";
   wrapper.innerHTML = `
     <button id="ghub-support-floating" type="button"
-      class="fixed right-4 bottom-4 sm:right-6 sm:bottom-6 z-[70] inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-emerald-600 text-white text-sm font-black shadow-2xl shadow-emerald-200 hover:bg-emerald-700 active:scale-95 transition-all">
+      class="fixed right-3 bottom-3 sm:right-6 sm:bottom-6 z-[70] inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-3.5 py-3 text-white text-sm font-black shadow-2xl shadow-emerald-200/70 hover:bg-emerald-700 active:scale-95 transition-all sm:px-4">
       <span class="relative flex">
         <i data-lucide="messages-square" class="w-5 h-5"></i>
         <span id="ghub-support-badge" class="hidden absolute -top-3 -right-3 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] leading-[18px] text-center font-black ring-2 ring-white">0</span>
       </span>
-      <span>Suporte</span>
+      <span class="hidden xs:inline sm:inline">Suporte</span>
     </button>
 
-    <div id="ghub-support-modal" class="hidden fixed inset-0 z-[80] bg-slate-950/50 backdrop-blur-sm px-3 py-4 sm:p-6">
+    <div id="ghub-support-modal" class="hidden fixed inset-0 z-[80] bg-slate-950/55 backdrop-blur-sm px-2 py-3 sm:p-6">
       <div class="min-h-full flex items-end sm:items-center justify-center">
-        <div class="w-full max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
-          <div class="flex items-start justify-between gap-4 px-5 py-4 border-b border-gray-100 bg-gradient-to-br from-emerald-50 to-white">
+        <div class="w-full max-w-xl max-h-[92vh] sm:max-h-[88vh] bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col">
+          <div class="shrink-0 flex items-start justify-between gap-3 px-4 py-4 sm:px-5 border-b border-gray-100 bg-gradient-to-br from-emerald-50 via-white to-white">
             <div class="min-w-0">
-              <div class="inline-flex items-center gap-2 rounded-full bg-emerald-100 text-emerald-700 px-3 py-1 text-[11px] font-black mb-2">
-                <i data-lucide="headphones" class="w-3.5 h-3.5"></i>
-                Atendimento Guilda HUB
+              <div class="inline-flex items-center gap-2 rounded-full bg-emerald-100 text-emerald-700 px-3 py-1 text-[10px] font-black mb-2 uppercase tracking-wide">
+                <i data-lucide="ticket" class="w-3.5 h-3.5"></i>
+                Chamado de suporte
               </div>
-              <h2 class="text-lg font-black text-gray-900 leading-tight">Mensagem com o suporte</h2>
-              <p class="text-xs text-gray-500 mt-1">Envie sua dúvida usando seu perfil configurado.</p>
+              <h2 class="text-base sm:text-lg font-black text-gray-900 leading-tight">Abrir chamado</h2>
+              <p class="text-xs text-gray-500 mt-1">Envie sua dúvida para o suporte da Guilda HUB.</p>
             </div>
             <button id="ghub-support-close-modal" type="button"
               class="shrink-0 w-10 h-10 rounded-2xl bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center">
@@ -295,7 +298,7 @@ function ensureShell() {
             </button>
           </div>
 
-          <div id="ghub-support-profile-warning" class="hidden p-5">
+          <div id="ghub-support-profile-warning" class="hidden p-4 sm:p-5 overflow-y-auto">
             <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <div class="flex gap-3">
                 <div class="shrink-0 w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
@@ -303,7 +306,7 @@ function ensureShell() {
                 </div>
                 <div>
                   <h3 class="font-black text-amber-900">Configure seu perfil primeiro</h3>
-                  <p class="text-sm text-amber-800 mt-1">Para falar com o suporte, seu perfil precisa ter o ID do jogo ativo.</p>
+                  <p class="text-sm text-amber-800 mt-1">Para abrir um chamado, seu perfil precisa ter o ID do jogo ativo.</p>
                   <a href="perfil.html" class="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-bold hover:bg-amber-700">
                     Abrir perfil
                     <i data-lucide="arrow-right" class="w-4 h-4"></i>
@@ -313,33 +316,33 @@ function ensureShell() {
             </div>
           </div>
 
-          <div id="ghub-support-chat-area" class="hidden">
-            <div class="p-5 border-b border-gray-100">
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="ghub-support-profile-info"></div>
+          <div id="ghub-support-chat-area" class="hidden min-h-0 flex-1 flex flex-col">
+            <div class="shrink-0 px-4 pt-4 sm:px-5 sm:pt-5">
+              <div id="ghub-support-profile-info" class="grid grid-cols-3 gap-2"></div>
             </div>
 
-            <div id="ghub-support-messages" class="h-[280px] sm:h-[320px] overflow-y-auto p-5 bg-gray-50/80 space-y-3"></div>
+            <div id="ghub-support-messages" class="min-h-[220px] h-[34vh] sm:h-[330px] overflow-y-auto px-4 py-4 sm:px-5 bg-gray-50/80 space-y-3 mt-4"></div>
 
-            <form id="ghub-support-form" class="p-4 border-t border-gray-100 bg-white">
-              <label class="block text-xs font-bold text-gray-500 mb-2">Sua mensagem</label>
-              <textarea id="ghub-support-text" rows="3" maxlength="700" placeholder="Digite sua dúvida para o suporte..."
+            <form id="ghub-support-form" class="shrink-0 p-4 sm:p-5 border-t border-gray-100 bg-white">
+              <label class="block text-xs font-black text-gray-500 mb-2 uppercase tracking-wide">Descreva sua dúvida</label>
+              <textarea id="ghub-support-text" rows="3" maxlength="1000" placeholder="Ex: estou com problema em..., apareceu tal erro..., tentei fazer isso..."
                 class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 resize-none"></textarea>
 
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3">
+              <div class="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 mt-3">
                 <button id="ghub-support-delete-chat" type="button"
                   class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-50 text-rose-600 text-sm font-bold hover:bg-rose-100">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
-                  Fechar chat
+                  Fechar chamado
                 </button>
 
                 <button id="ghub-support-send" type="submit"
-                  class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-black hover:bg-emerald-700 active:scale-95 transition-all">
+                  class="inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-black hover:bg-emerald-700 active:scale-95 transition-all">
                   <i data-lucide="send" class="w-4 h-4"></i>
-                  Enviar
+                  Abrir chamado
                 </button>
               </div>
 
-              <p class="text-[11px] text-gray-400 mt-2">Ao fechar o chat, todo o histórico deste atendimento será apagado.</p>
+              <p class="text-[11px] text-gray-400 mt-2">Ao fechar o chamado, todo o histórico deste atendimento será apagado.</p>
             </form>
           </div>
         </div>
@@ -391,31 +394,49 @@ function renderProfileInfo() {
   const p = state.profile;
   const items = [
     ["Nome", textOrDash(p.nick)],
-    ["ID do jogo", textOrDash(p.gameId || p.profileId)],
     ["UID", textOrDash(p.uid)],
-    ["UID da guilda", textOrDash(p.guildId)],
-    ["Nome da guilda", textOrDash(p.guildName)],
-    ["Cargo", textOrDash(p.role)],
-    ["E-mail", textOrDash(p.email)],
-    ["Data de entrada", formatDate(p.createdAt)]
+    ["Entrada", formatDate(p.createdAt, false)]
   ];
 
   container.innerHTML = "";
   items.forEach(([label, value]) => {
     const item = document.createElement("div");
-    item.className = "rounded-2xl bg-gray-50 border border-gray-100 p-3 min-w-0";
+    item.className = "rounded-2xl bg-gray-50 border border-gray-100 px-3 py-2 min-w-0";
+
     const labelEl = document.createElement("p");
-    labelEl.className = "text-[10px] font-black uppercase tracking-wider text-gray-400";
+    labelEl.className = "text-[9px] font-black uppercase tracking-wider text-gray-400 leading-none";
     labelEl.textContent = label;
 
     const valueEl = document.createElement("p");
-    valueEl.className = "mt-1 text-sm font-bold text-gray-800 break-all";
+    valueEl.className = "mt-1 text-[11px] sm:text-xs font-bold text-gray-800 truncate";
+    valueEl.title = value;
     valueEl.textContent = value;
 
     item.appendChild(labelEl);
     item.appendChild(valueEl);
     container.appendChild(item);
   });
+}
+
+function appendSupportWelcome(box) {
+  const row = document.createElement("div");
+  row.className = "flex justify-start";
+
+  const bubble = document.createElement("div");
+  bubble.className = "max-w-[92%] rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border bg-white text-gray-800 border-gray-100";
+
+  const who = document.createElement("p");
+  who.className = "text-[10px] font-black text-emerald-600 mb-1 uppercase tracking-wide";
+  who.textContent = "GUILDAHUB SUPORTE";
+
+  const text = document.createElement("p");
+  text.className = "text-sm whitespace-pre-wrap break-words leading-relaxed";
+  text.textContent = SUPPORT_WELCOME_TEXT;
+
+  bubble.appendChild(who);
+  bubble.appendChild(text);
+  row.appendChild(bubble);
+  box.appendChild(row);
 }
 
 function renderMessages() {
@@ -425,14 +446,15 @@ function renderMessages() {
   box.innerHTML = "";
 
   if (!state.messages.length) {
-    const empty = document.createElement("div");
-    empty.className = "h-full flex flex-col items-center justify-center text-center text-gray-400";
-    empty.innerHTML = `
-      <i data-lucide="message-circle" class="w-9 h-9 mb-2"></i>
-      <p class="text-sm font-bold text-gray-500">Nenhuma mensagem ainda</p>
-      <p class="text-xs mt-1">Envie a primeira mensagem para abrir o atendimento.</p>
+    appendSupportWelcome(box);
+
+    const hint = document.createElement("div");
+    hint.className = "rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/60 p-3 text-center";
+    hint.innerHTML = `
+      <p class="text-xs font-bold text-emerald-800">Digite sua mensagem abaixo para abrir o chamado.</p>
+      <p class="text-[11px] text-emerald-700/80 mt-1">As informações completas do seu perfil serão enviadas automaticamente para o suporte.</p>
     `;
-    box.appendChild(empty);
+    box.appendChild(hint);
     refreshIcons();
     return;
   }
@@ -444,18 +466,18 @@ function renderMessages() {
 
     const bubble = document.createElement("div");
     bubble.className = [
-      "max-w-[85%] rounded-2xl px-4 py-3 shadow-sm border",
+      "max-w-[88%] rounded-2xl px-4 py-3 shadow-sm border",
       mine
         ? "bg-emerald-600 text-white border-emerald-600 rounded-br-md"
         : "bg-white text-gray-800 border-gray-100 rounded-bl-md"
     ].join(" ");
 
     const who = document.createElement("p");
-    who.className = mine ? "text-[10px] font-black text-emerald-50 mb-1" : "text-[10px] font-black text-emerald-600 mb-1";
-    who.textContent = mine ? "Você" : "Suporte";
+    who.className = mine ? "text-[10px] font-black text-emerald-50 mb-1" : "text-[10px] font-black text-emerald-600 mb-1 uppercase tracking-wide";
+    who.textContent = mine ? "Você" : (msg.authorName || "GUILDAHUB SUPORTE");
 
     const text = document.createElement("p");
-    text.className = "text-sm whitespace-pre-wrap break-words";
+    text.className = "text-sm whitespace-pre-wrap break-words leading-relaxed";
     text.textContent = String(msg.text || "");
 
     const time = document.createElement("p");
@@ -472,6 +494,16 @@ function renderMessages() {
   box.scrollTop = box.scrollHeight;
 }
 
+function renderSendButton() {
+  const btn = qs("ghub-support-send");
+  if (!btn) return;
+  const hasChat = state.messages.length > 0 || readChatCache(state.user?.uid).chatOpen;
+  btn.innerHTML = hasChat
+    ? '<i data-lucide="send" class="w-4 h-4"></i> Enviar mensagem'
+    : '<i data-lucide="send" class="w-4 h-4"></i> Abrir chamado';
+  refreshIcons();
+}
+
 function renderModalState() {
   const warning = qs("ghub-support-profile-warning");
   const chat = qs("ghub-support-chat-area");
@@ -484,6 +516,7 @@ function renderModalState() {
   if (hasProfile) {
     renderProfileInfo();
     renderMessages();
+    renderSendButton();
   }
 
   renderBadge();
@@ -520,7 +553,7 @@ async function ensureProfileReady() {
   const profile = await resolveProfile(true);
   if (!profile?.profileId) {
     renderModalState();
-    showToast("error", "Configure seu perfil com o ID do jogo antes de falar com o suporte.");
+    showToast("error", "Configure seu perfil com o ID do jogo antes de abrir um chamado.");
     return null;
   }
 
@@ -563,6 +596,7 @@ function startMessageListener() {
     });
 
     renderBadge();
+    renderSendButton();
 
     if (state.modalOpen) {
       renderMessages();
@@ -573,12 +607,55 @@ function startMessageListener() {
   });
 }
 
+function buildSupportContext(profile) {
+  return {
+    nome: profile.nick || "",
+    idDoJogo: profile.gameId || profile.profileId || "",
+    profileId: profile.profileId || "",
+    uid: profile.uid || "",
+    email: profile.email || "",
+    cargo: profile.role || "",
+    uidGuilda: profile.guildId || "",
+    nomeGuilda: profile.guildName || "",
+    dataEntrada: formatDate(profile.createdAt),
+    urlPagina: String(window.location.href || ""),
+    abertoEmMs: Date.now()
+  };
+}
+
+function buildSupportContextText(profile) {
+  const c = buildSupportContext(profile);
+  return [
+    `Nome: ${textOrDash(c.nome)}`,
+    `ID do jogo: ${textOrDash(c.idDoJogo)}`,
+    `UID: ${textOrDash(c.uid)}`,
+    `E-mail: ${textOrDash(c.email)}`,
+    `Cargo: ${textOrDash(c.cargo)}`,
+    `UID da guilda: ${textOrDash(c.uidGuilda)}`,
+    `Nome da guilda: ${textOrDash(c.nomeGuilda)}`,
+    `Data de entrada: ${textOrDash(c.dataEntrada)}`,
+    `Página: ${textOrDash(c.urlPagina)}`
+  ].join("\n");
+}
+
 async function createChatDocIfNeeded(firstText) {
   const profile = state.profile;
   const ref = getChatDocRef();
   if (!profile || !ref) throw new Error("Perfil não encontrado.");
 
-  await setDoc(ref, {
+  const cached = readChatCache(state.user?.uid);
+  let isFirstTicket = !cached.chatOpen && state.messages.length === 0;
+
+  // Evita leitura extra nos próximos envios. Só confirma no Firebase quando parece ser a primeira mensagem.
+  if (isFirstTicket) {
+    try {
+      const currentSnap = await getDoc(ref);
+      if (currentSnap.exists()) isFirstTicket = false;
+    } catch (_) {}
+  }
+
+  const supportContext = buildSupportContext(profile);
+  const payload = {
     id: profile.profileId,
     profileId: profile.profileId,
     gameId: profile.gameId || profile.profileId,
@@ -597,17 +674,43 @@ async function createChatDocIfNeeded(firstText) {
       role: profile.role,
       createdAtText: formatDate(profile.createdAt)
     },
+    supportContext,
+    supportContextText: buildSupportContextText(profile),
     status: "aberto",
+    tipo: "chamado-suporte",
     lastMessage: String(firstText || "").slice(0, 180),
     lastMessageFrom: "user",
     unreadUser: 0,
-    createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     lastMessageAt: serverTimestamp(),
     lastMessageAtMs: Date.now()
-  }, { merge: true });
+  };
 
+  if (isFirstTicket) {
+    payload.createdAt = serverTimestamp();
+    payload.createdAtMs = Date.now();
+    payload.openedAt = serverTimestamp();
+    payload.openedAtMs = Date.now();
+  }
+
+  await setDoc(ref, payload, { merge: true });
   writeChatCache({ chatOpen: true });
+
+  return { isFirstTicket, supportContext };
+}
+
+async function addWelcomeMessageIfNeeded(colRef, isFirstTicket) {
+  if (!isFirstTicket) return;
+
+  await addDoc(colRef, {
+    from: "support",
+    authorName: "GUILDAHUB SUPORTE",
+    system: true,
+    text: SUPPORT_WELCOME_TEXT,
+    readByUser: true,
+    createdAt: serverTimestamp(),
+    createdAtMs: Date.now()
+  });
 }
 
 async function sendSupportMessage(event) {
@@ -621,12 +724,12 @@ async function sendSupportMessage(event) {
   const text = String(input?.value || "").trim();
 
   if (!text) {
-    showToast("error", "Digite uma mensagem antes de enviar.");
+    showToast("error", "Digite sua dúvida antes de abrir o chamado.");
     return;
   }
 
-  if (text.length > 700) {
-    showToast("error", "Mensagem muito grande. Use até 700 caracteres.");
+  if (text.length > 1000) {
+    showToast("error", "Mensagem muito grande. Use até 1000 caracteres.");
     return;
   }
 
@@ -638,9 +741,11 @@ async function sendSupportMessage(event) {
   }
 
   try {
-    await createChatDocIfNeeded(text);
-
+    const ticket = await createChatDocIfNeeded(text);
     const colRef = getMessagesCollectionRef();
+
+    await addWelcomeMessageIfNeeded(colRef, ticket.isFirstTicket);
+
     await addDoc(colRef, {
       from: "user",
       uid: profile.uid,
@@ -648,8 +753,13 @@ async function sendSupportMessage(event) {
       guildId: profile.guildId,
       text,
       readByUser: true,
+      ...(ticket.isFirstTicket ? {
+        primeiraMensagemDoChamado: true,
+        supportContext: ticket.supportContext,
+        supportContextText: buildSupportContextText(profile)
+      } : {}),
       createdAt: serverTimestamp(),
-      createdAtMs: Date.now()
+      createdAtMs: Date.now() + 1
     });
 
     await setDoc(getChatDocRef(), {
@@ -662,14 +772,16 @@ async function sendSupportMessage(event) {
     }, { merge: true });
 
     if (input) input.value = "";
-    showToast("success", "Mensagem enviada ao suporte.");
+    showToast("success", ticket.isFirstTicket ? "Chamado aberto e mensagem enviada." : "Mensagem enviada ao suporte.");
+    renderSendButton();
   } catch (error) {
     console.error(error);
     showToast("error", "Não foi possível enviar a mensagem.");
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = originalHtml || '<i data-lucide="send" class="w-4 h-4"></i> Enviar';
+      btn.innerHTML = originalHtml || '<i data-lucide="send" class="w-4 h-4"></i> Enviar mensagem';
+      renderSendButton();
       refreshIcons();
     }
   }
@@ -699,7 +811,7 @@ async function deleteSupportChat() {
   const profile = await ensureProfileReady();
   if (!profile) return;
 
-  const ok = window.confirm("Fechar este chat vai apagar todo o histórico deste atendimento. Deseja continuar?");
+  const ok = window.confirm("Fechar este chamado vai apagar todo o histórico deste atendimento. Deseja continuar?");
   if (!ok) return;
 
   const btn = qs("ghub-support-delete-chat");
@@ -714,20 +826,15 @@ async function deleteSupportChat() {
   try {
     const colRef = getMessagesCollectionRef();
     const snap = await getDocs(colRef);
+    const docs = snap.docs || [];
 
-    let batch = writeBatch(db);
-    let count = 0;
+    for (let i = 0; i < docs.length; i += 450) {
+      const batch = writeBatch(db);
+      docs.slice(i, i + 450).forEach((docSnap) => batch.delete(docSnap.ref));
+      await batch.commit();
+    }
 
-    snap.docs.forEach((docSnap) => {
-      batch.delete(docSnap.ref);
-      count += 1;
-
-      if (count >= 450) {
-        // Evita estourar o limite do batch.
-        // O próximo lote será criado após commit abaixo.
-      }
-    });
-
+    const batch = writeBatch(db);
     batch.delete(getChatDocRef());
     await batch.commit();
 
@@ -736,14 +843,14 @@ async function deleteSupportChat() {
     writeChatCache({ chatOpen: false, unreadCount: 0 });
 
     renderModalState();
-    showToast("success", "Chat fechado e histórico apagado.");
+    showToast("success", "Chamado fechado e histórico apagado.");
   } catch (error) {
     console.error(error);
-    showToast("error", "Não foi possível fechar o chat.");
+    showToast("error", "Não foi possível fechar o chamado.");
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = originalHtml || '<i data-lucide="trash-2" class="w-4 h-4"></i> Fechar chat';
+      btn.innerHTML = originalHtml || '<i data-lucide="trash-2" class="w-4 h-4"></i> Fechar chamado';
       refreshIcons();
     }
   }
