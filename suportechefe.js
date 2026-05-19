@@ -8,6 +8,8 @@ import {
   doc,
   addDoc,
   setDoc,
+  getDoc,
+  getDocs,
   onSnapshot,
   query,
   orderBy,
@@ -275,6 +277,25 @@ function ensureShell() {
         </div>
       </div>
 
+      <div class="bg-white border border-sky-100 rounded-2xl p-4 shadow-sm">
+        <div class="flex flex-col lg:flex-row gap-3 lg:items-center">
+          <div class="min-w-0 lg:w-64">
+            <p class="text-xs font-black text-sky-700 uppercase tracking-wider">Abrir chamado para usuário</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">Busca em <b>users/{ID do documento}</b>.</p>
+          </div>
+          <div class="relative flex-1">
+            <i data-lucide="user-search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
+            <input id="ceo-support-user-id" type="text" placeholder="Digite o ID do documento do usuário / ID do jogo"
+              class="w-full pl-12 pr-4 py-3.5 rounded-xl border border-gray-100 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500/20 text-sm" />
+          </div>
+          <button id="ceo-support-open-user" type="button"
+            class="inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-sky-600 text-white text-xs font-black hover:bg-sky-700 active:scale-95 transition whitespace-nowrap">
+            <i data-lucide="message-square-plus" class="w-4 h-4"></i>
+            Buscar e abrir
+          </button>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 xl:grid-cols-[390px,1fr] gap-4 min-h-[620px]">
         <section class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-[360px] xl:min-h-[620px]">
           <div class="shrink-0 p-4 border-b border-gray-100 flex items-center justify-between gap-3">
@@ -310,8 +331,8 @@ function ensureShell() {
 
                 <button id="ceo-support-close-ticket" type="button"
                   class="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-black hover:bg-gray-800">
-                  <i data-lucide="check-circle-2" class="w-4 h-4"></i>
-                  Fechar chamado
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  Fechar e apagar
                 </button>
               </div>
 
@@ -349,6 +370,13 @@ function ensureShell() {
   qs("ceo-support-reload")?.addEventListener("click", () => {
     showToast("info", "Os chamados já atualizam em tempo real.");
     renderTicketList();
+  });
+  qs("ceo-support-open-user")?.addEventListener("click", openTicketByUserSearch);
+  qs("ceo-support-user-id")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      openTicketByUserSearch();
+    }
   });
   qs("ceo-support-form")?.addEventListener("submit", sendSupportReply);
   qs("ceo-support-close-ticket")?.addEventListener("click", closeSelectedTicket);
@@ -612,13 +640,9 @@ function renderSelectedTicket() {
 
   const closeBtn = qs("ceo-support-close-ticket");
   if (closeBtn) {
-    const closed = s.key === "fechado";
-    closeBtn.disabled = closed;
-    closeBtn.classList.toggle("opacity-50", closed);
-    closeBtn.classList.toggle("cursor-not-allowed", closed);
-    closeBtn.innerHTML = closed
-      ? '<i data-lucide="check-circle-2" class="w-4 h-4"></i> Chamado fechado'
-      : '<i data-lucide="check-circle-2" class="w-4 h-4"></i> Fechar chamado';
+    closeBtn.disabled = false;
+    closeBtn.classList.remove("opacity-50", "cursor-not-allowed");
+    closeBtn.innerHTML = '<i data-lucide="trash-2" class="w-4 h-4"></i> Fechar e apagar';
   }
 
   renderMessages();
@@ -833,6 +857,199 @@ async function sendSupportReply(event) {
   }
 }
 
+function sanitizeUserDocId(value) {
+  const clean = String(value || "").trim();
+  if (!clean || clean.includes("/") || clean.length > 120) return "";
+  return clean;
+}
+
+function userDocProfileId(docId, data = {}) {
+  const direct = String(
+    data.gameIdMigrated ||
+    data.gameId ||
+    data.id ||
+    data.userId ||
+    ""
+  ).replace(/\D+/g, "");
+
+  if (direct) return direct;
+  if (/^\d+$/.test(String(docId || ""))) return String(docId);
+  return String(docId || "").trim();
+}
+
+function profileFromUserDoc(docId, data = {}) {
+  const profileId = userDocProfileId(docId, data);
+  const uid = String(data.uid || data.authUid || (String(docId || "").includes("-") ? docId : "")).trim();
+  const email = String(data.email || data.playerEmail || "").trim().toLowerCase();
+  const guildId = String(data.guildId || data.guild || data.guildUid || "").trim();
+  const guildName = String(data.guilda || data.guildName || data.nomeGuilda || "Sem guilda").trim() || "Sem guilda";
+
+  return {
+    profileId,
+    gameId: String(data.gameId || data.gameIdMigrated || profileId || "").trim(),
+    nick: String(data.nick || data.nome || data.name || "Usuário").trim() || "Usuário",
+    uid,
+    email,
+    guildId,
+    guildName,
+    role: String(data.role || data.cargo || "Membro").trim() || "Membro",
+    createdAt: data.createdAt || data.criadoEm || data.created_at || data.created || null
+  };
+}
+
+function buildSupportContextForProfile(profile = {}) {
+  return {
+    nome: profile.nick || "",
+    idDoJogo: profile.gameId || profile.profileId || "",
+    profileId: profile.profileId || "",
+    uid: profile.uid || "",
+    email: profile.email || "",
+    cargo: profile.role || "",
+    uidGuilda: profile.guildId || "",
+    nomeGuilda: profile.guildName || "",
+    dataEntrada: formatDate(profile.createdAt),
+    urlPagina: String(window.location.href || ""),
+    abertoPeloSuporte: true,
+    abertoEmMs: Date.now()
+  };
+}
+
+function supportContextTextFromProfile(profile = {}) {
+  const c = buildSupportContextForProfile(profile);
+  return [
+    `Nome: ${c.nome || "—"}`,
+    `ID do jogo: ${c.idDoJogo || "—"}`,
+    `UID: ${c.uid || "—"}`,
+    `E-mail: ${c.email || "—"}`,
+    `Cargo: ${c.cargo || "—"}`,
+    `UID da guilda: ${c.uidGuilda || "—"}`,
+    `Nome da guilda: ${c.nomeGuilda || "—"}`,
+    `Data de entrada: ${c.dataEntrada || "—"}`,
+    `Aberto pelo suporte: sim`
+  ].join("\n");
+}
+
+async function openTicketByUserSearch() {
+  const input = qs("ceo-support-user-id");
+  const btn = qs("ceo-support-open-user");
+  const userDocId = sanitizeUserDocId(input?.value || "");
+
+  if (!userDocId) {
+    showToast("error", "Digite um ID de documento válido do usuário.");
+    return;
+  }
+
+  const originalHtml = btn?.innerHTML || "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Buscando...';
+    refreshIcons();
+  }
+
+  try {
+    const userSnap = await getDoc(doc(db, "users", userDocId));
+    if (!userSnap.exists()) {
+      showToast("error", "Usuário não encontrado em users/" + userDocId + ".");
+      return;
+    }
+
+    const userData = userSnap.data() || {};
+    const profile = profileFromUserDoc(userSnap.id, userData);
+    if (!profile.profileId) {
+      showToast("error", "Esse usuário não tem ID suficiente para abrir chamado.");
+      return;
+    }
+
+    const ticketRef = doc(db, "mensagem", profile.profileId);
+    const ticketSnap = await getDoc(ticketRef);
+    const now = Date.now();
+    const supportContext = buildSupportContextForProfile(profile);
+
+    const ticketPayload = {
+      id: profile.profileId,
+      profileId: profile.profileId,
+      gameId: profile.gameId || profile.profileId,
+      uid: profile.uid,
+      email: profile.email,
+      guildId: profile.guildId,
+      guildName: profile.guildName,
+      role: profile.role,
+      profile: {
+        nick: profile.nick || "",
+        gameId: profile.gameId || profile.profileId,
+        uid: profile.uid || "",
+        email: profile.email || "",
+        guildId: profile.guildId || "",
+        guildName: profile.guildName || "",
+        role: profile.role || "Membro",
+        createdAtText: formatDate(profile.createdAt)
+      },
+      supportContext,
+      supportContextText: supportContextTextFromProfile(profile),
+      status: "respondido",
+      tipo: "chamado-suporte",
+      abertoPeloSuporte: true,
+      lastMessage: "Chamado aberto pelo suporte.",
+      lastMessageFrom: "support",
+      unreadUser: 1,
+      supportUid: auth.currentUser?.uid || null,
+      supportEmail: auth.currentUser?.email || null,
+      updatedAt: serverTimestamp(),
+      updatedAtMs: now,
+      lastMessageAt: serverTimestamp(),
+      lastMessageAtMs: now
+    };
+
+    if (!ticketSnap.exists()) {
+      ticketPayload.createdAt = serverTimestamp();
+      ticketPayload.createdAtMs = now;
+      ticketPayload.openedAt = serverTimestamp();
+      ticketPayload.openedAtMs = now;
+    }
+
+    await setDoc(ticketRef, ticketPayload, { merge: true });
+
+    if (!ticketSnap.exists()) {
+      await addDoc(collection(db, "mensagem", profile.profileId, "mensagens"), {
+        from: "support",
+        authorName: "GUILDAHUB SUPORTE",
+        supportUid: auth.currentUser?.uid || null,
+        supportEmail: auth.currentUser?.email || null,
+        profileId: profile.profileId,
+        uid: profile.uid || null,
+        guildId: profile.guildId || null,
+        text: "Olá! O suporte da Guilda HUB abriu este chamado para falar com você. Responda por aqui quando puder.",
+        readBySupport: true,
+        readByUser: false,
+        createdAt: serverTimestamp(),
+        createdAtMs: now
+      });
+    }
+
+    const draftTicket = {
+      id: profile.profileId,
+      ref: ticketRef,
+      ...((ticketSnap.exists() ? ticketSnap.data() : {}) || {}),
+      ...ticketPayload
+    };
+
+    state.tickets = [draftTicket, ...state.tickets.filter((t) => t.id !== profile.profileId)];
+    if (input) input.value = "";
+    openTicket(profile.profileId);
+    renderTicketList();
+    showToast("success", ticketSnap.exists() ? "Chamado existente aberto." : "Chamado criado para o usuário.");
+  } catch (error) {
+    console.error(error);
+    showToast("error", "Não foi possível buscar/abrir chamado para esse usuário.");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml || '<i data-lucide="message-square-plus" class="w-4 h-4"></i> Buscar e abrir';
+      refreshIcons();
+    }
+  }
+}
+
 async function closeSelectedTicket() {
   const ticket = getSelectedTicket();
   if (!ticket) {
@@ -840,9 +1057,7 @@ async function closeSelectedTicket() {
     return;
   }
 
-  if (statusInfo(ticket.status).key === "fechado") return;
-
-  const ok = window.confirm("Fechar este chamado? O histórico continuará visível para o suporte.");
+  const ok = window.confirm("Fechar este chamado vai apagar o histórico e remover o chamado da lista. Deseja continuar?");
   if (!ok) return;
 
   const btn = qs("ceo-support-close-ticket");
@@ -850,50 +1065,43 @@ async function closeSelectedTicket() {
 
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Fechando...';
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Apagando...';
     refreshIcons();
   }
 
   try {
-    const now = Date.now();
     const ticketRef = doc(db, "mensagem", ticket.id);
     const messagesRef = collection(db, "mensagem", ticket.id, "mensagens");
+    const snap = await getDocs(messagesRef);
+    const docs = snap.docs || [];
 
-    await addDoc(messagesRef, {
-      from: "support",
-      authorName: "GUILDAHUB SUPORTE",
-      system: true,
-      supportUid: auth.currentUser?.uid || null,
-      supportEmail: auth.currentUser?.email || null,
-      text: "Chamado fechado pelo suporte. Caso ainda precise de ajuda, envie uma nova mensagem neste atendimento.",
-      readBySupport: true,
-      readByUser: false,
-      createdAt: serverTimestamp(),
-      createdAtMs: now
-    });
+    for (let i = 0; i < docs.length; i += 450) {
+      const batch = writeBatch(db);
+      docs.slice(i, i + 450).forEach((docSnap) => batch.delete(docSnap.ref));
+      await batch.commit();
+    }
 
-    await setDoc(ticketRef, {
-      status: "fechado",
-      closedAt: serverTimestamp(),
-      closedAtMs: now,
-      closedBySupportUid: auth.currentUser?.uid || null,
-      closedBySupportEmail: auth.currentUser?.email || null,
-      lastMessage: "Chamado fechado pelo suporte.",
-      lastMessageFrom: "support",
-      updatedAt: serverTimestamp(),
-      updatedAtMs: now,
-      lastMessageAt: serverTimestamp(),
-      lastMessageAtMs: now
-    }, { merge: true });
+    const batch = writeBatch(db);
+    batch.delete(ticketRef);
+    await batch.commit();
 
-    showToast("success", "Chamado fechado.");
+    state.tickets = state.tickets.filter((item) => item.id !== ticket.id);
+    state.selectedTicketId = "";
+    state.messages = [];
+    saveCachedSelectedTicket("");
+    stopMessageListener();
+
+    updateStats();
+    renderTicketList();
+    renderSelectedTicket();
+    showToast("success", "Chamado fechado e apagado.");
   } catch (error) {
     console.error(error);
-    showToast("error", "Não foi possível fechar o chamado.");
+    showToast("error", "Não foi possível fechar/apagar o chamado.");
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = originalHtml || '<i data-lucide="check-circle-2" class="w-4 h-4"></i> Fechar chamado';
+      btn.innerHTML = originalHtml || '<i data-lucide="trash-2" class="w-4 h-4"></i> Fechar e apagar';
       refreshIcons();
     }
   }

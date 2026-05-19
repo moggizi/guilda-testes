@@ -576,6 +576,18 @@ function getMessagesCollectionRef() {
   return collection(db, "mensagem", profileId, "mensagens");
 }
 
+function stopMessageListener() {
+  if (state.unsubMessages) {
+    try { state.unsubMessages(); } catch (_) {}
+  }
+  state.unsubMessages = null;
+}
+
+function restartMessageListener() {
+  stopMessageListener();
+  startMessageListener();
+}
+
 function startMessageListener() {
   if (state.unsubMessages || !state.profile?.profileId) return;
 
@@ -605,7 +617,8 @@ function startMessageListener() {
       if (unread > 0) markSupportMessagesAsRead();
     }
   }, () => {
-    // Não bloqueia a tela se a regra do Firestore ainda não estiver liberada.
+    // Se o listener iniciou antes do documento do chamado existir, limpa para permitir reconectar no primeiro envio.
+    state.unsubMessages = null;
   });
 }
 
@@ -713,6 +726,30 @@ async function addWelcomeMessageIfNeeded(colRef, isFirstTicket) {
   return;
 }
 
+function appendLocalUserMessage(text, profile) {
+  const now = Date.now();
+  const tempId = `local-${now}`;
+
+  state.messages = [
+    ...state.messages.filter((msg) => String(msg.id || '').indexOf('local-') !== 0),
+    {
+      id: tempId,
+      from: 'user',
+      uid: profile?.uid || state.user?.uid || '',
+      profileId: profile?.profileId || '',
+      guildId: profile?.guildId || '',
+      text: String(text || ''),
+      readByUser: true,
+      pendingLocal: true,
+      createdAtMs: now
+    }
+  ];
+
+  writeChatCache({ chatOpen: true, unreadCount: state.unreadCount || 0 });
+  renderMessages();
+  renderSendButton();
+}
+
 async function sendSupportMessage(event) {
   event.preventDefault();
 
@@ -761,6 +798,10 @@ async function sendSupportMessage(event) {
       createdAt: serverTimestamp(),
       createdAtMs: Date.now() + 1
     });
+
+    // Mostra a mensagem na hora, mesmo se o listener inicial tiver falhado por permissão/doc inexistente.
+    appendLocalUserMessage(text, profile);
+    restartMessageListener();
 
     await setDoc(getChatDocRef(), {
       status: "aberto",
