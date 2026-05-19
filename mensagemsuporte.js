@@ -280,9 +280,9 @@ function ensureShell() {
       <span class="hidden xs:inline sm:inline">Suporte</span>
     </button>
 
-    <div id="ghub-support-modal" class="hidden fixed inset-0 z-[80] bg-slate-950/55 backdrop-blur-sm px-2 py-3 sm:p-6">
-      <div class="min-h-full flex items-end sm:items-center justify-center">
-        <div class="w-full max-w-xl max-h-[92vh] sm:max-h-[88vh] bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col">
+    <div id="ghub-support-modal" class="hidden fixed inset-0 z-[80] bg-slate-950/55 backdrop-blur-sm overflow-y-auto overscroll-contain px-2 py-3 sm:p-6">
+      <div class="min-h-full flex items-start sm:items-center justify-center py-2">
+        <div class="w-full max-w-xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-3rem)] bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col">
           <div class="shrink-0 flex items-start justify-between gap-3 px-4 py-4 sm:px-5 border-b border-gray-100 bg-gradient-to-br from-emerald-50 via-white to-white">
             <div class="min-w-0">
               <div class="inline-flex items-center gap-2 rounded-full bg-emerald-100 text-emerald-700 px-3 py-1 text-[10px] font-black mb-2 uppercase tracking-wide">
@@ -298,7 +298,7 @@ function ensureShell() {
             </button>
           </div>
 
-          <div id="ghub-support-profile-warning" class="hidden p-4 sm:p-5 overflow-y-auto">
+          <div id="ghub-support-profile-warning" class="hidden p-4 sm:p-5 overflow-y-auto min-h-0">
             <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <div class="flex gap-3">
                 <div class="shrink-0 w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
@@ -316,27 +316,27 @@ function ensureShell() {
             </div>
           </div>
 
-          <div id="ghub-support-chat-area" class="hidden min-h-0 flex-1 flex flex-col">
+          <div id="ghub-support-chat-area" class="hidden min-h-0 flex-1 overflow-y-auto flex flex-col">
             <div class="shrink-0 px-4 pt-4 sm:px-5 sm:pt-5">
               <div id="ghub-support-profile-info" class="grid grid-cols-3 gap-2"></div>
             </div>
 
-            <div id="ghub-support-messages" class="min-h-[220px] h-[34vh] sm:h-[330px] overflow-y-auto px-4 py-4 sm:px-5 bg-gray-50/80 space-y-3 mt-4"></div>
+            <div id="ghub-support-messages" class="min-h-[160px] max-h-[38dvh] sm:max-h-[330px] overflow-y-auto px-4 py-4 sm:px-5 bg-gray-50/80 space-y-3 mt-4"></div>
 
             <form id="ghub-support-form" class="shrink-0 p-4 sm:p-5 border-t border-gray-100 bg-white">
               <label class="block text-xs font-black text-gray-500 mb-2 uppercase tracking-wide">Descreva sua dúvida</label>
               <textarea id="ghub-support-text" rows="3" maxlength="1000" placeholder="Ex: estou com problema em..., apareceu tal erro..., tentei fazer isso..."
                 class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 resize-none"></textarea>
 
-              <div class="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 mt-3">
+              <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
                 <button id="ghub-support-delete-chat" type="button"
-                  class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-50 text-rose-600 text-sm font-bold hover:bg-rose-100">
+                  class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-50 text-rose-600 text-sm font-bold hover:bg-rose-100 whitespace-nowrap">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
                   Fechar chamado
                 </button>
 
                 <button id="ghub-support-send" type="submit"
-                  class="inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-black hover:bg-emerald-700 active:scale-95 transition-all">
+                  class="w-full sm:w-auto sm:min-w-[170px] inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-black hover:bg-emerald-700 active:scale-95 transition-all whitespace-nowrap">
                   <i data-lucide="send" class="w-4 h-4"></i>
                   Abrir chamado
                 </button>
@@ -458,6 +458,8 @@ function renderMessages() {
     refreshIcons();
     return;
   }
+
+  appendSupportWelcome(box);
 
   state.messages.forEach((msg) => {
     const mine = msg.from === "user";
@@ -655,7 +657,8 @@ async function createChatDocIfNeeded(firstText) {
   }
 
   const supportContext = buildSupportContext(profile);
-  const payload = {
+
+  const payload = isFirstTicket ? {
     id: profile.profileId,
     profileId: profile.profileId,
     gameId: profile.gameId || profile.profileId,
@@ -681,17 +684,22 @@ async function createChatDocIfNeeded(firstText) {
     lastMessage: String(firstText || "").slice(0, 180),
     lastMessageFrom: "user",
     unreadUser: 0,
+    createdAt: serverTimestamp(),
+    createdAtMs: Date.now(),
+    openedAt: serverTimestamp(),
+    openedAtMs: Date.now(),
+    updatedAt: serverTimestamp(),
+    lastMessageAt: serverTimestamp(),
+    lastMessageAtMs: Date.now()
+  } : {
+    status: "aberto",
+    lastMessage: String(firstText || "").slice(0, 180),
+    lastMessageFrom: "user",
+    unreadUser: 0,
     updatedAt: serverTimestamp(),
     lastMessageAt: serverTimestamp(),
     lastMessageAtMs: Date.now()
   };
-
-  if (isFirstTicket) {
-    payload.createdAt = serverTimestamp();
-    payload.createdAtMs = Date.now();
-    payload.openedAt = serverTimestamp();
-    payload.openedAtMs = Date.now();
-  }
 
   await setDoc(ref, payload, { merge: true });
   writeChatCache({ chatOpen: true });
@@ -700,17 +708,9 @@ async function createChatDocIfNeeded(firstText) {
 }
 
 async function addWelcomeMessageIfNeeded(colRef, isFirstTicket) {
-  if (!isFirstTicket) return;
-
-  await addDoc(colRef, {
-    from: "support",
-    authorName: "GUILDAHUB SUPORTE",
-    system: true,
-    text: SUPPORT_WELCOME_TEXT,
-    readByUser: true,
-    createdAt: serverTimestamp(),
-    createdAtMs: Date.now()
-  });
+  // A mensagem do GUILDAHUB SUPORTE é exibida no modal, mas não é gravada pelo usuário.
+  // Assim as regras podem permitir que o usuário crie apenas as próprias mensagens.
+  return;
 }
 
 async function sendSupportMessage(event) {
