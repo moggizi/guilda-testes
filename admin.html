@@ -219,8 +219,56 @@
     </main>
   </div>
 
+  <!-- Modal Adicionar Acesso -->
+  <div id="access-modal" class="fixed inset-0 z-[80] hidden" aria-hidden="true">
+    <div id="access-modal-backdrop" class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"></div>
+    <div class="relative min-h-full flex items-center justify-center p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="access-modal-title" class="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-white/70 overflow-hidden">
+        <div class="p-5 sm:p-6 border-b border-gray-100 bg-gradient-to-br from-emerald-50 via-white to-white">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <div class="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-3 ring-1 ring-emerald-200">
+                <i id="access-modal-icon" data-lucide="shield-plus" class="w-5 h-5"></i>
+              </div>
+              <h2 id="access-modal-title" class="text-lg font-extrabold text-gray-900">Adicionar acesso</h2>
+              <p id="access-modal-subtitle" class="text-sm text-gray-500 mt-1">Crie a conta e libere o acesso para a sua guilda.</p>
+            </div>
+            <button id="access-modal-close" type="button" class="shrink-0 p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-white transition-colors" aria-label="Fechar modal">
+              <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+          </div>
+        </div>
+
+        <form id="access-form" class="p-5 sm:p-6 space-y-4">
+          <div class="rounded-2xl bg-amber-50 border border-amber-100 p-4 text-xs text-amber-800 leading-relaxed">
+            <p id="access-modal-instructions" class="font-semibold">Informe um e-mail novo e uma senha para criar a conta de acesso.</p>
+            <p class="mt-1">Depois de criada, passe o e-mail e a senha para o Admin ou Líder entrar no sistema.</p>
+          </div>
+
+          <div>
+            <label for="access-email" class="block text-xs font-bold text-gray-600 mb-1.5">E-mail da conta</label>
+            <input id="access-email" type="email" autocomplete="email" placeholder="ex: admin.suaguilda@gmail.com" required
+              class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 text-sm" />
+          </div>
+
+          <div>
+            <label for="access-pass" class="block text-xs font-bold text-gray-600 mb-1.5">Senha inicial</label>
+            <input id="access-pass" type="password" autocomplete="new-password" minlength="6" required placeholder="Mínimo 6 caracteres"
+              class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 text-sm" />
+            <p class="text-[11px] text-gray-400 mt-2">Mínimo 6 caracteres. Sem espaços. Permitido: letras, números e <b>?</b> <b>.</b> <b>!</b> <b>#</b> <b>@</b> <b>_</b>.</p>
+          </div>
+
+          <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+            <button id="access-cancel" type="button" class="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 transition-colors">Cancelar</button>
+            <button id="access-submit" type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-sm shadow-emerald-200 transition-colors">Criar e liberar acesso</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
-    import { checkAuth, setupSidebar, initIcons, showToast, logout, auth, db, getGuildContext, ensureUserAccount, createPlayer_DISABLED_BETAAccess, revokePlayerAccess, deletePlayerAccount } from "./logic.js";
+    import { checkAuth, setupSidebar, initIcons, showToast, logout, auth, db, getGuildContext, ensureUserAccount, cleanupFailedUserAccount, createPlayer_DISABLED_BETAAccess, revokePlayerAccess, deletePlayerAccount } from "./logic.js";
     import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
@@ -409,35 +457,170 @@ function startRealtime() {
       showToast('info', 'Em breve! Este recurso ainda está em desenvolvimento.');
     });
 
-    document.getElementById('btn-add-admin')?.addEventListener('click', () => addAccess('admins'));
-    document.getElementById('btn-add-leader')?.addEventListener('click', () => addAccess('leaders'));
+    const ACCESS_PASSWORD_RE = /^[A-Za-z0-9?.!#@_]{6,}$/;
+    let pendingAccessType = null;
+    let accessSubmitting = false;
+
+    const accessModal = document.getElementById('access-modal');
+    const accessForm = document.getElementById('access-form');
+    const accessEmailInput = document.getElementById('access-email');
+    const accessPassInput = document.getElementById('access-pass');
+    const accessSubmitBtn = document.getElementById('access-submit');
+    const accessModalTitle = document.getElementById('access-modal-title');
+    const accessModalSubtitle = document.getElementById('access-modal-subtitle');
+    const accessModalInstructions = document.getElementById('access-modal-instructions');
+
+    function cleanAccessEmail(value) {
+      return String(value || '').toLowerCase().trim();
+    }
+
+    function normalizeAccessList(list) {
+      const out = [];
+      const seen = new Set();
+      (Array.isArray(list) ? list : []).forEach((item) => {
+        const email = cleanAccessEmail(item);
+        if (!email || seen.has(email)) return;
+        seen.add(email);
+        out.push(email);
+      });
+      return out;
+    }
+
+    function accessRoleLabel(type) {
+      return type === 'leaders' ? 'Líder' : 'Admin';
+    }
+
+    function emailAlreadyHasAccess(email) {
+      const all = [
+        ...normalizeAccessList(securityData.admins),
+        ...normalizeAccessList(securityData.leaders)
+      ];
+      return all.includes(cleanAccessEmail(email));
+    }
+
+    function setAccessSubmitting(isLoading) {
+      accessSubmitting = !!isLoading;
+      if (accessSubmitBtn) {
+        accessSubmitBtn.disabled = accessSubmitting;
+        accessSubmitBtn.classList.toggle('opacity-70', accessSubmitting);
+        accessSubmitBtn.classList.toggle('cursor-not-allowed', accessSubmitting);
+        accessSubmitBtn.textContent = accessSubmitting ? 'Criando conta...' : 'Criar e liberar acesso';
+      }
+      if (accessEmailInput) accessEmailInput.disabled = accessSubmitting;
+      if (accessPassInput) accessPassInput.disabled = accessSubmitting;
+      document.getElementById('access-cancel')?.classList.toggle('pointer-events-none', accessSubmitting);
+      document.getElementById('access-modal-close')?.classList.toggle('pointer-events-none', accessSubmitting);
+    }
+
+    function openAccessModal(type) {
+      pendingAccessType = type;
+      const role = accessRoleLabel(type);
+      if (accessModalTitle) accessModalTitle.textContent = `Adicionar ${role}`;
+      if (accessModalSubtitle) accessModalSubtitle.textContent = `Crie uma conta de ${role} e libere o acesso para esta guilda.`;
+      if (accessModalInstructions) accessModalInstructions.textContent = `Informe um e-mail que ainda não tenha conta e defina uma senha para criar o acesso de ${role}.`;
+      if (accessForm) accessForm.reset();
+      setAccessSubmitting(false);
+      accessModal?.classList.remove('hidden');
+      accessModal?.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('overflow-hidden');
+      setTimeout(() => accessEmailInput?.focus(), 50);
+      try { initIcons(); } catch (_) {}
+    }
+
+    function closeAccessModal(force = false) {
+      if (accessSubmitting && !force) return;
+      accessModal?.classList.add('hidden');
+      accessModal?.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('overflow-hidden');
+      pendingAccessType = null;
+    }
+
+    function friendlyAccessError(error) {
+      const msg = String(error?.message || error || '').trim();
+      const code = String(error?.code || '').trim();
+      if (code.includes('email-already-in-use') || code.includes('account-exists') || msg.toLowerCase().includes('já possui conta') || msg.toLowerCase().includes('já existe')) {
+        return 'Esse e-mail já possui uma conta. Use outro e-mail para criar o acesso.';
+      }
+      if (code.includes('invalid-email') || msg.toLowerCase().includes('e-mail inválido')) return 'Informe um e-mail válido.';
+      if (code.includes('weak-password') || msg.toLowerCase().includes('senha')) return 'Senha inválida. Use mínimo 6 caracteres, sem espaços, apenas letras, números e ? . ! # @ _.';
+      return msg || 'Erro ao adicionar acesso.';
+    }
+
+    document.getElementById('btn-add-admin')?.addEventListener('click', () => openAccessModal('admins'));
+    document.getElementById('btn-add-leader')?.addEventListener('click', () => openAccessModal('leaders'));
+    document.getElementById('access-modal-close')?.addEventListener('click', () => closeAccessModal());
+    document.getElementById('access-cancel')?.addEventListener('click', () => closeAccessModal());
+    document.getElementById('access-modal-backdrop')?.addEventListener('click', () => closeAccessModal());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !accessModal?.classList.contains('hidden')) closeAccessModal();
+    });
+
+    accessForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await addAccess(pendingAccessType);
+    });
 
     async function addAccess(type) {
+      if (!type || !['admins', 'leaders'].includes(type)) return;
+      if (accessSubmitting) return;
+
+      const cleanEmail = cleanAccessEmail(accessEmailInput?.value);
+      const pass = String(accessPassInput?.value || '');
+
+      if (!cleanEmail || !cleanEmail.includes('@')) return showToast('error', 'Informe um e-mail válido.');
+      if (emailAlreadyHasAccess(cleanEmail)) return showToast('info', 'Esse e-mail já está na lista de acesso desta guilda.');
+      if (!ACCESS_PASSWORD_RE.test(pass)) {
+        return showToast('error', 'Senha inválida. Use mínimo 6 caracteres, sem espaços, apenas letras, números e ? . ! # @ _.');
+      }
+
+      const role = accessRoleLabel(type);
+      let createdAccount = null;
+      let cleanupDone = false;
+      setAccessSubmitting(true);
+
       try {
-        const email = prompt("Digite o e-mail do usuário:");
-        if (!email) return;
-        const cleanEmail = email.toLowerCase().trim();
-        if (!cleanEmail.includes('@')) return showToast('error', 'E-mail inválido.');
+        createdAccount = await ensureUserAccount(cleanEmail, pass, { guildId: getGuildContext().guildId, role });
 
-        if (securityData[type].includes(cleanEmail)) return showToast('info', 'E-mail já está na lista.');
+        if (!createdAccount?.created) {
+          throw new Error('Esse e-mail já possui uma conta. Use outro e-mail para criar o acesso.');
+        }
 
-        let resUid = null;
-        let created = false;
-        try {
-          const pass = prompt('Se a conta não existir, defina uma senha (mín. 6) para criar.\nSe já existir, deixe em branco:');
-          if (pass && pass.length >= 6) {
-            const res = await ensureUserAccount(cleanEmail, pass, { guildId: getGuildContext().guildId, role: (type === 'leaders' ? 'Líder' : 'Admin') });
-            created = res.created;
-            resUid = res.uid;
-          }
-        } catch (e) { console.warn(e); }
-
-
-        securityData[type].push(cleanEmail);
+        const previousList = normalizeAccessList(securityData[type]);
+        securityData[type] = normalizeAccessList([...previousList, cleanEmail]);
         renderList(type, securityData[type]);
-        await saveSecurity();
-        showToast('success', created ? 'Conta criada e acesso liberado.' : 'Acesso liberado.');
-      } catch (e) { showToast('error', 'Erro ao adicionar.'); load(); }
+
+        try {
+          await saveSecurity();
+        } catch (saveError) {
+          securityData[type] = previousList;
+          renderList(type, securityData[type]);
+          try { localStorage.setItem(guildCacheKey(), JSON.stringify(securityData)); } catch (_) {}
+          if (createdAccount?.cleanupToken) {
+            await cleanupFailedUserAccount(createdAccount.cleanupToken, {
+              reason: 'admin-access-save-failed',
+              uid: createdAccount.uid
+            });
+            cleanupDone = true;
+          }
+          throw saveError;
+        }
+
+        closeAccessModal(true);
+        showToast('success', `Conta de ${role} criada e acesso liberado.`);
+      } catch (e) {
+        showToast('error', friendlyAccessError(e));
+        if (createdAccount?.cleanupToken && !cleanupDone) {
+          try {
+            await cleanupFailedUserAccount(createdAccount.cleanupToken, {
+              reason: 'admin-access-create-failed',
+              uid: createdAccount.uid
+            });
+          } catch (_) {}
+        }
+        load();
+      } finally {
+        setAccessSubmitting(false);
+      }
     }
 
     async function removeAccess(type, email) {
@@ -450,6 +633,9 @@ function startRealtime() {
     }
 
     async function saveSecurity() {
+      securityData.admins = normalizeAccessList(securityData.admins);
+      securityData.leaders = normalizeAccessList(securityData.leaders);
+
       // Salva no cache instantaneamente
       localStorage.setItem(guildCacheKey(), JSON.stringify(securityData));
       

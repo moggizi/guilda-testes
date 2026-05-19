@@ -1825,45 +1825,119 @@ export function consumeLoginToasts() {
   } catch (e) {}
 }
 
+function __isValidAccessPassword(password) {
+  return /^[A-Za-z0-9?.!#@_]{6,}$/.test(String(password || ''));
+}
+
+function __isEmailAlreadyInUseError(error) {
+  const code = String(error?.code || '').toLowerCase();
+  const msg = String(error?.message || error || '').toLowerCase();
+  return code.includes('email-already-in-use') || code.includes('account-exists') || msg.includes('email-already-in-use') || msg.includes('already in use');
+}
+
+export async function cleanupFailedUserAccount(idToken, opts = {}) {
+  const token = String(idToken || '').trim();
+  if (!token) return { ok: false, skipped: true, error: 'missing-token' };
+
+  const payload = {
+    reason: String(opts?.reason || 'admin-access-create-failed').slice(0, 160),
+    ...(opts?.uid ? { guildId: String(opts.uid) } : {}),
+    ...(opts?.gameId ? { gameId: String(opts.gameId) } : {})
+  };
+
+  const urls = [
+    '/api/signup_cleanup_failed',
+    './api/signup_cleanup_failed',
+    '/api/signup_cleanup_failed.js',
+    './api/signup_cleanup_failed.js'
+  ];
+
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      let data = null;
+      try { data = await res.json(); } catch (_) { data = null; }
+
+      if (res.ok && data?.ok !== false) return data || { ok: true };
+      lastError = new Error(data?.error || `cleanup-failed-${res.status}`);
+
+      // Se a rota não existir com este formato, tenta o próximo caminho.
+      if (res.status === 404) continue;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('cleanup-failed');
+}
+
 export async function ensureUserAccount(email, password, opts = {}) {
   const e = cleanEmail(email);
   if (!e) throw new Error("E-mail inválido.");
 
   const methods = await fetchSignInMethodsForEmail(auth, e);
   if (methods && methods.length) {
-    // Conta já existe.
-    return { created: false, uid: null };
+    throw new Error("Esse e-mail já possui uma conta. Use outro e-mail para criar o acesso.");
   }
 
-  if (!password || String(password).length < 6) {
-    throw new Error("Conta não existe. Informe uma senha (mínimo 6 caracteres) para criar.");
+  if (!__isValidAccessPassword(password)) {
+    throw new Error("Senha inválida. Use mínimo 6 caracteres, sem espaços, apenas letras, números e ? . ! # @ _.");
   }
+
+  const guildId = opts && opts.guildId ? String(opts.guildId) : null;
+  const role = opts && opts.role ? String(opts.role) : null;
+  if (!guildId) throw new Error("Guilda não resolvida. Faça login novamente.");
 
   const secondaryName = "secondary_" + Date.now();
   const secondaryApp = initializeApp(firebaseConfig, secondaryName);
   const secondaryAuth = getAuth(secondaryApp);
 
+  let uid = null;
+  let cleanupToken = '';
+
   try {
     const cred = await createUserWithEmailAndPassword(secondaryAuth, e, password);
-    const uid = cred.user.uid;
+    uid = cred.user.uid;
+    cleanupToken = await cred.user.getIdToken(true).catch(() => '');
 
     // Se foi criado a partir do Admin (conta secundária), cria/atualiza também em /users/{uid}
     // para o login conseguir resolver a guilda pelo documento do usuário.
-    try {
-      const guildId = opts && opts.guildId ? String(opts.guildId) : null;
-      const role = opts && opts.role ? String(opts.role) : null;
-      if (guildId) {
-        await setDoc(doc(db, "users", uid), {
-          email: e,
-          guildId,
-          role: role || "Membro",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      }
-    } catch (_) {}
+    await setDoc(doc(db, "users", uid), {
+      uid,
+      email: e,
+      guildId,
+      role: role || "Membro",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
 
-    return { created: true, uid };
+    return { created: true, uid, cleanupToken };
+  } catch (error) {
+    if (__isEmailAlreadyInUseError(error)) {
+      throw new Error("Esse e-mail já possui uma conta. Use outro e-mail para criar o acesso.");
+    }
+
+    // Se o Auth foi criado mas algum passo seguinte falhou, usa a mesma limpeza do cadastro.
+    if (uid && cleanupToken) {
+      try {
+        await cleanupFailedUserAccount(cleanupToken, {
+          uid,
+          reason: 'admin-access-create-failed'
+        });
+      } catch (_) {}
+    }
+
+    throw error;
   } finally {
     try { await signOut(secondaryAuth); } catch (_) {}
     try { await deleteApp(secondaryApp); } catch (_) {}
