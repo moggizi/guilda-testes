@@ -415,8 +415,13 @@
     function shouldFetchMembersForSlot(slot = currentGuildSlot){
       const payload = readMembersCachePayloadForSlot(slot);
       if (!payload.hasCache) return true;
-      if (payload.members.length > 0) return false;
-      return !payload.isVerifiedEmpty;
+
+      // Importante: cache com lista vazia não é tratado como dado final do dashboard.
+      // Isso corrige o primeiro login quando um cache vazio antigo/temporário fazia o painel
+      // acreditar que não precisava consultar o Firebase.
+      if (payload.members.length === 0) return true;
+
+      return false;
     }
 
     function writeMembersCacheForSlot(slot, members){
@@ -707,7 +712,13 @@
 
     setupSidebar();
     initIcons();
-    hydrateSettings().then(() => renderFromMembersCache()).catch(() => renderFromMembersCache());
+
+    // Só renderiza cache antes do checkAuth quando já existe contexto salvo.
+    // No primeiro login, ainda não há guildCtx; renderizar aqui zerava os cards antes
+    // da autenticação terminar e dava a impressão de que o dashboard não carregou.
+    if (getGuildContext()?.guildId) {
+      hydrateSettings().then(() => renderFromMembersCache()).catch(() => renderFromMembersCache());
+    }
 
     window.addEventListener('storage', (e) => {
       const ctx = getGuildContext();
@@ -763,7 +774,12 @@
       const ctx = getGuildContext();
       if(!ctx?.guildId) return;
 
-      await ensurePartnerInviteCountedOnDashboard(user);
+      // Não bloqueia o carregamento do painel por causa da sincronização de parceiro.
+      // Essa rotina chama API externa do site e, no primeiro login, podia atrasar/travar
+      // a leitura dos membros até trocar de tela ou recarregar.
+      ensurePartnerInviteCountedOnDashboard(user).catch((error) => {
+        console.warn('[dashboard-referral-sync]', error);
+      });
 
       try { applyVipUiAndGates(ctx?.vipTier || getVipTier()); } catch {}
       await hydrateSettings();
