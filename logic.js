@@ -1358,14 +1358,15 @@ export function checkAuth(redirectToLogin = true) {
         }
       } catch (_) {}
 
-      // Resolve a guilda SOMENTE pela configGuilda.
-
-      // - Contas secundárias (admin/líder/jogador) precisam estar dentro dos arrays em /configGuilda/{guildId}
-      // - O dono (guildId === uid) é criado no signup (finalizeSignup). Em logins futuros, também será resolvido.
-      try {
-        const found = await findGuildByEmail(emailLower);
-        if (found?.guildId) guildId = found.guildId;
-      } catch (_) {}
+      // Resolve a guilda pela configGuilda só quando /users ainda não trouxe guildId.
+      // Isso evita varreduras desnecessárias em configGuilda em toda tela protegida.
+      // Contas secundárias antigas, sem guildId em /users, continuam funcionando pelo fallback.
+      if (!guildId) {
+        try {
+          const found = await findGuildByEmail(emailLower);
+          if (found?.guildId) guildId = found.guildId;
+        } catch (_) {}
+      }
 
       // Se não achou por e-mail, só aceitamos como "dono" quando já existe configGuilda com id == uid.
       // Isso evita o bug de criar uma guilda nova ao logar com contas secundárias.
@@ -1825,6 +1826,52 @@ export function consumeLoginToasts() {
   } catch (e) {}
 }
 
+export async function cleanupFailedUserAccount(idToken, opts = {}) {
+  const token = String(idToken || '').trim();
+  if (!token) return { ok: false, skipped: true, error: 'missing-token' };
+
+  const payload = {
+    reason: String(opts?.reason || 'admin-access-create-failed').slice(0, 160),
+    ...(opts?.uid ? { guildId: String(opts.uid) } : {}),
+    ...(opts?.gameId ? { gameId: String(opts.gameId) } : {})
+  };
+
+  const urls = [
+    '/api/signup_cleanup_failed',
+    './api/signup_cleanup_failed',
+    '/api/signup_cleanup_failed.js',
+    './api/signup_cleanup_failed.js'
+  ];
+
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      let data = null;
+      try { data = await res.json(); } catch (_) { data = null; }
+
+      if (res.ok && data?.ok !== false) return data || { ok: true };
+      lastError = new Error(data?.error || `cleanup-failed-${res.status}`);
+
+      // Se a rota não existir com este formato, tenta o próximo caminho.
+      if (res.status === 404) continue;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('cleanup-failed');
+}
+
 export async function ensureUserAccount(email, password, opts = {}) {
   const e = cleanEmail(email);
   if (!e) throw new Error("E-mail inválido.");
@@ -1846,6 +1893,7 @@ export async function ensureUserAccount(email, password, opts = {}) {
   try {
     const cred = await createUserWithEmailAndPassword(secondaryAuth, e, password);
     const uid = cred.user.uid;
+    const cleanupToken = await cred.user.getIdToken(true).catch(() => '');
 
     // Se foi criado a partir do Admin (conta secundária), cria/atualiza também em /users/{uid}
     // para o login conseguir resolver a guilda pelo documento do usuário.
@@ -1863,7 +1911,7 @@ export async function ensureUserAccount(email, password, opts = {}) {
       }
     } catch (_) {}
 
-    return { created: true, uid };
+    return { created: true, uid, cleanupToken };
   } finally {
     try { await signOut(secondaryAuth); } catch (_) {}
     try { await deleteApp(secondaryApp); } catch (_) {}
