@@ -1330,6 +1330,11 @@
     }
 
     function startVipRealtime(guildId){
+      if (!guildId || window.__vipUnsub) return;
+
+      // Antes havia 2 listeners em tempo real: /configGuilda e /guildas.
+      // O webhook já grava o plano em /configGuilda também, então 1 listener basta
+      // e economiza 1 leitura inicial por abertura do dashboard.
       const ref1 = doc(db, 'configGuilda', guildId);
       const unsub1 = onSnapshot(ref1, (snap) => {
         if (!snap.exists()) return;
@@ -1343,20 +1348,7 @@
         renderGuildSlotDropdown();
       }, () => {});
 
-      const ref2 = doc(db, 'guildas', guildId);
-      const unsub2 = onSnapshot(ref2, (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data() || {};
-        const vipTier = normalizeTier(data.vipTier ?? data.vip ?? data.planoVip ?? data.planoVIP ?? data.vipLevel ?? data.vipPlano ?? data.vipName ?? data.plano ?? data.plan ?? data.tier);
-        if (!vipTier) return;
-        const cached = updateGuildCtxCache({ vipTier });
-        applyVipUiAndGates(cached.vipTier);
-        canUseMultiGuildDashboard = ['pro', 'business', 'vitalicio'].includes(normalizeTier(cached.vipTier));
-        syncGuildSlotButtonState();
-        renderGuildSlotDropdown();
-      }, () => {});
-
-      window.__vipUnsub = () => { try{unsub1();}catch{} try{unsub2();}catch{} };
+      window.__vipUnsub = () => { try{unsub1();}catch{} };
     }
 
     setupSidebar();

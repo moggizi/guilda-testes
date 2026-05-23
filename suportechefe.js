@@ -13,6 +13,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  limit,
   serverTimestamp,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -61,6 +62,173 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+
+
+function splitMessageParts(rawText) {
+  const text = String(rawText || "");
+  const parts = [];
+  const urlRegex = /https?:\/\/[^\s<>"']+/gi;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = urlRegex.exec(text)) !== null) {
+    const rawUrl = match[0];
+    const start = match.index;
+
+    if (start > lastIndex) {
+      parts.push({ type: "text", value: text.slice(lastIndex, start) });
+    }
+
+    let cleanUrl = rawUrl;
+    let trailing = "";
+    while (cleanUrl && /[)\].,!?;:]+$/.test(cleanUrl)) {
+      trailing = cleanUrl.slice(-1) + trailing;
+      cleanUrl = cleanUrl.slice(0, -1);
+    }
+
+    if (cleanUrl) parts.push({ type: "url", value: cleanUrl });
+    if (trailing) parts.push({ type: "text", value: trailing });
+
+    lastIndex = start + rawUrl.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push({ type: "text", value: text.slice(lastIndex) });
+  }
+
+  return parts;
+}
+
+function getYoutubeEmbed(urlText) {
+  try {
+    const url = new URL(urlText);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    let id = "";
+
+    if (host === "youtu.be") {
+      id = url.pathname.split("/").filter(Boolean)[0] || "";
+    } else if (host === "youtube.com" || host.endsWith(".youtube.com") || host === "youtube-nocookie.com") {
+      if (url.pathname === "/watch") {
+        id = url.searchParams.get("v") || "";
+      } else {
+        const parts = url.pathname.split("/").filter(Boolean);
+        if (["embed", "shorts", "live"].includes(parts[0])) id = parts[1] || "";
+      }
+    }
+
+    id = String(id || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+    return id ? `https://www.youtube.com/embed/${id}` : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+function getTikTokEmbed(urlText) {
+  try {
+    const url = new URL(urlText);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    if (!(host === "tiktok.com" || host.endsWith(".tiktok.com"))) return "";
+
+    const match = url.pathname.match(/\/video\/(\d+)/) || url.pathname.match(/\/embed\/v2\/(\d+)/) || url.pathname.match(/\/v\/(\d+)/);
+    const id = match ? String(match[1] || "").replace(/\D+/g, "").slice(0, 30) : "";
+    return id ? `https://www.tiktok.com/embed/v2/${id}` : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+function getVideoEmbed(urlText) {
+  const youtube = getYoutubeEmbed(urlText);
+  if (youtube) {
+    return {
+      platform: "youtube",
+      src: youtube,
+      title: "Vídeo do YouTube",
+      aspectRatio: "16 / 9",
+      maxWidth: "520px"
+    };
+  }
+
+  const tiktok = getTikTokEmbed(urlText);
+  if (tiktok) {
+    return {
+      platform: "tiktok",
+      src: tiktok,
+      title: "Vídeo do TikTok",
+      aspectRatio: "9 / 16",
+      maxWidth: "340px"
+    };
+  }
+
+  return null;
+}
+
+function createVideoEmbed(video) {
+  const wrap = document.createElement("div");
+  wrap.className = "my-3 overflow-hidden rounded-2xl border border-gray-200 bg-black shadow-sm";
+  wrap.style.width = "100%";
+  wrap.style.maxWidth = video.maxWidth || "520px";
+
+  const iframe = document.createElement("iframe");
+  iframe.src = video.src;
+  iframe.title = video.title || "Vídeo";
+  iframe.loading = "lazy";
+  iframe.referrerPolicy = "strict-origin-when-cross-origin";
+  iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+  iframe.allowFullscreen = true;
+  iframe.style.display = "block";
+  iframe.style.width = "100%";
+  iframe.style.border = "0";
+  iframe.style.background = "#000";
+  iframe.style.aspectRatio = video.aspectRatio || "16 / 9";
+  iframe.style.height = "auto";
+  if (video.platform === "tiktok") {
+    iframe.style.height = "560px";
+    iframe.style.maxHeight = "70vh";
+  }
+
+  wrap.appendChild(iframe);
+  return wrap;
+}
+
+function createNormalLink(urlText, coloredBubble = false) {
+  const a = document.createElement("a");
+  a.href = urlText;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer nofollow";
+  a.textContent = urlText;
+  a.className = coloredBubble
+    ? "inline font-black underline decoration-2 text-emerald-700 bg-white/90 rounded-md px-1 break-all hover:bg-white"
+    : "inline font-black underline decoration-2 text-emerald-600 hover:text-emerald-700 break-all";
+  return a;
+}
+
+function appendRichMessageContent(parent, rawText, options = {}) {
+  const content = document.createElement("div");
+  content.className = options.className || "text-sm whitespace-pre-wrap break-words leading-relaxed";
+  content.style.whiteSpace = "pre-wrap";
+  content.style.overflowWrap = "anywhere";
+
+  const parts = splitMessageParts(rawText);
+  parts.forEach((part) => {
+    if (part.type === "text") {
+      content.appendChild(document.createTextNode(part.value));
+      return;
+    }
+
+    const video = getVideoEmbed(part.value);
+    if (video) {
+      content.appendChild(createVideoEmbed(video));
+      return;
+    }
+
+    content.appendChild(createNormalLink(part.value, options.coloredBubble === true));
+  });
+
+  parent.appendChild(content);
+  return content;
+}
+
 
 function normalizeText(value) {
   return String(value || "")
@@ -418,7 +586,8 @@ function deactivateSupportView() {
 function startTicketListener() {
   if (state.unsubTickets) return;
 
-  const q = query(collection(db, "mensagem"));
+  // Limita os chamados mais recentes para não abrir um listener na coleção inteira.
+  const q = query(collection(db, "mensagem"), orderBy("lastMessageAtMs", "desc"), limit(100));
   state.unsubTickets = onSnapshot(q, (snap) => {
     state.tickets = snap.docs.map((d) => ({
       id: d.id,
@@ -670,14 +839,16 @@ function openTicket(ticketId) {
   stopMessageListener();
 
   const messagesRef = collection(db, "mensagem", cleanId, "mensagens");
-  const q = query(messagesRef, orderBy("createdAtMs", "asc"));
+  // Carrega só as últimas mensagens do chamado. Ordena desc para o limit pegar as recentes,
+  // depois inverte para exibir em ordem normal na conversa.
+  const q = query(messagesRef, orderBy("createdAtMs", "desc"), limit(80));
 
   state.unsubMessages = onSnapshot(q, (snap) => {
     state.messages = snap.docs.map((d) => ({
       id: d.id,
       ref: d.ref,
       ...(d.data() || {})
-    }));
+    })).reverse();
 
     renderMessages();
     markSelectedMessagesAsReadBySupport();
@@ -698,8 +869,9 @@ function renderMessages() {
   const box = qs("ceo-support-messages");
   if (!box) return;
 
+  box.innerHTML = "";
+
   if (!state.selectedTicketId) {
-    box.innerHTML = "";
     return;
   }
 
@@ -714,7 +886,7 @@ function renderMessages() {
     return;
   }
 
-  box.innerHTML = state.messages.map((msg) => {
+  state.messages.forEach((msg) => {
     const from = String(msg.from || "").toLowerCase();
     const support = from === "support";
     const system = msg.system === true;
@@ -723,34 +895,58 @@ function renderMessages() {
     const date = formatDate(msg.createdAtMs || msg.createdAt);
 
     if (system) {
-      return `
-        <div class="flex justify-center">
-          <div class="max-w-[90%] rounded-2xl bg-gray-100 text-gray-600 px-4 py-2 text-xs font-semibold text-center">
-            ${escapeHtml(text)}
-            <div class="mt-1 text-[10px] text-gray-400">${escapeHtml(date)}</div>
-          </div>
-        </div>
-      `;
+      const row = document.createElement("div");
+      row.className = "flex justify-center";
+
+      const bubble = document.createElement("div");
+      bubble.className = "max-w-[90%] rounded-2xl bg-gray-100 text-gray-600 px-4 py-2 text-xs font-semibold text-center";
+
+      appendRichMessageContent(bubble, text, {
+        coloredBubble: false,
+        className: "text-xs font-semibold whitespace-pre-wrap break-words leading-relaxed text-center"
+      });
+
+      const time = document.createElement("div");
+      time.className = "mt-1 text-[10px] text-gray-400";
+      time.textContent = date;
+
+      bubble.appendChild(time);
+      row.appendChild(bubble);
+      box.appendChild(row);
+      return;
     }
 
-    return `
-      <div class="flex ${support ? "justify-end" : "justify-start"}">
-        <div class="max-w-[88%] rounded-2xl px-4 py-3 shadow-sm border ${
-          support
-            ? "bg-sky-600 text-white border-sky-600 rounded-br-md"
-            : "bg-white text-gray-800 border-gray-100 rounded-bl-md"
-        }">
-          <p class="${support ? "text-sky-50" : "text-emerald-600"} text-[10px] font-black mb-1 uppercase tracking-wide">${escapeHtml(who)}</p>
-          <p class="text-sm whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(text)}</p>
-          <p class="${support ? "text-sky-100" : "text-gray-400"} text-[10px] mt-1">${escapeHtml(date)}</p>
-        </div>
-      </div>
-    `;
-  }).join("");
+    const row = document.createElement("div");
+    row.className = `flex ${support ? "justify-end" : "justify-start"}`;
+
+    const bubble = document.createElement("div");
+    bubble.className = [
+      "max-w-[88%] rounded-2xl px-4 py-3 shadow-sm border",
+      support
+        ? "bg-sky-600 text-white border-sky-600 rounded-br-md"
+        : "bg-white text-gray-800 border-gray-100 rounded-bl-md"
+    ].join(" ");
+
+    const whoEl = document.createElement("p");
+    whoEl.className = `${support ? "text-sky-50" : "text-emerald-600"} text-[10px] font-black mb-1 uppercase tracking-wide`;
+    whoEl.textContent = who;
+
+    const time = document.createElement("p");
+    time.className = `${support ? "text-sky-100" : "text-gray-400"} text-[10px] mt-1`;
+    time.textContent = date;
+
+    bubble.appendChild(whoEl);
+    appendRichMessageContent(bubble, text, { coloredBubble: support });
+    bubble.appendChild(time);
+
+    row.appendChild(bubble);
+    box.appendChild(row);
+  });
 
   box.scrollTop = box.scrollHeight;
   refreshIcons();
 }
+
 
 async function markSelectedMessagesAsReadBySupport() {
   const ticket = getSelectedTicket();

@@ -93,6 +93,10 @@ export function getVipExpiresAtMs() {
 // Leituras usam cache primeiro; Firebase só entra quando expira ou quando forceRefresh=true.
 const __SETTINGS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+// Cache de autenticação/navegação: reduz leituras repetidas ao trocar de tela.
+// Mantive menor que o cache de ajustes para não segurar permissões antigas por muito tempo.
+const __AUTH_CONTEXT_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+
 function __cacheIsFresh(cached, ttlMs = __SETTINGS_CACHE_TTL_MS) {
   try {
     if (!cached) return false;
@@ -1421,6 +1425,111 @@ export async function createUpgradeSolicitacao(planId, payerName) {
   return true;
 }
 
+
+function __isProtectedRouteAllowedByCachedCtx(ctx, isLoginPage) {
+  try {
+    if (!ctx || !ctx.guildId) return { allowed: false };
+
+    const role = String(ctx.role || 'Membro');
+    const path = (window.location.pathname || "").toLowerCase();
+    const isAdminPage = path.endsWith("/admin") || path.endsWith("/admin.html") || path.includes("admin.html");
+    const isMembersPage = path.endsWith("/membros") || path.endsWith("/membros.html") || path.includes("membros.html");
+    const isDashboardPage = path.endsWith("/dashboard") || path.endsWith("/dashboard.html") || path.includes("dashboard.html");
+    const isSettingsPage = path.endsWith("/ajustes") || path.endsWith("/ajustes.html") || path.includes("ajustes.html");
+    const isLinesPage = path.endsWith("/lines") || path.endsWith("/lines.html") || path.includes("lines.html");
+    const isUpgradePage = path.endsWith("/upgrade") || path.endsWith("/upgrade.html") || path.includes("upgrade.html");
+    const isChefePage = path.endsWith("/chefe") || path.endsWith("/chefe.html") || path.includes("chefe.html");
+    const isRecruitmentPage =
+      path.endsWith("/eventos") || path.endsWith("/eventos.html") || path.includes("eventos.html") ||
+      path.endsWith("/recrutar") || path.endsWith("/recrutar.html") || path.includes("recrutar.html") ||
+      path.endsWith("/recrutamento") || path.endsWith("/recrutamento.html") || path.includes("recrutamento.html") ||
+      path.endsWith("/rec") || path.endsWith("/rec.html") || path.includes("rec.html") ||
+      path.endsWith("/camp") || path.endsWith("/camp.html") || path.includes("camp.html");
+    const isPlayerPage = path.endsWith("/jogador") || path.endsWith("/jogador.html") || path.includes("jogador.html");
+
+    if (isChefePage && ctx.isCeo !== true) return { allowed: false, redirectTo: 'dashboard.html' };
+
+    if (role === "Jogador") {
+      if (!isPlayerPage) return { allowed: false, redirectTo: 'jogador.html' };
+      return { allowed: true };
+    }
+
+    if (role === "Admin") {
+      if (isAdminPage) return { allowed: false, redirectTo: 'dashboard.html' };
+      if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage && !isRecruitmentPage && !isUpgradePage) {
+        return { allowed: false, redirectTo: 'dashboard.html' };
+      }
+    }
+
+    // O fluxo original permite role "Membro" quando existe vínculo em /users.
+    // Como o cache só é aceito quando tem guildId/uid válidos, não derrubamos aqui.
+    return { allowed: true };
+  } catch (_) {
+    return { allowed: false };
+  }
+}
+
+function __getUsableAuthContextFromCache(user) {
+  try {
+    const cached = getSharedGuildContextCache();
+    if (!cached || !cached.guildId || !cached.uid || !cached.role) return null;
+    if (!__cacheIsFresh(cached, __AUTH_CONTEXT_CACHE_TTL_MS)) return null;
+
+    const userUid = String(user?.uid || '').trim();
+    const userEmail = cleanEmail(user?.email || '');
+    const cachedUid = String(cached.uid || '').trim();
+    const cachedEmail = cleanEmail(cached.email || cached.emailLower || '');
+
+    if (!userUid || cachedUid !== userUid) return null;
+    if (userEmail && cachedEmail && cachedEmail !== userEmail) return null;
+
+    const role = String(cached.role || 'Membro');
+    return {
+      ...cached,
+      role,
+      email: cachedEmail || userEmail,
+      emailLower: cachedEmail || userEmail,
+      uid: userUid,
+      isLeader: cached.isLeader === true || role === 'Líder',
+      isAdmin: cached.isAdmin === true || role === 'Admin',
+      isOwner: cached.isOwner === true
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function __applyAuthContextFromCache(ctx, user) {
+  const role = String(ctx.role || 'Membro');
+  __guildCtx = {
+    guildId: String(ctx.guildId),
+    guildName: ctx.guildName ? String(ctx.guildName) : null,
+    role,
+    vipTier: ctx.vipTier ? String(ctx.vipTier) : 'free',
+    vipExpiresAtMs: (ctx.vipExpiresAtMs != null ? Number(ctx.vipExpiresAtMs) : null),
+    email: cleanEmail(ctx.email || ctx.emailLower || user?.email || ''),
+    uid: String(user?.uid || ctx.uid || '')
+  };
+
+  try {
+    const ceoCached = readSharedJsonCache(__CEO_LS_KEY, null);
+    const ceoEmail = cleanEmail(ceoCached?.email || ceoCached?.emailLower || '');
+    const email = cleanEmail(__guildCtx.email || '');
+    if (ceoCached && ceoEmail === email && __cacheIsFresh(ceoCached, __AUTH_CONTEXT_CACHE_TTL_MS)) {
+      __isCeo = ceoCached.isCeo === true;
+    } else if (typeof ctx.isCeo === 'boolean') {
+      __isCeo = ctx.isCeo === true;
+    }
+  } catch (_) {}
+
+  const emailEl = document.getElementById("user-email");
+  if (emailEl) emailEl.textContent = user?.email || __guildCtx.email || "";
+  const roleEl = document.getElementById("user-role");
+  if (roleEl) roleEl.textContent = role;
+  try { applyVipUiAndGates(__guildCtx.vipTier || 'free'); } catch (_) {}
+  try { applyCeoNavVisibility(); } catch (_) {}
+}
+
 export function checkAuth(redirectToLogin = true) {
   return new Promise((resolve) => {
     onAuthStateChanged(auth, async (user) => {
@@ -1435,6 +1544,24 @@ export function checkAuth(redirectToLogin = true) {
       const emailLower = cleanEmail(user.email);
       const emailEl = document.getElementById("user-email");
       if (emailEl) emailEl.textContent = user.email || "";
+
+      // Caminho rápido: se o contexto da guilda ainda está fresco no cache,
+      // evita reler /users, /configGuilda, /guildas e /chefe ao trocar de tela.
+      const cachedCtx = __getUsableAuthContextFromCache(user);
+      if (cachedCtx) {
+        const routeCheck = __isProtectedRouteAllowedByCachedCtx(cachedCtx, isLoginPage);
+        if (routeCheck.allowed) {
+          __applyAuthContextFromCache(cachedCtx, user);
+          try { __flushOneTimeSignupToast(); } catch (_) {}
+          resolve(user);
+          return;
+        }
+        if (routeCheck.redirectTo) {
+          window.location.href = routeCheck.redirectTo;
+          resolve(null);
+          return;
+        }
+      }
 
       let guildId = null;
       let username = "";
@@ -1614,12 +1741,12 @@ try {
         uid: user.uid
       };
 
+      let __ceoOkForCache = false;
+      try { __ceoOkForCache = await __refreshCeoStatus(emailLower); } catch (_) {}
       try {
-        localStorage.setItem(__GUILDCTX_LS_KEY, JSON.stringify({ guildId, guildName, role, vipTier, vipExpiresAtMs, email: emailLower, uid: user.uid, ts: Date.now() }));
+        setSharedGuildContextCache({ guildId, guildName, role, vipTier, vipExpiresAtMs, email: emailLower, uid: user.uid, isCeo: __ceoOkForCache });
       } catch (_) {}
       try { applyVipUiAndGates(vipTier); } catch (_) {}
-
-      try { await __refreshCeoStatus(emailLower); } catch (_) {}
       try { applyCeoNavVisibility(); } catch (_) {}
 
 

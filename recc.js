@@ -33,6 +33,7 @@ initIcons();
 const qs = (id) => document.getElementById(id);
 
 const RECRUITMENT_GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
+const RECRUITMENT_AUTH_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
 const cleanRecruitmentEmail = (email = '') => String(email || '').toLowerCase().trim();
 const normalizeRecruitmentRole = (value = '') => String(value || '')
   .toLowerCase()
@@ -78,6 +79,28 @@ const readRecruitmentCachedCtx = () => {
     return null;
   }
 };
+const isRecruitmentCachedCtxFresh = (ctx) => {
+  try {
+    const ts = Number(ctx?.ts || 0);
+    return !!ts && Number.isFinite(ts) && (Date.now() - ts) < RECRUITMENT_AUTH_CACHE_TTL_MS;
+  } catch (_) {
+    return false;
+  }
+};
+const recruitmentCachedCtxMatchesUser = (ctx, user) => {
+  try {
+    if (!ctx || !user) return false;
+    const cachedUid = String(ctx.uid || '').trim();
+    const userUid = String(user.uid || '').trim();
+    const cachedEmail = cleanRecruitmentEmail(ctx.email || ctx.emailLower || '');
+    const userEmail = cleanRecruitmentEmail(user.email || '');
+    if (!cachedUid || !userUid || cachedUid !== userUid) return false;
+    if (cachedEmail && userEmail && cachedEmail !== userEmail) return false;
+    return true;
+  } catch (_) {
+    return false;
+  }
+};
 const writeRecruitmentCachedCtx = (ctx = {}) => {
   try {
     if (!ctx?.guildId) return;
@@ -88,7 +111,12 @@ const writeRecruitmentCachedCtx = (ctx = {}) => {
       vipTier: ctx.vipTier || 'free',
       vipExpiresAtMs: ctx.vipExpiresAtMs ?? null,
       email: ctx.email || '',
+      emailLower: ctx.emailLower || ctx.email || '',
       uid: ctx.uid || '',
+      isLeader: ctx.role === 'Líder' || ctx.isLeader === true,
+      isAdmin: ctx.role === 'Admin' || ctx.isAdmin === true,
+      isOwner: ctx.isOwner === true,
+      configGuilda: ctx.configGuilda && typeof ctx.configGuilda === 'object' ? ctx.configGuilda : null,
       ts: Date.now()
     }));
   } catch (_) {}
@@ -148,6 +176,16 @@ async function resolveRecruitmentAccessContext() {
   }
 
   const emailLower = cleanRecruitmentEmail(user.email);
+
+  const cachedCtx = readRecruitmentCachedCtx();
+  if (isRecruitmentCachedCtxFresh(cachedCtx) && recruitmentCachedCtxMatchesUser(cachedCtx, user) && isRecruitmentManagerRole(cachedCtx.role)) {
+    const emailEl = document.getElementById('user-email');
+    if (emailEl) emailEl.textContent = user.email || emailLower;
+    const roleEl = document.getElementById('user-role');
+    if (roleEl) roleEl.textContent = canonicalRecruitmentRole(cachedCtx.role || 'Membro');
+    return { user, ctx: { ...cachedCtx, email: emailLower, uid: user.uid } };
+  }
+
   let profile = {};
   let guildId = '';
   let role = '';

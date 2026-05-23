@@ -823,15 +823,52 @@ function bootMarketplaceMode() {
     return items;
   }
 
-  async function loadMarketplace() {
+  const MARKETPLACE_CACHE_KEY = 'hub_rec_marketplace_cache_v1';
+  const MARKETPLACE_CACHE_TTL_MS = 15 * 60 * 1000;
+
+  function readMarketplaceCache() {
     try {
-      setStatus('Carregando recrutamentos...');
+      const raw = localStorage.getItem(MARKETPLACE_CACHE_KEY);
+      if (!raw) return null;
+      const cached = JSON.parse(raw);
+      if (!cached || !Array.isArray(cached.items)) return null;
+      const ts = Number(cached.ts || 0);
+      return { items: cached.items, ts, fresh: !!ts && (Date.now() - ts) < MARKETPLACE_CACHE_TTL_MS };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writeMarketplaceCache(items = []) {
+    try {
+      localStorage.setItem(MARKETPLACE_CACHE_KEY, JSON.stringify({ items: Array.isArray(items) ? items : [], ts: Date.now() }));
+    } catch (_) {}
+  }
+
+  function renderMarketplaceFromItems(items = []) {
+    allItems = shuffleMarketplaceItems((Array.isArray(items) ? items : []).filter(item => item && item.guildName));
+    els.q.value = params.get('q') || '';
+    els.filter.value = params.get('filter') || 'all';
+    applyFilters();
+  }
+
+  async function loadMarketplace() {
+    const cached = readMarketplaceCache();
+    if (cached?.items?.length) {
+      renderMarketplaceFromItems(cached.items);
+      if (cached.fresh) return;
+    }
+
+    try {
+      if (!cached?.items?.length) setStatus('Carregando recrutamentos...');
       const snap = await getDocs(collection(recDb,'rec'));
-      allItems = shuffleMarketplaceItems(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(item => item && item.guildName));
-      els.q.value = params.get('q') || '';
-      els.filter.value = params.get('filter') || 'all';
-      applyFilters();
-    } catch (err) { console.error(err); setStatus('Erro ao carregar recrutamentos.'); }
+      const freshItems = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(item => item && item.guildName);
+      writeMarketplaceCache(freshItems);
+      renderMarketplaceFromItems(freshItems);
+    } catch (err) {
+      console.error(err);
+      if (!cached?.items?.length) setStatus('Erro ao carregar recrutamentos.');
+    }
   }
   els.q?.addEventListener('input', applyFilters);
   els.filterBtn?.addEventListener('click', () => els.filterMenu?.classList.toggle('hidden'));
