@@ -627,23 +627,9 @@ async function findUserProfile(user) {
 }
 
 async function findGuildByEmail(emailLower) {
-  const email = cleanEmail(emailLower);
-  if (!email) return null;
-
-  const attempts = [
-    ['leaders', 'array-contains', email],
-    ['admins', 'array-contains', email],
-    ['ownerEmail', '==', email],
-    ['playerEmail', '==', email]
-  ];
-
-  for (const [field, op, value] of attempts) {
-    try {
-      const snap = await getDocs(query(collection(db, 'configGuilda'), where(field, op, value), limit(1)));
-      if (!snap.empty) return snap.docs[0].id;
-    } catch (_) {}
-  }
-
+  // Desativado de propósito para economizar leituras.
+  // O login não consulta mais configGuilda por e-mail para descobrir guilda.
+  // O vínculo deve vir de users/{uid}; se for dono antigo, ainda validamos configGuilda/{uid}.
   return null;
 }
 
@@ -663,9 +649,8 @@ async function resolveLoginRedirect(user) {
     return 'dashboard.html?login=1';
   }
 
-  const email = cleanEmail(user?.email);
-  const guildByEmail = await findGuildByEmail(email);
-  if (guildByEmail) return 'dashboard.html?login=1';
+  // Não consulta/varre configGuilda para descobrir guilda por e-mail.
+  // Para economizar leituras, o vínculo deve vir de users/{uid}.
 
   try {
     const ownerCfg = await getDoc(doc(db, 'configGuilda', user.uid));

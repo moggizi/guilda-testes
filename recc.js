@@ -8,10 +8,7 @@ import {
   deleteDoc,
   serverTimestamp,
   collection,
-  getDocs,
-  query,
-  where,
-  limit
+  getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { setupSidebar, initIcons, logout, getGuildContext, getGuildAccessKeyConfig, getGuildMultiConfig, showToast, auth, db } from './logic.js';
 
@@ -33,7 +30,8 @@ initIcons();
 const qs = (id) => document.getElementById(id);
 
 const RECRUITMENT_GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
-const RECRUITMENT_AUTH_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+const RECRUITMENT_AUTH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const RECRUITMENT_GUILDCTX_CACHE_VERSION = 2;
 const cleanRecruitmentEmail = (email = '') => String(email || '').toLowerCase().trim();
 const normalizeRecruitmentRole = (value = '') => String(value || '')
   .toLowerCase()
@@ -74,7 +72,10 @@ const readRecruitmentCachedCtx = () => {
     const raw = localStorage.getItem(RECRUITMENT_GUILDCTX_LS_KEY);
     if (!raw) return null;
     const ctx = JSON.parse(raw);
-    return ctx && ctx.guildId ? ctx : null;
+    if (!ctx || !ctx.guildId) return null;
+    // Cache antigo podia vir com vipTier free por causa do fallback de plano.
+    if (ctx.cacheVersion !== RECRUITMENT_GUILDCTX_CACHE_VERSION && (!ctx.vipTier || String(ctx.vipTier).toLowerCase().trim() === 'free')) return null;
+    return ctx;
   } catch (_) {
     return null;
   }
@@ -117,6 +118,7 @@ const writeRecruitmentCachedCtx = (ctx = {}) => {
       isAdmin: ctx.role === 'Admin' || ctx.isAdmin === true,
       isOwner: ctx.isOwner === true,
       configGuilda: ctx.configGuilda && typeof ctx.configGuilda === 'object' ? ctx.configGuilda : null,
+      cacheVersion: RECRUITMENT_GUILDCTX_CACHE_VERSION,
       ts: Date.now()
     }));
   } catch (_) {}
@@ -132,31 +134,9 @@ const waitRecruitmentAuthUser = () => new Promise((resolve) => {
   }
 });
 async function findRecruitmentGuildByEmail(emailLower) {
-  if (!emailLower) return null;
-  const attempts = [
-    { field: 'leaders', role: 'Líder' },
-    { field: 'admins', role: 'Admin' }
-  ];
-  for (const item of attempts) {
-    try {
-      const snap = await getDocs(query(collection(db, 'configGuilda'), where(item.field, 'array-contains', emailLower), limit(1)));
-      if (!snap.empty) {
-        const first = snap.docs[0];
-        return { guildId: first.id, role: item.role, configGuilda: first.data() || {} };
-      }
-    } catch (_) {}
-  }
-  try {
-    const snap = await getDocs(query(collection(db, 'configGuilda'), limit(300)));
-    for (const item of snap.docs) {
-      const data = item.data() || {};
-      const leaders = Array.isArray(data.leaders) ? data.leaders.map(cleanRecruitmentEmail) : [];
-      const admins = Array.isArray(data.admins) ? data.admins.map(cleanRecruitmentEmail) : [];
-      const ownerEmail = cleanRecruitmentEmail(data.ownerEmail);
-      if (leaders.includes(emailLower) || ownerEmail === emailLower) return { guildId: item.id, role: 'Líder', configGuilda: data };
-      if (admins.includes(emailLower)) return { guildId: item.id, role: 'Admin', configGuilda: data };
-    }
-  } catch (_) {}
+  // Desativado de propósito para economizar leituras.
+  // O recrutamento não faz mais query/varredura em configGuilda para descobrir guilda por e-mail.
+  // O guildId precisa vir de users/{uid}; depois lê apenas os docs próprios da guilda.
   return null;
 }
 function resolveRecruitmentRoleFromConfig(cfg = {}, emailLower = '', uid = '') {
@@ -201,14 +181,8 @@ async function resolveRecruitmentAccessContext() {
     }
   } catch (_) {}
 
-  if (!guildId) {
-    const found = await findRecruitmentGuildByEmail(emailLower);
-    if (found?.guildId) {
-      guildId = String(found.guildId || '').trim();
-      role = found.role || role;
-      configGuilda = found.configGuilda || {};
-    }
-  }
+  // Não consulta/varre configGuilda para descobrir guilda por e-mail.
+  // Para economizar leituras, o vínculo deve vir de users/{uid}.
 
   if (!guildId) {
     showToast('error', 'Essa conta não está vinculada a uma guilda.');

@@ -3,7 +3,7 @@
 
     import { initializeApp, getApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { collection, getDocs, doc, getDoc, onSnapshot, setDoc, writeBatch, serverTimestamp, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { collection, getDocs, doc, getDoc, onSnapshot, setDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getSharedCache, setSharedCache, removeSharedCache, readSharedJsonCache, writeSharedJsonCache, isSharedCacheFresh, getSharedGuildContextCache, setSharedGuildContextCache, clearSharedGuildContextCache } from './logic.js';
 
@@ -286,23 +286,9 @@
     }
 
     async function findGuildByEmail(emailLower) {
-      if (!emailLower) return null;
-      try { const s = await getDocs(query(collection(db, 'configGuilda'), where('leaders', 'array-contains', emailLower), limit(1))); if (!s.empty) return { guildId: s.docs[0].id, source: 'leaders' }; } catch (_) {}
-      try { const s = await getDocs(query(collection(db, 'configGuilda'), where('admins', 'array-contains', emailLower), limit(1))); if (!s.empty) return { guildId: s.docs[0].id, source: 'admins' }; } catch (_) {}
-      try { const s = await getDocs(query(collection(db, 'configGuilda'), where('ownerEmail', '==', emailLower), limit(1))); if (!s.empty) return { guildId: s.docs[0].id, source: 'ownerEmail' }; } catch (_) {}
-      try { const s = await getDocs(query(collection(db, 'configGuilda'), where('playerEmail', '==', emailLower), limit(1))); if (!s.empty) return { guildId: s.docs[0].id, source: 'playerEmail' }; } catch (_) {}
-      try {
-        const snap = await getDocs(query(collection(db, 'configGuilda'), limit(300)));
-        for (const d of snap.docs) {
-          const data = d.data() || {};
-          const leaders = uniq((Array.isArray(data.leaders) ? data.leaders : []).map(cleanEmail)).filter(Boolean);
-          const admins = uniq((Array.isArray(data.admins) ? data.admins : []).map(cleanEmail)).filter(Boolean);
-          if (leaders.includes(emailLower)) return { guildId: d.id, source: 'scan-leaders' };
-          if (admins.includes(emailLower)) return { guildId: d.id, source: 'scan-admins' };
-          if (cleanEmail(data.ownerEmail) === emailLower) return { guildId: d.id, source: 'scan-ownerEmail' };
-          if (cleanEmail(data.playerEmail) === emailLower) return { guildId: d.id, source: 'scan-playerEmail' };
-        }
-      } catch (_) {}
+      // Desativado de propósito para economizar leituras.
+      // O dashboard não descobre mais guilda por query/varredura em configGuilda.
+      // O guildId vem de users/{uid}; depois lê somente configGuilda/{guildId} e guildas/{guildId}.
       return null;
     }
 
@@ -546,9 +532,8 @@
             }
           } catch (_) {}
 
-          if (!guildId) {
-            try { const found = await findGuildByEmail(emailLower); if (found?.guildId) guildId = found.guildId; } catch (_) {}
-          }
+          // Não consulta/varre configGuilda para descobrir guilda por e-mail.
+          // Para economizar leituras, o vínculo deve vir de users/{uid}.
           if (!guildId) {
             try { const selfCfg = await getDoc(doc(db, 'configGuilda', user.uid)); if (selfCfg.exists()) guildId = user.uid; } catch (_) {}
           }
@@ -583,12 +568,14 @@
             }
           } catch (_) {}
 
+          // Fallback quando configGuilda não trouxe plano pago ou faltou expiração.
+          // Não deixa /guildas vazio/desatualizado transformar plano pago em free.
           if (!vipTier || vipTier === 'free' || vipExpiresAtMs == null) {
             try {
               const gSnap = await getDoc(doc(db, 'guildas', guildId));
               if (gSnap.exists()) {
                 const parsed = parseVipFromData(gSnap.data() || {});
-                if (parsed.vipTier) vipTier = parsed.vipTier;
+                if (parsed.vipTier && (parsed.vipTier !== 'free' || !vipTier || vipTier === 'free')) vipTier = parsed.vipTier;
                 if (vipExpiresAtMs == null) vipExpiresAtMs = parsed.vipExpiresAtMs;
               }
             } catch (_) {}

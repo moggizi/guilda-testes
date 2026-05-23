@@ -17,11 +17,7 @@ import {
   writeBatch,
   serverTimestamp,
   addDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  limit
+  collection
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
@@ -46,12 +42,14 @@ export const functions = getFunctions(app);
 let __guildCtx = null;
 
 const __GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
+const __GUILDCTX_CACHE_VERSION = 2;
 try {
   const raw = localStorage.getItem(__GUILDCTX_LS_KEY);
   if (raw) {
     const cached = JSON.parse(raw);
     if (cached && cached.guildId && cached.uid && (cached.email || cached.emailLower) && cached.role) {
-      __guildCtx = {
+      const oldFreeCache = cached.cacheVersion !== __GUILDCTX_CACHE_VERSION && (!cached.vipTier || String(cached.vipTier).toLowerCase().trim() === 'free');
+      if (!oldFreeCache) __guildCtx = {
         guildId: String(cached.guildId),
         guildName: cached.guildName ? String(cached.guildName) : null,
         role: String(cached.role),
@@ -94,8 +92,8 @@ export function getVipExpiresAtMs() {
 const __SETTINGS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 // Cache de autenticação/navegação: reduz leituras repetidas ao trocar de tela.
-// Mantive menor que o cache de ajustes para não segurar permissões antigas por muito tempo.
-const __AUTH_CONTEXT_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+// 24h para manter guildCtx_cache_v1 reaproveitável durante o dia inteiro.
+const __AUTH_CONTEXT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function __cacheIsFresh(cached, ttlMs = __SETTINGS_CACHE_TTL_MS) {
   try {
@@ -188,6 +186,11 @@ function __roleCacheFlags(roleValue, ctx = {}) {
 export function getSharedGuildContextCache() {
   const cached = readSharedJsonCache(__GUILDCTX_LS_KEY, null);
   if (cached && cached.guildId && cached.uid && cached.email && cached.role) {
+    // Cache antigo, criado antes da correção do plano, podia salvar vipTier como free
+    // mesmo quando a guilda era paga. Rejeita só esse caso para forçar 1 refresh seguro.
+    if (cached.cacheVersion !== __GUILDCTX_CACHE_VERSION && (!cached.vipTier || String(cached.vipTier).toLowerCase().trim() === 'free')) {
+      return null;
+    }
     const flags = __roleCacheFlags(cached.role, cached);
     const email = cleanEmail(cached.email || cached.emailLower || '');
     const ceoCached = readSharedJsonCache(__CEO_LS_KEY, null);
@@ -214,6 +217,7 @@ export function setSharedGuildContextCache(ctx = {}) {
     emailLower: email,
     ...flags,
     ...(typeof ctx?.isCeo === 'boolean' ? { isCeo: ctx.isCeo === true } : {}),
+    cacheVersion: __GUILDCTX_CACHE_VERSION,
     ts: Date.now()
   };
   writeSharedJsonCache(__GUILDCTX_LS_KEY, next);
@@ -516,57 +520,12 @@ async function getGuildName(guildId) {
 }
 
 async function findGuildByEmail(emailLower) {
-  if (!emailLower) return null;
-
-  // 1) Tentativas rápidas (indexáveis) — requer que os e-mails estejam normalizados (lowercase) no Firestore
-  try {
-    const q1 = query(collection(db, "configGuilda"), where("leaders", "array-contains", emailLower), limit(1));
-    const s1 = await getDocs(q1);
-    if (!s1.empty) return { guildId: s1.docs[0].id, source: "leaders" };
-  } catch (_) {}
-
-  try {
-    const q2 = query(collection(db, "configGuilda"), where("admins", "array-contains", emailLower), limit(1));
-    const s2 = await getDocs(q2);
-    if (!s2.empty) return { guildId: s2.docs[0].id, source: "admins" };
-  } catch (_) {}
-
-  try {
-    const q3 = query(collection(db, "configGuilda"), where("ownerEmail", "==", emailLower), limit(1));
-    const s3 = await getDocs(q3);
-    if (!s3.empty) return { guildId: s3.docs[0].id, source: "ownerEmail" };
-  } catch (_) {}
-
-  try {
-    const q4 = query(collection(db, "configGuilda"), where("playerEmail", "==", emailLower), limit(1));
-    const s4 = await getDocs(q4);
-    if (!s4.empty) return { guildId: s4.docs[0].id, source: "playerEmail" };
-  } catch (_) {}
-
-  // 2) Fallback robusto (varredura): cobre casos em que o Firestore tem e-mails salvos com maiúsculas/espacos,
-  // e portanto "array-contains" / "==" não bate. Isso evita logout de admin/líder secundário.
-  // Observação: ideal é salvar tudo em lowercase, mas isso resolve sem mexer no cadastro.
-  try {
-    const qAll = query(collection(db, "configGuilda"), limit(300));
-    const snap = await getDocs(qAll);
-
-    for (const d of snap.docs) {
-      const data = d.data() || {};
-      const leaders = Array.isArray(data.leaders) ? data.leaders : [];
-      const admins  = Array.isArray(data.admins) ? data.admins : [];
-      const ownerEmail = cleanEmail(data.ownerEmail);
-      const playerEmail = cleanEmail(data.playerEmail);
-
-      const leadersL = uniq(leaders.map((x) => cleanEmail(x))).filter(Boolean);
-      const adminsL  = uniq(admins.map((x) => cleanEmail(x))).filter(Boolean);
-
-      if (leadersL.includes(emailLower)) return { guildId: d.id, source: "scan-leaders" };
-      if (adminsL.includes(emailLower))  return { guildId: d.id, source: "scan-admins" };
-      if (ownerEmail && ownerEmail === emailLower) return { guildId: d.id, source: "scan-ownerEmail" };
-      if (playerEmail && playerEmail === emailLower) return { guildId: d.id, source: "scan-playerEmail" };
-    }
-  } catch (_) {}
-
+  // Desativado de propósito para economizar leituras.
+  // Não fazemos mais query/varredura em configGuilda para descobrir guilda por e-mail.
+  // O vínculo correto deve vir de users/{uid}. Depois disso, cada tela lê apenas:
+  // - configGuilda/{guildId}
+  // - guildas/{guildId}
+  // sempre o próprio documento da guilda.
   return null;
 }
 
@@ -1578,17 +1537,10 @@ export function checkAuth(redirectToLogin = true) {
         }
       } catch (_) {}
 
-      // Resolve a guilda pela configGuilda só quando /users ainda não trouxe guildId.
-      // Isso evita varreduras desnecessárias em configGuilda em toda tela protegida.
-      // Contas secundárias antigas, sem guildId em /users, continuam funcionando pelo fallback.
-      if (!guildId) {
-        try {
-          const found = await findGuildByEmail(emailLower);
-          if (found?.guildId) guildId = found.guildId;
-        } catch (_) {}
-      }
+      // Não fazemos mais busca por e-mail varrendo/consultando configGuilda.
+      // Para evitar leituras desnecessárias, o guildId precisa vir de users/{uid}.
 
-      // Se não achou por e-mail, só aceitamos como "dono" quando já existe configGuilda com id == uid.
+      // Se /users não trouxe guildId, só aceitamos como "dono" quando já existe configGuilda com id == uid.
       // Isso evita o bug de criar uma guilda nova ao logar com contas secundárias.
       if (!guildId) {
         try {
@@ -1658,7 +1610,8 @@ export function checkAuth(redirectToLogin = true) {
         }
       } catch (_) {}
 
-      // Fallback: se configGuilda não tiver vipTier, tenta /guildas/{guildId}
+      // Fallback: se configGuilda não tiver plano pago ou faltar expiração, tenta /guildas/{guildId}.
+      // Importante: não sobrescreve um plano pago por free quando /guildas está vazio/desatualizado.
       if (!vipTier || vipTier === 'free' || vipExpiresAtMs == null) {
         try {
           const gSnap = await getDoc(doc(db, "guildas", guildId));
@@ -1666,7 +1619,7 @@ export function checkAuth(redirectToLogin = true) {
             const g = gSnap.data() || {};
             const rawVip2 = g.vipTier ?? g.vip ?? g.planoVip ?? g.planoVIP ?? g.vipLevel ?? g.vipPlano ?? g.vipName ?? g.plano ?? g.plan ?? g.tier;
             const v2 = vipTierFromValue(rawVip2);
-            if (v2) vipTier = v2;
+            if (v2 && (v2 !== 'free' || !vipTier || vipTier === 'free')) vipTier = v2;
 
             if (vipExpiresAtMs == null) {
               const rawExp2 = g.vipExpiresAt ?? g.vipExpiraEm ?? g.vipExpireAt ?? g.expiresAt ?? g.vipExpires;
