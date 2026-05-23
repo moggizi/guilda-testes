@@ -42,7 +42,7 @@ export const functions = getFunctions(app);
 let __guildCtx = null;
 
 const __GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
-const __GUILDCTX_CACHE_VERSION = 3;
+const __GUILDCTX_CACHE_VERSION = 4;
 try {
   const raw = localStorage.getItem(__GUILDCTX_LS_KEY);
   if (raw) {
@@ -400,57 +400,6 @@ function vipTierFromValue(v) {
   if (s === 'business' || s === 'bussines' || s.includes('buss') || s.includes('business')) return 'business';
   if (s === 'pro' || s.includes('pro')) return 'pro';
   return 'plus';
-}
-
-function __vipDateToMs(value) {
-  try {
-    if (!value) return null;
-    if (typeof value?.toMillis === 'function') return value.toMillis();
-    if (typeof value?.toDate === 'function') {
-      const d = value.toDate();
-      return d instanceof Date && !Number.isNaN(d.getTime()) ? d.getTime() : null;
-    }
-    if (typeof value?.seconds === 'number') return value.seconds * 1000;
-    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-    if (typeof value === 'string') {
-      const t = Date.parse(value);
-      return Number.isFinite(t) ? t : null;
-    }
-  } catch (_) {}
-  return null;
-}
-
-function __parseVipFromData(data = {}) {
-  const rawVip = data?.vipTier ?? data?.vip ?? data?.planoVip ?? data?.planoVIP ?? data?.vipLevel ?? data?.vipPlano ?? data?.vipName ?? data?.plano ?? data?.plan ?? data?.tier;
-  const rawExp = data?.vipExpiresAt ?? data?.vipExpiraEm ?? data?.vipExpireAt ?? data?.expiresAt ?? data?.vipExpires;
-  return { vipTier: vipTierFromValue(rawVip), vipExpiresAtMs: __vipDateToMs(rawExp) };
-}
-
-function __isVipPlanActive(vipTier, vipExpiresAtMs) {
-  const tier = vipTierFromValue(vipTier);
-  if (!tier || tier === 'free') return false;
-  if (tier === 'vitalicio') return true;
-  const exp = (vipExpiresAtMs != null && Number.isFinite(Number(vipExpiresAtMs))) ? Number(vipExpiresAtMs) : null;
-  return exp == null || Date.now() < exp;
-}
-
-function __mergeVipPlanFromOwnDocs(configGuildaData = {}, guildData = {}) {
-  const cfg = __parseVipFromData(configGuildaData || {});
-  const guild = __parseVipFromData(guildData || {});
-  const cfgActive = __isVipPlanActive(cfg.vipTier, cfg.vipExpiresAtMs);
-  const guildActive = __isVipPlanActive(guild.vipTier, guild.vipExpiresAtMs);
-
-  // Promoção de novo usuário fica só em /guildas/{guildId}; pagamento normalmente fica nos dois.
-  // Por isso nunca deixamos configGuilda free apagar um plano ativo encontrado no próprio doc guildas.
-  if (cfgActive && guildActive) {
-    return {
-      vipTier: cfg.vipTier !== 'free' ? cfg.vipTier : guild.vipTier,
-      vipExpiresAtMs: cfg.vipExpiresAtMs ?? guild.vipExpiresAtMs
-    };
-  }
-  if (cfgActive) return cfg;
-  if (guildActive) return guild;
-  return { vipTier: 'free', vipExpiresAtMs: null };
 }
 
 
@@ -1633,29 +1582,59 @@ export function checkAuth(redirectToLogin = true) {
         normalizeConfigGuilda(guildId);
       }
 
-      let guildName = null;
+      const guildName = await getGuildName(guildId);
 
       let vipTier = 'free';
       let vipExpiresAtMs = null;
       let __cfgData = null;
-      let __guildData = null;
 
-      // Plano: lê somente os documentos próprios da guilda.
-      // - configGuilda/{guildId}: plano pago após PIX normalmente aparece aqui.
-      // - guildas/{guildId}: promoção de 7 dias grátis fica aqui.
+      // Preferência: vipTier e vipExpiresAt vêm de /configGuilda/{guildId}
       try {
-        const [cfgSnap, gSnap] = await Promise.all([
-          getDoc(doc(db, "configGuilda", guildId)),
-          getDoc(doc(db, "guildas", guildId))
-        ]);
-        __cfgData = cfgSnap.exists() ? (cfgSnap.data() || {}) : {};
-        __guildData = gSnap.exists() ? (gSnap.data() || {}) : {};
+        const cfgSnap = await getDoc(doc(db, "configGuilda", guildId));
+        if (cfgSnap.exists()) {
+          const cfg = cfgSnap.data() || {};
+          __cfgData = cfg;
+          const rawVip = cfg.vipTier ?? cfg.vip ?? cfg.planoVip ?? cfg.planoVIP ?? cfg.vipLevel ?? cfg.vipPlano ?? cfg.vipName ?? cfg.plano ?? cfg.plan ?? cfg.tier;
+          vipTier = vipTierFromValue(rawVip);
 
-        const mergedVip = __mergeVipPlanFromOwnDocs(__cfgData, __guildData);
-        vipTier = mergedVip.vipTier || 'free';
-        vipExpiresAtMs = mergedVip.vipExpiresAtMs ?? null;
-        guildName = String(__cfgData.name || __guildData.name || guildName || '').trim() || guildName;
+          // vipExpiresAt pode ser Timestamp, número (ms) ou string ISO — aceitamos qualquer um sem quebrar
+          const rawExp = cfg.vipExpiresAt ?? cfg.vipExpiraEm ?? cfg.vipExpireAt ?? cfg.expiresAt ?? cfg.vipExpires;
+          if (rawExp && typeof rawExp.toMillis === 'function') {
+            vipExpiresAtMs = rawExp.toMillis();
+          } else if (typeof rawExp === 'number') {
+            vipExpiresAtMs = rawExp;
+          } else if (typeof rawExp === 'string') {
+            const t = Date.parse(rawExp);
+            vipExpiresAtMs = isFinite(t) ? t : null;
+          }
+        }
       } catch (_) {}
+
+      // Fallback: se configGuilda não tiver plano pago ou faltar expiração, tenta /guildas/{guildId}.
+      // Importante: não sobrescreve um plano pago por free quando /guildas está vazio/desatualizado.
+      if (!vipTier || vipTier === 'free' || vipExpiresAtMs == null) {
+        try {
+          const gSnap = await getDoc(doc(db, "guildas", guildId));
+          if (gSnap.exists()) {
+            const g = gSnap.data() || {};
+            const rawVip2 = g.vipTier ?? g.vip ?? g.planoVip ?? g.planoVIP ?? g.vipLevel ?? g.vipPlano ?? g.vipName ?? g.plano ?? g.plan ?? g.tier;
+            const v2 = vipTierFromValue(rawVip2);
+            if (v2 && (v2 !== 'free' || !vipTier || vipTier === 'free')) vipTier = v2;
+
+            if (vipExpiresAtMs == null) {
+              const rawExp2 = g.vipExpiresAt ?? g.vipExpiraEm ?? g.vipExpireAt ?? g.expiresAt ?? g.vipExpires;
+              if (rawExp2 && typeof rawExp2.toMillis === 'function') {
+                vipExpiresAtMs = rawExp2.toMillis();
+              } else if (typeof rawExp2 === 'number') {
+                vipExpiresAtMs = rawExp2;
+              } else if (typeof rawExp2 === 'string') {
+                const t2 = Date.parse(rawExp2);
+                vipExpiresAtMs = isFinite(t2) ? t2 : null;
+              }
+            }
+          }
+        } catch (_) {}
+      }
 
       // ✅ Verificação automática de expiração (somente se vipExpiresAt existir)
       // FIX 3: Garante que vitalício JAMAIS seja expirado/rebaixado pro FREE
