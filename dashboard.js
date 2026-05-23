@@ -75,10 +75,66 @@
           vipExpiresAtMs: cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null,
           isLeader: cached.isLeader === true || role === 'Líder',
           isAdmin: cached.isAdmin === true || role === 'Admin',
-          isOwner: cached.isOwner === true
+          isOwner: cached.isOwner === true,
+          isCeo: cached.isCeo === true
         };
       }
       return dashboardGuildCtx;
+    }
+
+
+    function readCeoCacheForEmail(email){
+      const clean = cleanEmail(email);
+      const cached = readSharedJsonCache('ceo_cache_v1', null);
+      if (!cached || !clean) return null;
+      const cachedEmail = cleanEmail(cached.email || cached.emailLower || '');
+      if (cachedEmail !== clean) return null;
+      if (!isSharedCacheFresh(cached, SETTINGS_CACHE_TTL_MS)) return null;
+      return cached;
+    }
+
+    function hasCompleteSidebarIdentity(ctx, user){
+      const email = cleanEmail(user?.email || ctx?.email || ctx?.emailLower || '');
+      if (!ctx || !user || !ctx.guildId || !ctx.uid || !ctx.role) return false;
+      if (String(ctx.uid) !== String(user.uid || '')) return false;
+      if (!email || cleanEmail(ctx.email || ctx.emailLower || '') !== email) return false;
+      const role = String(ctx.role || '').trim();
+      if (!role) return false;
+      const hasFlags = typeof ctx.isLeader === 'boolean' && typeof ctx.isAdmin === 'boolean';
+      return hasFlags && isSharedCacheFresh(ctx, SETTINGS_CACHE_TTL_MS);
+    }
+
+    function applyCachedSidebarNow(){
+      try {
+        const ctx = getGuildContext();
+        if (!ctx?.guildId) return false;
+
+        const emailEl = document.getElementById('user-email');
+        if (emailEl && (ctx.email || ctx.emailLower)) emailEl.textContent = ctx.email || ctx.emailLower || '';
+
+        const roleEl = document.getElementById('user-role');
+        if (roleEl && ctx.role) roleEl.textContent = ctx.role;
+
+        if (ctx.vipTier) applyVipUiAndGates(ctx.vipTier);
+
+        const ceo = readCeoCacheForEmail(ctx.email || ctx.emailLower || '');
+        if (ceo) dashboardIsCeo = ceo.isCeo === true;
+        else if (ctx.isCeo === true) dashboardIsCeo = true;
+        applyCeoNavVisibility();
+        initIcons();
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function mergeCeoIntoGuildCache(isCeo){
+      try {
+        const prev = getGuildContext();
+        if (!prev?.guildId) return;
+        const next = setSharedGuildContextCache({ ...prev, isCeo: isCeo === true });
+        dashboardGuildCtx = { ...dashboardGuildCtx, ...next };
+      } catch (_) {}
     }
 
     function getVipTier() {
@@ -187,7 +243,8 @@
         const list = Array.isArray(data.ceo) ? data.ceo : [];
         const ok = list.map(cleanEmail).includes(email);
         dashboardIsCeo = ok;
-        setSharedCache('ceo_cache_v1', JSON.stringify({ email, isCeo: ok, ts: Date.now() }));
+        setSharedCache('ceo_cache_v1', JSON.stringify({ email, emailLower: email, isCeo: ok, ts: Date.now() }));
+        mergeCeoIntoGuildCache(ok);
         return ok;
       } catch (_) {
         dashboardIsCeo = false;
@@ -444,6 +501,38 @@
           const emailLower = cleanEmail(user.email);
           const emailEl = document.getElementById('user-email');
           if (emailEl) emailEl.textContent = user.email || '';
+
+          const cachedCtx = getSharedGuildContextCache();
+          if (hasCompleteSidebarIdentity(cachedCtx, user)) {
+            dashboardGuildCtx = {
+              ...cachedCtx,
+              email: cleanEmail(cachedCtx.email || cachedCtx.emailLower || emailLower),
+              emailLower,
+              uid: String(user.uid)
+            };
+            applyCachedSidebarNow();
+
+            const cachedCeo = readCeoCacheForEmail(emailLower);
+            if (cachedCeo) {
+              dashboardIsCeo = cachedCeo.isCeo === true;
+              applyCeoNavVisibility();
+            } else if (typeof cachedCtx.isCeo === 'boolean') {
+              dashboardIsCeo = cachedCtx.isCeo === true;
+              applyCeoNavVisibility();
+            } else {
+              // Só consulta o Firebase para chefe/CEO quando esse dado ainda não existe no cache.
+              try { await refreshCeoStatus(emailLower); } catch (_) {}
+              applyCeoNavVisibility();
+            }
+
+            if (String(cachedCtx.role || '') === 'Jogador') {
+              window.location.href = 'jogador.html';
+              resolve(null); return;
+            }
+
+            resolve(user);
+            return;
+          }
 
           let guildId = null;
           let roleHint = null;
@@ -1324,6 +1413,9 @@
     });
 
     window.addEventListener('resize', positionGuildSlotDropdown);
+
+    // Preenche e-mail/cargo/chefe pelo cache antes de qualquer leitura do Firebase.
+    applyCachedSidebarNow();
 
     checkAuth().then(async (user) => {
       if(!user) return;

@@ -50,7 +50,7 @@ try {
   const raw = localStorage.getItem(__GUILDCTX_LS_KEY);
   if (raw) {
     const cached = JSON.parse(raw);
-    if (cached && cached.guildId && cached.uid && cached.email && cached.role) {
+    if (cached && cached.guildId && cached.uid && (cached.email || cached.emailLower) && cached.role) {
       __guildCtx = {
         guildId: String(cached.guildId),
         guildName: cached.guildName ? String(cached.guildName) : null,
@@ -185,11 +185,17 @@ export function getSharedGuildContextCache() {
   const cached = readSharedJsonCache(__GUILDCTX_LS_KEY, null);
   if (cached && cached.guildId && cached.uid && cached.email && cached.role) {
     const flags = __roleCacheFlags(cached.role, cached);
+    const email = cleanEmail(cached.email || cached.emailLower || '');
+    const ceoCached = readSharedJsonCache(__CEO_LS_KEY, null);
+    const ceoEmail = cleanEmail(ceoCached?.email || ceoCached?.emailLower || '');
+    const ceoFresh = ceoCached && ceoEmail === email && __cacheIsFresh(ceoCached, __SETTINGS_CACHE_TTL_MS);
     return {
       ...cached,
-      email: cleanEmail(cached.email || cached.emailLower || ''),
+      email,
       emailLower: cleanEmail(cached.emailLower || cached.email || ''),
-      ...flags
+      ...flags,
+      ...(typeof cached.isCeo === 'boolean' ? { isCeo: cached.isCeo === true } : {}),
+      ...(ceoFresh ? { isCeo: ceoCached.isCeo === true } : {})
     };
   }
   return null;
@@ -203,6 +209,7 @@ export function setSharedGuildContextCache(ctx = {}) {
     email,
     emailLower: email,
     ...flags,
+    ...(typeof ctx?.isCeo === 'boolean' ? { isCeo: ctx.isCeo === true } : {}),
     ts: Date.now()
   };
   writeSharedJsonCache(__GUILDCTX_LS_KEY, next);
