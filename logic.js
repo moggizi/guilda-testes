@@ -171,14 +171,40 @@ export function isSharedCacheFresh(cached, ttlMs = __SETTINGS_CACHE_TTL_MS) {
   return __cacheIsFresh(cached, ttlMs);
 }
 
+function __roleCacheFlags(roleValue, ctx = {}) {
+  const role = String(roleValue || ctx?.role || 'Membro');
+  return {
+    role,
+    isLeader: ctx?.isLeader === true || role === 'Líder',
+    isAdmin: ctx?.isAdmin === true || role === 'Admin',
+    isOwner: ctx?.isOwner === true
+  };
+}
+
 export function getSharedGuildContextCache() {
   const cached = readSharedJsonCache(__GUILDCTX_LS_KEY, null);
-  if (cached && cached.guildId && cached.uid && cached.email && cached.role) return cached;
+  if (cached && cached.guildId && cached.uid && cached.email && cached.role) {
+    const flags = __roleCacheFlags(cached.role, cached);
+    return {
+      ...cached,
+      email: cleanEmail(cached.email || cached.emailLower || ''),
+      emailLower: cleanEmail(cached.emailLower || cached.email || ''),
+      ...flags
+    };
+  }
   return null;
 }
 
 export function setSharedGuildContextCache(ctx = {}) {
-  const next = { ...(ctx || {}), ts: Date.now() };
+  const flags = __roleCacheFlags(ctx?.role, ctx);
+  const email = cleanEmail(ctx?.email || ctx?.emailLower || '');
+  const next = {
+    ...(ctx || {}),
+    email,
+    emailLower: email,
+    ...flags,
+    ts: Date.now()
+  };
   writeSharedJsonCache(__GUILDCTX_LS_KEY, next);
   return next;
 }

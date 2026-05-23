@@ -63,14 +63,19 @@
       if (dashboardGuildCtx?.guildId) return dashboardGuildCtx;
       const cached = getSharedGuildContextCache();
       if (cached?.guildId) {
+        const role = String(cached.role || 'Membro');
         dashboardGuildCtx = {
           guildId: String(cached.guildId),
           guildName: cached.guildName ? String(cached.guildName) : null,
-          role: String(cached.role || 'Membro'),
-          email: String(cached.email || ''),
+          role,
+          email: String(cached.email || cached.emailLower || ''),
+          emailLower: cleanEmail(cached.emailLower || cached.email || ''),
           uid: String(cached.uid || ''),
           vipTier: cached.vipTier ? String(cached.vipTier) : 'free',
-          vipExpiresAtMs: cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null
+          vipExpiresAtMs: cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null,
+          isLeader: cached.isLeader === true || role === 'Líder',
+          isAdmin: cached.isAdmin === true || role === 'Admin',
+          isOwner: cached.isOwner === true
         };
       }
       return dashboardGuildCtx;
@@ -525,7 +530,28 @@
             }
           } catch (_) {}
 
-          dashboardGuildCtx = { guildId, guildName, role, vipTier, vipExpiresAtMs, email: emailLower, uid: user.uid };
+          const isOwner = (() => {
+            try {
+              const ownerEmail = cfgData?.ownerEmail ? cleanEmail(cfgData.ownerEmail) : '';
+              return guildId === user.uid || (!!ownerEmail && ownerEmail === emailLower);
+            } catch (_) {
+              return guildId === user.uid;
+            }
+          })();
+
+          dashboardGuildCtx = {
+            guildId,
+            guildName,
+            role,
+            vipTier,
+            vipExpiresAtMs,
+            email: emailLower,
+            emailLower,
+            uid: user.uid,
+            isLeader: role === 'Líder',
+            isAdmin: role === 'Admin',
+            isOwner
+          };
           setSharedGuildContextCache(dashboardGuildCtx);
           applyVipUiAndGates(vipTier);
           try { await refreshCeoStatus(emailLower); } catch (_) {}
