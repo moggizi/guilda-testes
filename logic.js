@@ -128,6 +128,66 @@ function __writeJsonCache(key, value = {}) {
 }
 
 
+// --- Cache compartilhado oficial -------------------------------------------
+// Mantém um único ponto de leitura/escrita de cache para as telas novas.
+// As telas antigas continuam usando as funções já existentes neste arquivo.
+export function getSharedCache(key) {
+  try {
+    return key ? localStorage.getItem(key) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+export function setSharedCache(key, value) {
+  try {
+    if (key) localStorage.setItem(key, value);
+  } catch (_) {}
+}
+
+export function removeSharedCache(key) {
+  try {
+    if (key) localStorage.removeItem(key);
+  } catch (_) {}
+}
+
+export function readSharedJsonCache(key, fallback = null) {
+  try {
+    const raw = getSharedCache(key);
+    return raw ? (JSON.parse(raw) || fallback) : fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+export function writeSharedJsonCache(key, value) {
+  try {
+    if (!key) return;
+    setSharedCache(key, JSON.stringify(value));
+  } catch (_) {}
+}
+
+export function isSharedCacheFresh(cached, ttlMs = __SETTINGS_CACHE_TTL_MS) {
+  return __cacheIsFresh(cached, ttlMs);
+}
+
+export function getSharedGuildContextCache() {
+  const cached = readSharedJsonCache(__GUILDCTX_LS_KEY, null);
+  if (cached && cached.guildId && cached.uid && cached.email && cached.role) return cached;
+  return null;
+}
+
+export function setSharedGuildContextCache(ctx = {}) {
+  const next = { ...(ctx || {}), ts: Date.now() };
+  writeSharedJsonCache(__GUILDCTX_LS_KEY, next);
+  return next;
+}
+
+export function clearSharedGuildContextCache() {
+  removeSharedCache(__GUILDCTX_LS_KEY);
+}
+
+
 
 // --- Guilda: info básica com cache (1 leitura no máximo) --------------------
 // Cache em localStorage: guildInfo_<guildId>

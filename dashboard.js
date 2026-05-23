@@ -1,8 +1,11 @@
 // dashboard.js — código exclusivo do painel
 // Separado do dashboard.html para facilitar manutenção e reduzir bugs.
 
-    import { checkAuth, setupSidebar, initIcons, logout, db, auth, consumeLoginToasts, showWelcomeLoginModal, getGuildContext, applyVipUiAndGates, getVipTier, getGuildMultiConfig, getGuildGoalsConfig, showToast } from './logic.js';
-    import { collection, getDocs, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { initializeApp, getApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { collection, getDocs, doc, getDoc, onSnapshot, setDoc, writeBatch, serverTimestamp, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getSharedCache, setSharedCache, removeSharedCache, readSharedJsonCache, writeSharedJsonCache, isSharedCacheFresh, getSharedGuildContextCache, setSharedGuildContextCache, clearSharedGuildContextCache } from './logic.js';
 
     const GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
     const SETTINGS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -21,6 +24,540 @@
     let canUseMultiGuildDashboard = false;
     let guildGoals = normalizeGoalsFromAnySource({});
 
+
+    // Firebase/API exclusivos do dashboard. O logic.js é importado só para cache compartilhado.
+    const firebaseConfig = {
+      apiKey: "AIzaSyC7UJxBOViZj8ELjw-Xvy645QYfDfpBzxM",
+      authDomain: "guilda-hubb.firebaseapp.com",
+      projectId: "guilda-hubb",
+      storageBucket: "guilda-hubb.firebasestorage.app",
+      messagingSenderId: "117135418619",
+      appId: "1:117135418619:web:e8ca8ec52eb0eeeff87c5e",
+      measurementId: "G-9CHV67E64Y"
+    };
+
+    const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let dashboardGuildCtx = null;
+    let dashboardIsCeo = false;
+
+    function cleanEmail(email) {
+      return (email || '').toString().toLowerCase().trim();
+    }
+
+    function uniq(arr) {
+      const out = [];
+      const seen = new Set();
+      for (const v of (arr || [])) {
+        const s = (v || '').toString();
+        if (!s || seen.has(s)) continue;
+        seen.add(s);
+        out.push(s);
+      }
+      return out;
+    }
+
+    function getGuildContext() {
+      if (dashboardGuildCtx?.guildId) return dashboardGuildCtx;
+      const cached = getSharedGuildContextCache();
+      if (cached?.guildId) {
+        dashboardGuildCtx = {
+          guildId: String(cached.guildId),
+          guildName: cached.guildName ? String(cached.guildName) : null,
+          role: String(cached.role || 'Membro'),
+          email: String(cached.email || ''),
+          uid: String(cached.uid || ''),
+          vipTier: cached.vipTier ? String(cached.vipTier) : 'free',
+          vipExpiresAtMs: cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null
+        };
+      }
+      return dashboardGuildCtx;
+    }
+
+    function getVipTier() {
+      return getGuildContext()?.vipTier || 'free';
+    }
+
+    function getVipExpiresAtMs() {
+      const ms = getGuildContext()?.vipExpiresAtMs;
+      return ms != null ? Number(ms) : null;
+    }
+
+    function getVipRemainingDays() {
+      const ms = getVipExpiresAtMs();
+      if (!ms) return null;
+      const diff = ms - Date.now();
+      if (!isFinite(diff)) return null;
+      return Math.max(0, Math.ceil(diff / 86400000));
+    }
+
+    function vipTierFromValue(v) {
+      const s = (v || '').toString().toLowerCase().trim();
+      if (!s || s === 'free') return 'free';
+      if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life')) return 'vitalicio';
+      if (s === 'business' || s === 'bussines' || s.includes('buss') || s.includes('business')) return 'business';
+      if (s === 'pro' || s.includes('pro')) return 'pro';
+      return 'plus';
+    }
+
+    function toastEscapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function showToast(type = 'info', message = '') {
+      let container = document.getElementById('toast-container');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'fixed top-4 right-4 z-[9999] flex flex-col gap-2';
+        document.body.appendChild(container);
+      }
+      const toast = document.createElement('div');
+      toast.className = 'px-4 py-3 rounded-xl shadow-lg border text-sm font-medium flex items-start gap-2 max-w-[340px] ' +
+        (type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+         type === 'error' ? 'bg-red-50 text-red-800 border-red-200' :
+         'bg-gray-900 text-white border-white/10');
+      toast.innerHTML = `<div class="flex-1 leading-snug">${toastEscapeHtml(message)}</div>`;
+      container.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(-4px)'; toast.style.transition = 'all 180ms ease'; }, 2600);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function initIcons() {
+      try { if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons(); } catch (_) {}
+    }
+
+    function setupSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      const btn = document.getElementById('mobile-menu-btn');
+      if (!sidebar || !overlay || !btn) return;
+      const open = () => { sidebar.classList.remove('-translate-x-full'); overlay.classList.remove('hidden'); };
+      const close = () => { sidebar.classList.add('-translate-x-full'); overlay.classList.add('hidden'); };
+      btn.addEventListener('click', open);
+      overlay.addEventListener('click', close);
+      sidebar.querySelectorAll('a[href]').forEach(a => a.addEventListener('click', () => { if (window.innerWidth < 1024) close(); }));
+      if (window.innerWidth < 1024) close();
+    }
+
+    async function logout() {
+      try { await signOut(auth); }
+      finally {
+        try {
+          clearSharedGuildContextCache();
+          removeSharedCache('membersList');
+          removeSharedCache('dashboard_stats');
+          removeSharedCache('campsList');
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i) || '';
+            if (k.startsWith('securityConfig_') || k.startsWith('tagMembros_')) removeSharedCache(k);
+          }
+        } catch (_) {}
+        window.location.href = 'index.html';
+      }
+    }
+
+    function applyCeoNavVisibility() {
+      try {
+        document.querySelectorAll('[data-ceo-only="true"], #nav-chefe').forEach((el) => {
+          if (dashboardIsCeo) el.classList.remove('hidden');
+          else el.classList.add('hidden');
+        });
+      } catch (_) {}
+    }
+
+    async function refreshCeoStatus(emailLower) {
+      const email = cleanEmail(emailLower);
+      if (!email) return false;
+      try {
+        const snap = await getDoc(doc(db, 'chefe', 'security'));
+        const data = snap.exists() ? (snap.data() || {}) : {};
+        const list = Array.isArray(data.ceo) ? data.ceo : [];
+        const ok = list.map(cleanEmail).includes(email);
+        dashboardIsCeo = ok;
+        setSharedCache('ceo_cache_v1', JSON.stringify({ email, isCeo: ok, ts: Date.now() }));
+        return ok;
+      } catch (_) {
+        dashboardIsCeo = false;
+        return false;
+      }
+    }
+
+    function applyVipUiAndGates(tierRaw) {
+      const tier = normalizeTier(tierRaw || getVipTier());
+      const vipLabel = document.getElementById('vip-label');
+      if (vipLabel) {
+        const days = getVipRemainingDays();
+        const daysTxt = (tier !== 'free' && tier !== 'vitalicio' && days != null) ? ` • ${days} dias` : '';
+        vipLabel.innerHTML = `Guilda: <span class="font-bold text-gray-800">${tier === 'vitalicio' ? 'VITALÍCIO' : tier.toUpperCase()}${daysTxt}</span>`;
+      }
+      document.querySelectorAll('span').forEach((sp) => {
+        if (sp.closest && sp.closest('#vip-label')) return;
+        if (sp.dataset && sp.dataset.vipTag) return;
+        const t = (sp.textContent || '').trim().toUpperCase();
+        if (t === 'PLUS') sp.dataset.vipTag = 'plus';
+        if (t === 'PRO') sp.dataset.vipTag = 'pro';
+      });
+      const showPlusTags = tier === 'free';
+      const showProTags = (tier !== 'pro' && tier !== 'business' && tier !== 'vitalicio');
+      document.querySelectorAll('[data-vip-tag]').forEach((el) => {
+        const tag = (el.dataset.vipTag || '').toLowerCase();
+        if (tag === 'plus') el.style.display = showPlusTags ? '' : 'none';
+        if (tag === 'pro') el.style.display = showProTags ? '' : 'none';
+      });
+    }
+
+    async function getGuildName(guildId) {
+      try {
+        const snap = await getDoc(doc(db, 'guildas', guildId));
+        if (!snap.exists()) return null;
+        const data = snap.data() || {};
+        return (data.name || '').toString().trim() || null;
+      } catch (_) { return null; }
+    }
+
+    async function findGuildByEmail(emailLower) {
+      if (!emailLower) return null;
+      try { const s = await getDocs(query(collection(db, 'configGuilda'), where('leaders', 'array-contains', emailLower), limit(1))); if (!s.empty) return { guildId: s.docs[0].id, source: 'leaders' }; } catch (_) {}
+      try { const s = await getDocs(query(collection(db, 'configGuilda'), where('admins', 'array-contains', emailLower), limit(1))); if (!s.empty) return { guildId: s.docs[0].id, source: 'admins' }; } catch (_) {}
+      try { const s = await getDocs(query(collection(db, 'configGuilda'), where('ownerEmail', '==', emailLower), limit(1))); if (!s.empty) return { guildId: s.docs[0].id, source: 'ownerEmail' }; } catch (_) {}
+      try { const s = await getDocs(query(collection(db, 'configGuilda'), where('playerEmail', '==', emailLower), limit(1))); if (!s.empty) return { guildId: s.docs[0].id, source: 'playerEmail' }; } catch (_) {}
+      try {
+        const snap = await getDocs(query(collection(db, 'configGuilda'), limit(300)));
+        for (const d of snap.docs) {
+          const data = d.data() || {};
+          const leaders = uniq((Array.isArray(data.leaders) ? data.leaders : []).map(cleanEmail)).filter(Boolean);
+          const admins = uniq((Array.isArray(data.admins) ? data.admins : []).map(cleanEmail)).filter(Boolean);
+          if (leaders.includes(emailLower)) return { guildId: d.id, source: 'scan-leaders' };
+          if (admins.includes(emailLower)) return { guildId: d.id, source: 'scan-admins' };
+          if (cleanEmail(data.ownerEmail) === emailLower) return { guildId: d.id, source: 'scan-ownerEmail' };
+          if (cleanEmail(data.playerEmail) === emailLower) return { guildId: d.id, source: 'scan-playerEmail' };
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    async function resolveRoleInGuild(guildId, email) {
+      const e = cleanEmail(email);
+      if (!guildId || !e) return 'Membro';
+      try {
+        const snap = await getDoc(doc(db, 'configGuilda', guildId));
+        if (snap.exists()) {
+          const data = snap.data() || {};
+          const leaders = uniq((Array.isArray(data.leaders) ? data.leaders : []).map(cleanEmail)).filter(Boolean);
+          const admins = uniq((Array.isArray(data.admins) ? data.admins : []).map(cleanEmail)).filter(Boolean);
+          if (leaders.includes(e)) return 'Líder';
+          if (admins.includes(e)) return 'Admin';
+          if (cleanEmail(data.playerEmail) === e) return 'Jogador';
+        }
+        const g = await getDoc(doc(db, 'guildas', guildId));
+        if (g.exists()) {
+          const gd = g.data() || {};
+          if ((gd.ownerUid || '').toString().trim() === auth.currentUser?.uid) return 'Líder';
+          if (cleanEmail(gd.ownerEmail) === e) return 'Líder';
+        }
+        return 'Membro';
+      } catch (_) { return 'Membro'; }
+    }
+
+    async function normalizeConfigGuilda(guildId) {
+      try {
+        const ref = doc(db, 'configGuilda', guildId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return;
+        const data = snap.data() || {};
+        const leaders = Array.isArray(data.leaders) ? data.leaders : [];
+        const admins = Array.isArray(data.admins) ? data.admins : [];
+        const leadersN = uniq(leaders.map(cleanEmail)).filter(Boolean);
+        const adminsN = uniq(admins.map(cleanEmail)).filter(Boolean);
+        const ownerEmailN = data.ownerEmail ? cleanEmail(data.ownerEmail) : null;
+        const changed = JSON.stringify(leadersN) !== JSON.stringify(leaders) || JSON.stringify(adminsN) !== JSON.stringify(admins) || (data.ownerEmail ? ownerEmailN !== data.ownerEmail : false);
+        if (!changed) return;
+        await setDoc(ref, { ...(ownerEmailN ? { ownerEmail: ownerEmailN } : {}), leaders: leadersN, admins: adminsN, updatedAt: serverTimestamp() }, { merge: true });
+      } catch (_) {}
+    }
+
+    async function ensureOwnerDocsLight(user) {
+      const uid = user?.uid;
+      if (!uid) return;
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'guildas', uid), { updatedAt: serverTimestamp() }, { merge: true });
+      batch.set(doc(db, 'configGuilda', uid), { updatedAt: serverTimestamp() }, { merge: true });
+      batch.set(doc(db, 'users', uid), { updatedAt: serverTimestamp() }, { merge: true });
+      await batch.commit();
+    }
+
+    async function syncPermissoesAtivasIfNeeded(guildId, cfgData, vipTier, vipExpiresAtMs) {
+      try {
+        if (!guildId) return null;
+        const tier = (vipTier || cfgData?.vipTier || 'free').toString().toLowerCase().trim();
+        const paid = (tier === 'plus' || tier === 'pro' || tier === 'business' || tier === 'vitalicio' || tier.includes('pro') || tier.includes('business') || tier.includes('buss') || tier.includes('vital'));
+        const exp = (vipExpiresAtMs != null && isFinite(Number(vipExpiresAtMs))) ? Number(vipExpiresAtMs) : null;
+        const vipAtivo = paid && (tier.includes('vital') || exp == null || Date.now() < exp);
+        const atual = (cfgData && cfgData.permissoesAtivas !== undefined) ? (cfgData.permissoesAtivas !== false) : null;
+        const novo = !!vipAtivo;
+        if (atual === null || atual !== novo) await setDoc(doc(db, 'configGuilda', guildId), { permissoesAtivas: novo, updatedAt: serverTimestamp() }, { merge: true });
+        return novo;
+      } catch (_) { return null; }
+    }
+
+    function parseVipFromData(data = {}) {
+      const rawVip = data.vipTier ?? data.vip ?? data.planoVip ?? data.planoVIP ?? data.vipLevel ?? data.vipPlano ?? data.vipName ?? data.plano ?? data.plan ?? data.tier;
+      const rawExp = data.vipExpiresAt ?? data.vipExpiraEm ?? data.vipExpireAt ?? data.expiresAt ?? data.vipExpires;
+      return { vipTier: vipTierFromValue(rawVip), vipExpiresAtMs: toMs(rawExp) };
+    }
+
+    function showWelcomeLoginModal() {
+      try {
+        const params = new URLSearchParams(window.location.search || '');
+        if (params.get('login') !== '1') return false;
+        const overlay = document.getElementById('welcome-overlay');
+        const modal = document.getElementById('welcome-modal');
+        const closeBtn = document.getElementById('welcome-close');
+        if (!overlay || !modal || !closeBtn) return false;
+        if (modal.dataset.bound === '1') return true;
+        const close = () => {
+          modal.classList.remove('show'); overlay.classList.remove('show'); modal.setAttribute('aria-hidden', 'true'); document.documentElement.classList.remove('overflow-hidden');
+          setTimeout(() => { modal.classList.add('hidden'); overlay.classList.add('hidden'); }, 240);
+        };
+        modal.dataset.bound = '1';
+        closeBtn.addEventListener('click', close);
+        overlay.addEventListener('click', close);
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) close(); });
+        overlay.classList.remove('hidden'); modal.classList.remove('hidden'); modal.setAttribute('aria-hidden', 'false'); document.documentElement.classList.add('overflow-hidden');
+        requestAnimationFrame(() => { overlay.classList.add('show'); modal.classList.add('show'); });
+        initIcons();
+        return true;
+      } catch (_) { return false; }
+    }
+
+    function consumeLoginToasts() {
+      try {
+        const params = new URLSearchParams(window.location.search || '');
+        if (params.get('login') !== '1') return;
+        const email = (document.getElementById('user-email')?.textContent || auth.currentUser?.email || '').trim();
+        const role = (document.getElementById('user-role')?.textContent || 'Membro').trim();
+        showToast('success', 'Login realizado com sucesso!');
+        showToast('info', `Perfil: ${role} • ${email}`);
+        params.delete('login');
+        const qs = params.toString();
+        history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : '') + (window.location.hash || ''));
+      } catch (_) {}
+    }
+
+    async function getGuildInfoCached(guildId, options = {}) {
+      const gid = (guildId || getGuildContext()?.guildId || '').toString().trim();
+      if (!gid) return { guildId: null, name: null, createdAtMs: null };
+      const key = `guildInfo_${gid}`;
+      const cached = readSharedJsonCache(key, null);
+      if (isSharedCacheFresh(cached, options?.ttlMs ?? SETTINGS_CACHE_TTL_MS) && cached?.guildId === gid) return { guildId: gid, name: cached.name || null, createdAtMs: cached.createdAtMs != null ? Number(cached.createdAtMs) : null };
+      try {
+        const snap = await getDoc(doc(db, 'guildas', gid));
+        const data = snap.exists() ? (snap.data() || {}) : {};
+        const name = (data.name || '').toString().trim() || null;
+        const createdAtMs = toMs(data.createdAt);
+        writeSharedJsonCache(key, { guildId: gid, name, createdAtMs, ts: Date.now() });
+        return { guildId: gid, name, createdAtMs };
+      } catch (_) {
+        if (cached?.guildId === gid) return { guildId: gid, name: cached.name || null, createdAtMs: cached.createdAtMs != null ? Number(cached.createdAtMs) : null };
+        return { guildId: gid, name: null, createdAtMs: null };
+      }
+    }
+
+    function readGuildMultiCache(guildId) {
+      return readSharedJsonCache(`guildMulti_${guildId}`, null);
+    }
+
+    function writeGuildMultiCache(guildId, slots) {
+      writeSharedJsonCache(`guildMulti_${guildId}`, Array.isArray(slots) ? slots : []);
+      setSharedCache(`guildMulti_${guildId}_ts`, String(Date.now()));
+    }
+
+    async function getGuildMultiConfig(maxSlots = 4, options = {}) {
+      if (typeof maxSlots === 'object' && maxSlots !== null) { options = maxSlots; maxSlots = 4; }
+      const guildId = getGuildContext()?.guildId;
+      if (!guildId) return [];
+      const safeMax = Math.max(1, Math.min(4, Math.floor(Number(maxSlots) || 4)));
+      const cachedSlots = readGuildMultiCache(guildId);
+      const cachedTs = Number(getSharedCache(`guildMulti_${guildId}_ts`) || 0) || 0;
+      if (options?.forceRefresh !== true && cachedSlots?.length && isSharedCacheFresh({ ts: cachedTs }, options?.ttlMs ?? SETTINGS_CACHE_TTL_MS)) return cachedSlots.filter(Boolean).slice(0, safeMax);
+      let cfg = {};
+      try { const snap = await getDoc(doc(db, 'configGuilda', guildId)); cfg = snap.exists() ? (snap.data() || {}) : {}; }
+      catch (_) { if (cachedSlots?.length) return cachedSlots.filter(Boolean).slice(0, safeMax); }
+      let primaryName = (cfg.name || '').toString().trim();
+      if (!primaryName) primaryName = (await getGuildInfoCached(guildId, options))?.name || getGuildContext()?.guildName || 'Guilda 1';
+      const out = [];
+      for (let i = 1; i <= safeMax; i++) {
+        const nameField = i <= 1 ? 'name' : `name${i}`;
+        const tagField = i <= 1 ? 'tagMembros' : `tagMembros${i}`;
+        const name = i <= 1 ? primaryName : (cfg[nameField] || '').toString().trim();
+        const tag = (cfg[tagField] || '').toString();
+        out.push({ slot: i, nameField, tagField, name, tag, exists: i === 1 || !!name || !!tag || cfg[`guild${i}Ativa`] === true });
+      }
+      writeGuildMultiCache(guildId, out);
+      return out;
+    }
+
+    function normalizeGuildGoalsForCache(data = {}) {
+      return normalizeGoalsFromAnySource(data || {});
+    }
+
+    async function getGuildGoalsConfig(options = {}) {
+      const guildId = getGuildContext()?.guildId;
+      if (!guildId) return normalizeGuildGoalsForCache({});
+      const key = `guildGoals_${guildId}`;
+      const cached = readSharedJsonCache(key, null);
+      if (options?.forceRefresh !== true && isSharedCacheFresh(cached, options?.ttlMs ?? SETTINGS_CACHE_TTL_MS)) return normalizeGuildGoalsForCache(cached || {});
+      try {
+        const snap = await getDoc(doc(db, 'configGuilda', guildId));
+        const goals = normalizeGuildGoalsForCache(snap.exists() ? (snap.data() || {}) : {});
+        writeSharedJsonCache(key, { ...goals, ts: Date.now() });
+        return goals;
+      } catch (_) {
+        if (cached) return normalizeGuildGoalsForCache(cached || {});
+        return normalizeGuildGoalsForCache({});
+      }
+    }
+
+    function checkAuth(redirectToLogin = true) {
+      return new Promise((resolve) => {
+        onAuthStateChanged(auth, async (user) => {
+          const isLoginPage = /index\.html$|\/$/i.test(window.location.pathname || '');
+          if (!user) {
+            if (redirectToLogin && !isLoginPage) window.location.href = 'index.html';
+            resolve(null);
+            return;
+          }
+
+          const emailLower = cleanEmail(user.email);
+          const emailEl = document.getElementById('user-email');
+          if (emailEl) emailEl.textContent = user.email || '';
+
+          let guildId = null;
+          let roleHint = null;
+          let userProfile = null;
+          try {
+            const uSnap = await getDoc(doc(db, 'users', user.uid));
+            if (uSnap.exists()) {
+              userProfile = uSnap.data() || {};
+              if (userProfile.guildId) guildId = String(userProfile.guildId);
+              if (userProfile.role) roleHint = String(userProfile.role);
+            }
+          } catch (_) {}
+
+          if (!guildId) {
+            try { const found = await findGuildByEmail(emailLower); if (found?.guildId) guildId = found.guildId; } catch (_) {}
+          }
+          if (!guildId) {
+            try { const selfCfg = await getDoc(doc(db, 'configGuilda', user.uid)); if (selfCfg.exists()) guildId = user.uid; } catch (_) {}
+          }
+          if (!guildId) {
+            try { await signOut(auth); } catch (_) {}
+            if (!isLoginPage) window.location.href = 'index.html';
+            resolve(null); return;
+          }
+
+          try { if (guildId === user.uid) await ensureOwnerDocsLight(user); } catch (_) {}
+
+          let role = null;
+          const hint = (roleHint || '').toString().trim();
+          if (hint && ['Líder', 'Admin', 'Jogador'].includes(hint)) role = hint;
+          const resolved = await resolveRoleInGuild(guildId, user.email || '');
+          if (!role || role === 'Membro') role = resolved;
+          if (role === 'Membro' && hint && hint !== 'Membro') role = hint;
+          if (role === 'Líder') normalizeConfigGuilda(guildId);
+
+          const guildName = await getGuildName(guildId);
+          let vipTier = 'free';
+          let vipExpiresAtMs = null;
+          let cfgData = null;
+
+          try {
+            const cfgSnap = await getDoc(doc(db, 'configGuilda', guildId));
+            if (cfgSnap.exists()) {
+              cfgData = cfgSnap.data() || {};
+              const parsed = parseVipFromData(cfgData);
+              vipTier = parsed.vipTier;
+              vipExpiresAtMs = parsed.vipExpiresAtMs;
+            }
+          } catch (_) {}
+
+          if (!vipTier || vipTier === 'free' || vipExpiresAtMs == null) {
+            try {
+              const gSnap = await getDoc(doc(db, 'guildas', guildId));
+              if (gSnap.exists()) {
+                const parsed = parseVipFromData(gSnap.data() || {});
+                if (parsed.vipTier) vipTier = parsed.vipTier;
+                if (vipExpiresAtMs == null) vipExpiresAtMs = parsed.vipExpiresAtMs;
+              }
+            } catch (_) {}
+          }
+
+          if (vipTier && vipTier !== 'free' && vipTier !== 'vitalicio' && vipExpiresAtMs != null && isFinite(vipExpiresAtMs) && Date.now() > vipExpiresAtMs) {
+            vipTier = 'free'; vipExpiresAtMs = null;
+            try { await setDoc(doc(db, 'configGuilda', guildId), { vipTier: 'free', vipExpiresAt: null, updatedAt: serverTimestamp() }, { merge: true }); } catch (_) {}
+            try { await setDoc(doc(db, 'guildas', guildId), { vipTier: 'free', updatedAt: serverTimestamp() }, { merge: true }); } catch (_) {}
+          }
+
+          let permissoesAtivas = null;
+          try {
+            permissoesAtivas = await syncPermissoesAtivasIfNeeded(guildId, cfgData, vipTier, vipExpiresAtMs);
+            if (permissoesAtivas == null && cfgData && cfgData.permissoesAtivas !== undefined) permissoesAtivas = cfgData.permissoesAtivas !== false;
+          } catch (_) {}
+
+          try {
+            const ownerEmail = cfgData?.ownerEmail ? cleanEmail(cfgData.ownerEmail) : '';
+            const isOwner = (guildId === user.uid) || (!!ownerEmail && ownerEmail === emailLower);
+            const okPerm = permissoesAtivas == null ? true : !!permissoesAtivas;
+            if (!okPerm && ((role === 'Líder' && !isOwner) || role === 'Admin')) {
+              showToast('error', 'Conta expirada');
+              try { await signOut(auth); } catch (_) {}
+              clearSharedGuildContextCache();
+              window.location.href = 'index.html';
+              resolve(null); return;
+            }
+          } catch (_) {}
+
+          dashboardGuildCtx = { guildId, guildName, role, vipTier, vipExpiresAtMs, email: emailLower, uid: user.uid };
+          setSharedGuildContextCache(dashboardGuildCtx);
+          applyVipUiAndGates(vipTier);
+          try { await refreshCeoStatus(emailLower); } catch (_) {}
+          applyCeoNavVisibility();
+
+          const roleEl = document.getElementById('user-role');
+          if (roleEl) roleEl.textContent = role;
+
+          const path = (window.location.pathname || '').toLowerCase();
+          const isDashboardPage = path.endsWith('/dashboard') || path.endsWith('/dashboard.html') || path.includes('dashboard.html');
+          if (role === 'Membro') {
+            const hasUserLink = !!(userProfile && userProfile.guildId);
+            if (!hasUserLink && (!hint || hint === 'Membro')) {
+              try { await signOut(auth); } catch (_) {}
+              if (!isLoginPage) window.location.href = 'index.html';
+              resolve(null); return;
+            }
+          }
+          if (role === 'Jogador') {
+            window.location.href = 'jogador.html';
+            resolve(null); return;
+          }
+          // No dashboard o admin pode entrar. Páginas antigas continuam protegidas pelo logic.js.
+          try {
+            const message = sessionStorage.getItem('hub_signup_promo_toast');
+            if (message) { sessionStorage.removeItem('hub_signup_promo_toast'); showToast('success', message); }
+          } catch (_) {}
+          resolve(user);
+        });
+      });
+    }
+
     function normalizeTier(raw){
       const s = (raw || 'free').toString().toLowerCase().trim();
       if (s.includes('vital') || s.includes('life')) return 'vitalicio';
@@ -35,11 +572,11 @@
     }
 
     function safeStorageGet(key){
-      try { return key ? localStorage.getItem(key) : null; } catch { return null; }
+      return getSharedCache(key);
     }
 
     function safeStorageSet(key, value){
-      try { if (key) localStorage.setItem(key, value); } catch {}
+      setSharedCache(key, value);
     }
 
     function safeSessionGet(key){
@@ -111,10 +648,7 @@
     }
 
     function isFreshCache(cached, ttlMs = SETTINGS_CACHE_TTL_MS){
-      try {
-        const ts = Number(cached?.ts || 0);
-        return !!ts && Number.isFinite(ts) && (Date.now() - ts) < ttlMs;
-      } catch { return false; }
+      return isSharedCacheFresh(cached, ttlMs);
     }
 
     function readJsonStorage(key, fallback = null){
@@ -674,9 +1208,9 @@
     }
 
     function updateGuildCtxCache(patch){
-      const prev = safeParseJSON(safeStorageGet(GUILDCTX_LS_KEY) || '{}', {});
-      const next = { ...prev, ...patch, ts: Date.now() };
-      safeStorageSet(GUILDCTX_LS_KEY, JSON.stringify(next));
+      const prev = getGuildContext() || safeParseJSON(safeStorageGet(GUILDCTX_LS_KEY) || '{}', {});
+      const next = setSharedGuildContextCache({ ...prev, ...patch });
+      dashboardGuildCtx = { ...dashboardGuildCtx, ...next };
       return next;
     }
 
