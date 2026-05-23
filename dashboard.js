@@ -362,6 +362,33 @@
       return { vipTier: vipTierFromValue(rawVip), vipExpiresAtMs: toMs(rawExp) };
     }
 
+    function isVipPlanActive(vipTier, vipExpiresAtMs) {
+      const tier = vipTierFromValue(vipTier);
+      if (!tier || tier === 'free') return false;
+      if (tier === 'vitalicio') return true;
+      const exp = (vipExpiresAtMs != null && Number.isFinite(Number(vipExpiresAtMs))) ? Number(vipExpiresAtMs) : null;
+      return exp == null || Date.now() < exp;
+    }
+
+    function mergeVipPlanFromOwnDocs(configGuildaData = {}, guildData = {}) {
+      const cfg = parseVipFromData(configGuildaData || {});
+      const guild = parseVipFromData(guildData || {});
+      const cfgActive = isVipPlanActive(cfg.vipTier, cfg.vipExpiresAtMs);
+      const guildActive = isVipPlanActive(guild.vipTier, guild.vipExpiresAtMs);
+
+      // Promoção de novo usuário fica só em /guildas/{guildId}; pagamento normalmente fica nos dois.
+      // Por isso configGuilda free não pode apagar um plano ativo encontrado em guildas.
+      if (cfgActive && guildActive) {
+        return {
+          vipTier: cfg.vipTier !== 'free' ? cfg.vipTier : guild.vipTier,
+          vipExpiresAtMs: cfg.vipExpiresAtMs ?? guild.vipExpiresAtMs
+        };
+      }
+      if (cfgActive) return cfg;
+      if (guildActive) return guild;
+      return { vipTier: 'free', vipExpiresAtMs: null };
+    }
+
     function showWelcomeLoginModal() {
       try {
         const params = new URLSearchParams(window.location.search || '');
@@ -553,33 +580,26 @@
           if (role === 'Membro' && hint && hint !== 'Membro') role = hint;
           if (role === 'Líder') normalizeConfigGuilda(guildId);
 
-          const guildName = await getGuildName(guildId);
+          let guildName = null;
           let vipTier = 'free';
           let vipExpiresAtMs = null;
           let cfgData = null;
+          let guildData = null;
 
+          // Plano: lê somente os documentos próprios da guilda.
+          // A promoção de 7 dias fica em guildas/{guildId}; plano pago normalmente fica nos dois.
           try {
-            const cfgSnap = await getDoc(doc(db, 'configGuilda', guildId));
-            if (cfgSnap.exists()) {
-              cfgData = cfgSnap.data() || {};
-              const parsed = parseVipFromData(cfgData);
-              vipTier = parsed.vipTier;
-              vipExpiresAtMs = parsed.vipExpiresAtMs;
-            }
+            const [cfgSnap, gSnap] = await Promise.all([
+              getDoc(doc(db, 'configGuilda', guildId)),
+              getDoc(doc(db, 'guildas', guildId))
+            ]);
+            cfgData = cfgSnap.exists() ? (cfgSnap.data() || {}) : {};
+            guildData = gSnap.exists() ? (gSnap.data() || {}) : {};
+            const mergedVip = mergeVipPlanFromOwnDocs(cfgData, guildData);
+            vipTier = mergedVip.vipTier || 'free';
+            vipExpiresAtMs = mergedVip.vipExpiresAtMs ?? null;
+            guildName = String(cfgData.name || guildData.name || guildName || '').trim() || guildName;
           } catch (_) {}
-
-          // Fallback quando configGuilda não trouxe plano pago ou faltou expiração.
-          // Não deixa /guildas vazio/desatualizado transformar plano pago em free.
-          if (!vipTier || vipTier === 'free' || vipExpiresAtMs == null) {
-            try {
-              const gSnap = await getDoc(doc(db, 'guildas', guildId));
-              if (gSnap.exists()) {
-                const parsed = parseVipFromData(gSnap.data() || {});
-                if (parsed.vipTier && (parsed.vipTier !== 'free' || !vipTier || vipTier === 'free')) vipTier = parsed.vipTier;
-                if (vipExpiresAtMs == null) vipExpiresAtMs = parsed.vipExpiresAtMs;
-              }
-            } catch (_) {}
-          }
 
           if (vipTier && vipTier !== 'free' && vipTier !== 'vitalicio' && vipExpiresAtMs != null && isFinite(vipExpiresAtMs) && Date.now() > vipExpiresAtMs) {
             vipTier = 'free'; vipExpiresAtMs = null;

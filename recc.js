@@ -31,7 +31,7 @@ const qs = (id) => document.getElementById(id);
 
 const RECRUITMENT_GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
 const RECRUITMENT_AUTH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const RECRUITMENT_GUILDCTX_CACHE_VERSION = 2;
+const RECRUITMENT_GUILDCTX_CACHE_VERSION = 3;
 const cleanRecruitmentEmail = (email = '') => String(email || '').toLowerCase().trim();
 const normalizeRecruitmentRole = (value = '') => String(value || '')
   .toLowerCase()
@@ -58,15 +58,56 @@ const normalizeRecruitmentVipTier = (value = '') => {
   if (raw.includes('plus')) return 'plus';
   return raw === 'free' ? 'free' : raw;
 };
-const pickRecruitmentVipTier = (...sources) => {
-  for (const source of sources) {
-    if (!source || typeof source !== 'object') continue;
-    const raw = source.vipTier ?? source.vip ?? source.planoVip ?? source.planoVIP ?? source.vipLevel ?? source.vipPlano ?? source.vipName ?? source.plano ?? source.plan ?? source.tier;
-    const tier = normalizeRecruitmentVipTier(raw);
-    if (tier && tier !== 'free') return tier;
-  }
-  return 'free';
+const recruitmentVipDateToMs = (value) => {
+  try {
+    if (!value) return null;
+    if (typeof value?.toMillis === 'function') return value.toMillis();
+    if (typeof value?.toDate === 'function') {
+      const d = value.toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d.getTime() : null;
+    }
+    if (typeof value?.seconds === 'number') return value.seconds * 1000;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'string') {
+      const t = Date.parse(value);
+      return Number.isFinite(t) ? t : null;
+    }
+  } catch (_) {}
+  return null;
 };
+const parseRecruitmentVipFromData = (source = {}) => {
+  const raw = source?.vipTier ?? source?.vip ?? source?.planoVip ?? source?.planoVIP ?? source?.vipLevel ?? source?.vipPlano ?? source?.vipName ?? source?.plano ?? source?.plan ?? source?.tier;
+  const rawExp = source?.vipExpiresAt ?? source?.vipExpiraEm ?? source?.vipExpireAt ?? source?.expiresAt ?? source?.vipExpires;
+  return { vipTier: normalizeRecruitmentVipTier(raw), vipExpiresAtMs: recruitmentVipDateToMs(rawExp) };
+};
+const isRecruitmentVipActive = (vipTier, vipExpiresAtMs) => {
+  const tier = normalizeRecruitmentVipTier(vipTier);
+  if (!tier || tier === 'free') return false;
+  if (tier === 'vitalicio') return true;
+  const exp = (vipExpiresAtMs != null && Number.isFinite(Number(vipExpiresAtMs))) ? Number(vipExpiresAtMs) : null;
+  return exp == null || Date.now() < exp;
+};
+const pickRecruitmentVipPlan = (...sources) => {
+  const parsed = sources
+    .filter(source => source && typeof source === 'object')
+    .map(parseRecruitmentVipFromData);
+  const cfg = parsed[0] || { vipTier: 'free', vipExpiresAtMs: null };
+  const guild = parsed[1] || { vipTier: 'free', vipExpiresAtMs: null };
+  const cfgActive = isRecruitmentVipActive(cfg.vipTier, cfg.vipExpiresAtMs);
+  const guildActive = isRecruitmentVipActive(guild.vipTier, guild.vipExpiresAtMs);
+
+  // Promoção de 7 dias fica em guildas/{guildId}; pagamento normalmente fica também em configGuilda/{guildId}.
+  if (cfgActive && guildActive) {
+    return {
+      vipTier: cfg.vipTier !== 'free' ? cfg.vipTier : guild.vipTier,
+      vipExpiresAtMs: cfg.vipExpiresAtMs ?? guild.vipExpiresAtMs
+    };
+  }
+  if (cfgActive) return cfg;
+  if (guildActive) return guild;
+  return { vipTier: 'free', vipExpiresAtMs: null };
+};
+const pickRecruitmentVipTier = (...sources) => pickRecruitmentVipPlan(...sources).vipTier;
 const readRecruitmentCachedCtx = () => {
   try {
     const raw = localStorage.getItem(RECRUITMENT_GUILDCTX_LS_KEY);
@@ -216,13 +257,14 @@ async function resolveRecruitmentAccessContext() {
   }
 
   const guildName = String(configGuilda.name || guildData.name || profile.guildName || '').trim() || null;
-  const vipTier = pickRecruitmentVipTier(configGuilda, guildData, profile);
+  const vipPlan = pickRecruitmentVipPlan(configGuilda, guildData, profile);
+  const vipTier = vipPlan.vipTier || 'free';
   const ctx = {
     guildId,
     guildName,
     role,
     vipTier,
-    vipExpiresAtMs: null,
+    vipExpiresAtMs: vipPlan.vipExpiresAtMs ?? null,
     email: emailLower,
     uid: user.uid,
     configGuilda
