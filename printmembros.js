@@ -13,7 +13,7 @@ export function setupPrintScanner({ onSave }) {
     const statusText = document.getElementById('print-status');
 
     const API_ROUTE = '/api/ler-print-membros';
-    const MAX_FILES = 8;
+    const MAX_FILES = 6;
     const MAX_IMAGE_WIDTH = 1600;
     const JPEG_QUALITY = 0.82;
 
@@ -249,23 +249,93 @@ export function setupPrintScanner({ onSave }) {
         return payload?.rows || [];
     }
 
-    function memberOptionsHtml(selectedId = '') {
-        const options = [
-            `<option value="">Escolha o membro...</option>`,
-            ...membersList.map(member => {
-                const id = String(member.id || '');
-                const selected = String(selectedId || '') === id ? 'selected' : '';
-                const label = `${getMemberDisplayName(member)}${member.visibleId ? ` — ID ${member.visibleId}` : ''}`;
-                return `<option value="${escapeHtml(id)}" ${selected}>${escapeHtml(label)}</option>`;
-            })
-        ];
-        return options.join('');
+    function getMemberLabelById(selectedId = '') {
+        const member = membersList.find(m => String(m.id || '') === String(selectedId || ''));
+        if (!member) return 'Escolha o membro...';
+        return `${getMemberDisplayName(member)}${member.visibleId ? ` — ID ${member.visibleId}` : ''}`;
     }
 
-    function metricOptionsHtml(metric) {
+    function metricLabel(metric = 'gg') {
+        return metric === 'honra' ? 'Honra semanal' : 'GG / Guerra';
+    }
+
+    function metricIcon(metric = 'gg') {
+        return metric === 'honra' ? 'target' : 'swords';
+    }
+
+    function renderMemberCustomSelect(index, selectedId = '', isManual = false) {
+        const selectedLabel = getMemberLabelById(selectedId);
+        const optionButtons = membersList.map(member => {
+            const id = String(member.id || '');
+            const active = String(selectedId || '') === id;
+            const label = `${getMemberDisplayName(member)}${member.visibleId ? ` — ID ${member.visibleId}` : ''}`;
+            const initial = getMemberDisplayName(member).charAt(0).toUpperCase() || '?';
+            return `
+                <button type="button" data-print-select-option data-print-select-kind="member" data-print-select-index="${index}" data-value="${escapeHtml(id)}" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${active ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100' : 'hover:bg-gray-50 text-gray-700'}">
+                    <span class="w-8 h-8 rounded-full ${active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'} flex items-center justify-center shrink-0 text-xs font-bold">${escapeHtml(initial)}</span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm font-bold truncate">${escapeHtml(getMemberDisplayName(member))}</span>
+                        <span class="block text-[11px] text-gray-400 truncate">${member.visibleId ? `ID ${escapeHtml(member.visibleId)}` : 'Sem ID visível'}</span>
+                    </span>
+                    ${active ? '<i data-lucide="check" class="w-4 h-4 shrink-0"></i>' : ''}
+                </button>
+            `;
+        }).join('');
+
         return `
-            <option value="gg" ${metric === 'gg' ? 'selected' : ''}>GG / Guerra</option>
-            <option value="honra" ${metric === 'honra' ? 'selected' : ''}>Honra semanal</option>
+            <div class="relative print-custom-select" data-print-select-root>
+                <input type="hidden" data-print-member-index="${index}" value="${escapeHtml(selectedId || '')}">
+                <button type="button" data-print-select-toggle data-print-select-kind="member" data-print-select-index="${index}" class="w-full min-h-[46px] flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border ${isManual ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 bg-white'} text-left shadow-sm outline-none transition-all hover:bg-gray-50 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100">
+                    <span class="min-w-0 flex items-center gap-2">
+                        <span class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><i data-lucide="user" class="w-4 h-4"></i></span>
+                        <span data-print-select-label="member-${index}" class="block truncate text-sm font-bold text-gray-800">${escapeHtml(selectedLabel)}</span>
+                    </span>
+                    <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400 shrink-0"></i>
+                </button>
+                <div data-print-select-menu="member-${index}" class="hidden absolute left-0 right-0 z-[90] mt-2 max-h-72 overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,.16)]">
+                    <button type="button" data-print-select-option data-print-select-kind="member" data-print-select-index="${index}" data-value="" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-gray-500 hover:bg-gray-50 transition-colors">
+                        <span class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 text-xs font-bold">?</span>
+                        <span class="text-sm font-bold">Escolha o membro...</span>
+                    </button>
+                    ${optionButtons}
+                </div>
+            </div>
+        `;
+    }
+
+    function renderMetricCustomSelect(index, metric = 'gg') {
+        const current = metric === 'honra' ? 'honra' : 'gg';
+        const options = [
+            { value: 'gg', label: 'GG / Guerra', icon: 'swords', help: 'Pontuação individual da guerra' },
+            { value: 'honra', label: 'Honra semanal', icon: 'target', help: 'Pontos da coluna Esta semana' }
+        ].map(option => {
+            const active = option.value === current;
+            return `
+                <button type="button" data-print-select-option data-print-select-kind="metric" data-print-select-index="${index}" data-value="${option.value}" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${active ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100' : 'hover:bg-gray-50 text-gray-700'}">
+                    <span class="w-8 h-8 rounded-full ${active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'} flex items-center justify-center shrink-0"><i data-lucide="${option.icon}" class="w-4 h-4"></i></span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm font-bold">${option.label}</span>
+                        <span class="block text-[11px] text-gray-400">${option.help}</span>
+                    </span>
+                    ${active ? '<i data-lucide="check" class="w-4 h-4 shrink-0"></i>' : ''}
+                </button>
+            `;
+        }).join('');
+
+        return `
+            <div class="relative print-custom-select" data-print-select-root>
+                <input type="hidden" data-print-metric-index="${index}" value="${escapeHtml(current)}">
+                <button type="button" data-print-select-toggle data-print-select-kind="metric" data-print-select-index="${index}" class="w-full min-h-[46px] flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-left shadow-sm outline-none transition-all hover:bg-gray-50 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100">
+                    <span class="min-w-0 flex items-center gap-2">
+                        <span class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><i data-lucide="${metricIcon(current)}" data-print-select-icon="metric-${index}" class="w-4 h-4"></i></span>
+                        <span data-print-select-label="metric-${index}" class="block truncate text-sm font-bold text-gray-800">${metricLabel(current)}</span>
+                    </span>
+                    <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400 shrink-0"></i>
+                </button>
+                <div data-print-select-menu="metric-${index}" class="hidden absolute left-0 right-0 z-[90] mt-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,.16)]">
+                    ${options}
+                </div>
+            </div>
         `;
     }
 
@@ -324,16 +394,12 @@ export function setupPrintScanner({ onSave }) {
                     <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div class="sm:col-span-3">
                             <label class="text-[11px] uppercase tracking-wide text-gray-400 font-bold mb-1 block">Membro</label>
-                            <select data-print-member-index="${index}" class="w-full px-3 py-2.5 rounded-xl border ${isManual ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 bg-white'} text-sm font-semibold text-gray-700 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
-                                ${memberOptionsHtml(row.id)}
-                            </select>
+                            ${renderMemberCustomSelect(index, row.id, isManual)}
                         </div>
 
                         <div>
                             <label class="text-[11px] uppercase tracking-wide text-gray-400 font-bold mb-1 block">Tipo</label>
-                            <select data-print-metric-index="${index}" class="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
-                                ${metricOptionsHtml(row.metric)}
-                            </select>
+                            ${renderMetricCustomSelect(index, row.metric)}
                         </div>
 
                         <div class="sm:col-span-2">
@@ -382,12 +448,103 @@ export function setupPrintScanner({ onSave }) {
         return Array.from(merged.values());
     }
 
+    function closeAllPrintSelectMenus(exceptMenu = null) {
+        document.querySelectorAll('[data-print-select-menu]').forEach(menu => {
+            if (menu !== exceptMenu) menu.classList.add('hidden');
+        });
+    }
+
+    function refreshCustomSelectOptionState(kind, index, selectedValue) {
+        const menu = document.querySelector(`[data-print-select-menu="${kind}-${index}"]`);
+        if (!menu) return;
+
+        menu.querySelectorAll('[data-print-select-option]').forEach(option => {
+            const active = String(option.getAttribute('data-value') || '') === String(selectedValue || '');
+            option.classList.toggle('bg-emerald-50', active);
+            option.classList.toggle('text-emerald-700', active);
+            option.classList.toggle('ring-1', active);
+            option.classList.toggle('ring-emerald-100', active);
+            option.classList.toggle('hover:bg-gray-50', !active);
+            option.querySelectorAll('[data-lucide="check"]').forEach(icon => icon.remove());
+            if (active && selectedValue) {
+                option.insertAdjacentHTML('beforeend', '<i data-lucide="check" class="w-4 h-4 shrink-0"></i>');
+            }
+        });
+    }
+
+    function updateCustomSelect(kind, index, value) {
+        const hidden = document.querySelector(kind === 'member' ? `[data-print-member-index="${index}"]` : `[data-print-metric-index="${index}"]`);
+        const label = document.querySelector(`[data-print-select-label="${kind}-${index}"]`);
+        if (hidden) hidden.value = value || '';
+
+        if (kind === 'member') {
+            if (label) label.textContent = getMemberLabelById(value);
+        } else {
+            const metric = value === 'honra' ? 'honra' : 'gg';
+            if (hidden) hidden.value = metric;
+            if (label) label.textContent = metricLabel(metric);
+            const icon = document.querySelector(`[data-print-select-icon="metric-${index}"]`);
+            if (icon) icon.setAttribute('data-lucide', metricIcon(metric));
+        }
+
+        refreshCustomSelectOptionState(kind, index, kind === 'metric' ? (value === 'honra' ? 'honra' : 'gg') : value);
+        if (window.lucide) window.lucide.createIcons();
+    }
+
+    if (resultDiv) {
+        resultDiv.addEventListener('click', (event) => {
+            const toggle = event.target.closest('[data-print-select-toggle]');
+            if (toggle) {
+                event.preventDefault();
+                event.stopPropagation();
+                const kind = toggle.getAttribute('data-print-select-kind');
+                const index = toggle.getAttribute('data-print-select-index');
+                const menu = document.querySelector(`[data-print-select-menu="${kind}-${index}"]`);
+                if (!menu) return;
+                const willOpen = menu.classList.contains('hidden');
+                closeAllPrintSelectMenus(menu);
+                menu.classList.toggle('hidden', !willOpen);
+                return;
+            }
+
+            const option = event.target.closest('[data-print-select-option]');
+            if (option) {
+                event.preventDefault();
+                event.stopPropagation();
+                const kind = option.getAttribute('data-print-select-kind');
+                const index = option.getAttribute('data-print-select-index');
+                const value = option.getAttribute('data-value') || '';
+                updateCustomSelect(kind, index, value);
+                closeAllPrintSelectMenus();
+            }
+        });
+    }
+
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('[data-print-select-root]')) {
+            closeAllPrintSelectMenus();
+        }
+    });
+
     if (input && resultDiv && btnSave) {
         input.addEventListener('change', async (event) => {
             const files = Array.from(event.target.files || []);
             if (!files.length) return;
 
-            const selectedFiles = files.slice(0, MAX_FILES);
+            if (files.length > MAX_FILES) {
+                pendingUpdates = [];
+                btnSave.classList.add('hidden');
+                input.value = '';
+                setStatus(`Envie no máximo ${MAX_FILES} prints por vez.`);
+                resultDiv.innerHTML = `
+                    <div class="text-center text-amber-700 text-sm p-5 bg-amber-50 rounded-2xl border border-amber-100">
+                        Você selecionou ${files.length} prints. Envie no máximo ${MAX_FILES} por vez para evitar limite da API.
+                    </div>
+                `;
+                return;
+            }
+
+            const selectedFiles = files;
 
             btnSave.classList.add('hidden');
             btnSave.disabled = false;
@@ -402,10 +559,6 @@ export function setupPrintScanner({ onSave }) {
             if (window.lucide) window.lucide.createIcons();
 
             try {
-                if (files.length > MAX_FILES) {
-                    setStatus(`Foram enviados ${files.length} prints, mas vou analisar só os primeiros ${MAX_FILES}.`);
-                }
-
                 const rows = await readPrintsWithGemini(selectedFiles);
                 pendingUpdates = normalizeApiRows(rows);
                 renderResults();

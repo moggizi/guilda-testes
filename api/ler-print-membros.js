@@ -34,8 +34,8 @@ async function readJsonBody(req) {
   let raw = '';
   for await (const chunk of req) {
     raw += chunk;
-    if (raw.length > 9_000_000) {
-      throw new Error('Payload muito grande. Envie menos prints por vez.');
+    if (raw.length > 7_000_000) {
+      throw new Error('Payload muito grande. Envie no máximo 6 prints por vez.');
     }
   }
 
@@ -263,7 +263,11 @@ module.exports = async function handler(req, res) {
     }
 
     const body = await readJsonBody(req);
-    const images = Array.isArray(body.images) ? body.images.slice(0, 8) : [];
+    const rawImages = Array.isArray(body.images) ? body.images : [];
+    if (rawImages.length > 6) {
+      return res.status(400).json({ error: 'Envie no máximo 6 prints por vez.' });
+    }
+    const images = rawImages.slice(0, 6);
     const members = simplifyMembers(body.members);
 
     if (!images.length) {

@@ -291,7 +291,7 @@
             </button>
 
             <!-- Botão Ler Prints -->
-            <button onclick="openPrintModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95">
+            <button id="btn-print-scanner" onclick="openPrintModal()" class="hidden flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95">
               <i data-lucide="scan-line" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Ler Prints</span>
             </button>
 
@@ -566,7 +566,7 @@
           <div class="flex flex-col items-center justify-center pt-5 pb-6">
             <i data-lucide="upload-cloud" class="w-8 h-8 mb-2 text-emerald-500"></i>
             <p class="mb-1 text-sm text-gray-700"><span class="font-semibold">Clique para enviar</span> os prints</p>
-            <p class="text-xs text-gray-400">PNG, JPG ou WEBP</p>
+            <p class="text-xs text-gray-400">PNG, JPG ou WEBP • máximo 6 por vez</p>
           </div>
           <input id="upload-prints" type="file" class="hidden" accept="image/*" multiple>
         </label>
@@ -726,6 +726,7 @@
     let currentGuildSlot = 1;
     let currentGuildSlotsMeta = [];
     let canUseMultiGuildMembers = false;
+    let canUsePrintScanner = false;
 
     const SETTINGS_SCREEN_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -889,6 +890,23 @@
       return ['pro', 'business', 'vitalicio'].includes(__getCachedVipTierFast());
     }
 
+    function __canUsePrintScannerFromCache() {
+      return ['pro', 'vitalicio'].includes(__getCachedVipTierFast());
+    }
+
+    function __syncPrintScannerAccessState() {
+      canUsePrintScanner = __canUsePrintScannerFromCache();
+      const btn = document.getElementById('btn-print-scanner');
+      if (!btn) return;
+
+      btn.classList.toggle('hidden', !canUsePrintScanner);
+      btn.classList.toggle('opacity-60', !canUsePrintScanner);
+      btn.classList.toggle('cursor-not-allowed', !canUsePrintScanner);
+      btn.disabled = !canUsePrintScanner;
+      btn.setAttribute('aria-disabled', canUsePrintScanner ? 'false' : 'true');
+      btn.title = canUsePrintScanner ? 'Ler prints com Gemini' : 'Recurso disponível apenas para planos PRO e Vitalício';
+    }
+
     function __guildSlotSelectionKey() {
       const gid = getGuildContext()?.guildId;
       return gid ? `membersGuildSlot_${gid}` : 'membersGuildSlot';
@@ -1002,6 +1020,7 @@
         if (settingsCache?.goals) guildGoals = normalizeGoalsFromAnySource(settingsCache.goals);
 
         __syncGuildSlotButtonState();
+        __syncPrintScannerAccessState();
         __renderGuildSlotDropdown();
         refreshPlayModeCounterUi();
         refreshGoalMetFilterUi();
@@ -1848,6 +1867,13 @@
     }
 
     window.openPrintModal = async () => {
+        if (!__canUsePrintScannerFromCache()) {
+            canUsePrintScanner = false;
+            __syncPrintScannerAccessState();
+            showToast('info', 'Ler prints é um recurso disponível apenas para planos PRO e Vitalício.');
+            return;
+        }
+
         const modal = document.getElementById('print-modal');
         if (!modal) return;
         modal.classList.remove('hidden');
@@ -3002,6 +3028,7 @@
         : [{ slot: 1, name: getGuildContext()?.guildName || '', tag: settingsCache?.tag || '', exists: true }];
       const vipTier = __getCachedVipTierFast();
       canUseMultiGuildMembers = ['pro', 'business', 'vitalicio'].includes(vipTier);
+      canUsePrintScanner = ['pro', 'vitalicio'].includes(vipTier);
       currentGuildSlot = canUseMultiGuildMembers ? __readSelectedGuildSlot() : 1;
       if (!__isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
       __writeSelectedGuildSlot(currentGuildSlot);
@@ -3010,6 +3037,7 @@
       __updateCurrentMemberTag();
       guildGoals = settingsCache?.goals ? normalizeGoalsFromAnySource(settingsCache.goals) : guildGoals;
       __syncGuildSlotButtonState();
+      __syncPrintScannerAccessState();
       __renderGuildSlotDropdown();
       refreshPlayModeCounterUi();
       refreshGoalMetFilterUi();
@@ -3029,6 +3057,7 @@
         if (!__isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
         __writeSelectedGuildSlot(currentGuildSlot);
         __syncGuildSlotButtonState();
+        __syncPrintScannerAccessState();
         __renderGuildSlotDropdown();
         refreshPlayModeCounterUi();
         refreshGoalMetFilterUi();
