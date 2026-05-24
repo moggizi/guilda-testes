@@ -161,9 +161,11 @@
 <body class="bg-gray-50/80">
 
   <div class="flex min-h-screen">
+    <!-- Menu Mobile Overlay -->
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
 
-    <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
+    <!-- Sidebar -->
+  <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
   <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
     <div class="flex items-center gap-3">
       <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
@@ -237,6 +239,7 @@
   </div>
 </aside>
 
+<!-- Conteúdo -->
 <main class="flex-1 min-w-0 relative lg:ml-72">
       <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
         <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
@@ -247,11 +250,13 @@
 
       <div class="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
         
+        <!-- Cabeçalho com Filtros e Botão Adicionar -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div><h2 class="text-2xl font-bold text-gray-900">Membros</h2><p class="text-gray-500 text-sm mt-1" id="member-count">Carregando...</p></div>
           
           <div class="flex flex-wrap items-center justify-end gap-2 relative w-full sm:w-auto">
             
+            <!-- Seletor de Guilda -->
             <div class="relative">
               <button id="btn-guild-slot" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
                 <i data-lucide="users" class="w-4 h-4 text-emerald-500"></i>
@@ -261,6 +266,7 @@
               <div id="guild-slot-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
             </div>
 
+            <!-- Contador/Filtro por Função -->
             <div class="relative">
               <button id="btn-playmode-counter" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
                 <i data-lucide="shield" class="w-4 h-4 text-emerald-500"></i>
@@ -270,6 +276,7 @@
               <div id="playmode-counter-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
             </div>
 
+            <!-- Filtro por meta cumprida na modalidade -->
             <div class="relative">
               <button id="btn-goal-met-filter" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
                 <i data-lucide="check-check" class="w-4 h-4 text-emerald-500"></i>
@@ -279,25 +286,30 @@
               <div id="goal-met-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
             </div>
 
+            <!-- Botão Edição Rápida Novo -->
             <button onclick="openQuickEditModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
               <i data-lucide="zap" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Edição Rápida</span>
             </button>
 
+            <!-- Botão Ler Prints -->
             <button onclick="openPrintModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95">
               <i data-lucide="scan-line" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Ler Prints</span>
             </button>
 
+            <!-- Dropdown Filtro Avançado -->
             <div class="relative">
               <button id="btn-filter" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
                 <i data-lucide="filter" class="w-4 h-4"></i> <span class="hidden sm:inline" id="filter-label">Todos</span>
               </button>
               
+              <!-- Menu de Opções (Painel Completo) -->
               <div id="filter-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-4 transform origin-top-right transition-all">
                 
                 <button onclick="applyFilter('all', 'Todos')" class="w-full text-left px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 rounded-xl transition-colors mb-3">
                   Exibir Todos
                 </button>
 
+                <!-- Filtro Tag -->
                 <div class="mb-3">
                   <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Tag</p>
                   <div class="grid grid-cols-2 gap-2">
@@ -310,6 +322,7 @@
                   </div>
                 </div>
 
+                <!-- Filtro GG -->
                 <div class="mb-3">
                   <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Guerra (GG)</p>
                   <div class="grid grid-cols-2 gap-2">
@@ -322,6 +335,7 @@
                   </div>
                 </div>
 
+                <!-- Filtro Semanal -->
                 <div class="mb-3">
                   <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Semanal (honra)</p>
                   <div class="grid grid-cols-2 gap-2">
@@ -334,6 +348,7 @@
                   </div>
                 </div>
 
+                <!-- Filtro Todas as Metas -->
                 <div class="pt-2 border-t border-gray-100">
                   <button onclick="applyFilter('all-met', 'Metas Batidas')" class="w-full px-3 py-2.5 text-sm font-bold text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors flex items-center justify-center gap-2">
                     <i data-lucide="check-check" class="w-4 h-4"></i> Todas as Metas
@@ -343,6 +358,7 @@
               </div>
             </div>
 
+            <!-- Botão Adicionar Original -->
             <button onclick="openModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
               <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
             </button>
@@ -358,7 +374,8 @@
         </div>
 
         <div id="members-list" class="space-y-3">
-          <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
+          <!-- Placeholder de carregamento -->
+           <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
               <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
               <div class="flex-1 space-y-2">
                  <div class="h-4 bg-gray-200 rounded w-1/3"></div>
@@ -377,6 +394,7 @@
     </main>
   </div>
 
+  <!-- MODAL (Adicionar/Editar Original) -->
   <div id="modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
     <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closeModal()"></div>
     <div class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in">
@@ -440,6 +458,7 @@
 
         <hr class="border-gray-100">
 
+        <!-- Toggles -->
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <label class="text-sm font-medium text-gray-700">Guerra de Guilda</label>
@@ -482,10 +501,12 @@
     </div>
   </div>
 
+  <!-- MODAL DE EDIÇÃO RÁPIDA -->
   <div id="quick-edit-modal" class="fixed inset-0 z-[55] flex items-end sm:items-center justify-center hidden">
     <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closeQuickEditModal()"></div>
     <div class="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl animate-in">
       
+      <!-- Header -->
       <div class="bg-white border-b border-gray-100 p-4 flex flex-col gap-4 rounded-t-2xl z-10 shrink-0">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
@@ -497,6 +518,7 @@
           <button onclick="closeQuickEditModal()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
         </div>
         
+        <!-- Botões de Zerar Tudo -->
         <div class="flex gap-2">
           <button onclick="promptZero('gg')" class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-xs transition-colors">
             <i data-lucide="swords" class="w-3.5 h-3.5"></i> Zerar GG
@@ -507,11 +529,14 @@
         </div>
       </div>
 
+      <!-- Lista de Membros para Edição Rápida -->
       <div class="p-4 overflow-y-auto flex-1 bg-gray-50/50">
         <div id="qe-members-list" class="space-y-2">
-          </div>
+          <!-- Gerado via JS -->
+        </div>
       </div>
 
+      <!-- Footer / Botão Salvar (Oculto inicialmente) -->
       <div class="bg-white border-t border-gray-100 p-4 shrink-0 rounded-b-2xl">
         <button id="qe-save-btn" onclick="saveQuickEdits()" class="hidden w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold text-sm shadow-lg hover:shadow-xl transition-all">
           Salvar Alterações
@@ -522,10 +547,11 @@
     </div>
   </div>
 
+  <!-- MODAL DE LEITURA DE PRINTS -->
   <div id="print-modal" class="fixed inset-0 z-[55] flex items-end sm:items-center justify-center hidden">
     <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closePrintModal()"></div>
     <div class="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl animate-in">
-      
+
       <div class="bg-white border-b border-gray-100 p-4 flex flex-col gap-4 rounded-t-2xl z-10 shrink-0">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
@@ -536,31 +562,31 @@
           </div>
           <button onclick="closePrintModal()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
         </div>
-        
-        <div>
-            <label class="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-emerald-300 rounded-xl cursor-pointer bg-emerald-50 hover:bg-emerald-100 transition-colors">
-                <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                    <i data-lucide="image-plus" class="w-6 h-6 text-emerald-500 mb-2"></i>
-                    <p class="text-sm font-semibold text-emerald-700">Selecione vários prints de uma vez</p>
-                </div>
-                <input id="upload-prints" type="file" accept="image/*" multiple class="hidden" />
-            </label>
-            <p id="print-status" class="text-center text-xs text-gray-500 mt-3 font-medium">Aguardando imagens...</p>
-        </div>
+
+        <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-emerald-200 rounded-2xl bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer transition-colors">
+          <div class="flex flex-col items-center justify-center pt-5 pb-6">
+            <i data-lucide="upload-cloud" class="w-8 h-8 mb-2 text-emerald-500"></i>
+            <p class="mb-1 text-sm text-gray-700"><span class="font-semibold">Clique para enviar</span> os prints</p>
+            <p class="text-xs text-gray-400">PNG, JPG ou WEBP</p>
+          </div>
+          <input id="upload-prints" type="file" class="hidden" accept="image/*" multiple>
+        </label>
+        <p id="print-status" class="text-xs text-center text-gray-500">Selecione os prints para começar a leitura.</p>
       </div>
 
-      <div class="p-4 overflow-y-auto flex-1 bg-gray-50/50" id="print-results">
-        </div>
+      <div class="p-4 overflow-y-auto flex-1 bg-gray-50/50">
+        <div id="print-results" class="space-y-2"></div>
+      </div>
 
-      <div class="bg-white border-t border-gray-100 p-4 shrink-0 rounded-b-2xl">
-        <button id="btn-save-prints" class="hidden w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold text-sm shadow-lg hover:shadow-xl transition-all">
+      <div class="bg-white border-t border-gray-100 p-4 rounded-b-2xl">
+        <button id="btn-save-prints" class="hidden w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold text-sm shadow-lg shadow-emerald-200 hover:shadow-xl transition-all active:scale-95">
           Confirmar e Salvar Pontuações
         </button>
       </div>
-
     </div>
   </div>
 
+  <!-- MODAL DE CONFIRMAÇÃO (Para Zerar) -->
   <div id="confirm-modal" class="fixed inset-0 z-[60] flex items-center justify-center hidden">
     <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeConfirmModal()"></div>
     <div class="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
@@ -576,6 +602,7 @@
     </div>
   </div>
 
+  <!-- MODAL DE CONFIRMAÇÃO (Para Excluir Membro) -->
   <div id="delete-confirm-modal" class="fixed inset-0 z-[61] flex items-center justify-center hidden">
     <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeleteConfirmModal()"></div>
     <div class="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
@@ -591,6 +618,7 @@
     </div>
   </div>
 
+  <!-- MODAL DE MOVER MEMBRO -->
   <div id="move-member-modal" class="fixed inset-0 z-[62] flex items-center justify-center hidden">
     <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeMoveMemberModal()"></div>
     <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
@@ -607,6 +635,7 @@
     </div>
   </div>
 
+  <!-- MODAL DE ADVERTÊNCIA -->
   <div id="warning-member-modal" class="fixed inset-0 z-[63] flex items-end sm:items-center justify-center hidden">
     <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeWarningMemberModal()"></div>
     <div class="relative bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 m-0 sm:m-4 zoom-in-95">
@@ -674,7 +703,6 @@
   <script type="module">
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildGoalsConfig, getGuildContext, getGuildMultiConfig, getVipTier } from './logic.js';
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { setupPrintScanner } from './printmembros.js'; // IMPORT DO NOVO ARQUIVO
 
     // CARREGA OS ÍCONES IMEDIATAMENTE INDEPENDENTE DE TER DADOS!
     setupSidebar();
@@ -1601,7 +1629,7 @@
         } else {
            el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">Nenhum membro encontrado.</div>`;
         }
-        initIcons(); 
+        initIcons(); // garante que o ícone do estado vazio renderize (se houver)
         return;
       }
 
@@ -1716,7 +1744,7 @@
 
 
     // ==========================================
-    // FUNCIONALIDADES DOS MODAIS (EDIÇÃO RÁPIDA, PRINTS, ETC)
+    // FUNCIONALIDADES DOS MODAIS (EDIÇÃO RÁPIDA, ETC)
     // ==========================================
     window.openQuickEditModal = () => {
        pendingEdits = {};
@@ -1730,58 +1758,95 @@
 
     // --- LÓGICA DO PRINT ---
     let scannerInstance = null;
-
-    window.openPrintModal = () => {
-        document.getElementById('print-modal').classList.remove('hidden');
-        if (scannerInstance) {
-            scannerInstance.updateCache(membersCache);
-        }
-    };
-    
-    window.closePrintModal = () => {
-        document.getElementById('print-modal').classList.add('hidden');
-        if (scannerInstance) scannerInstance.resetScanner();
-    };
+    let printScannerLoadPromise = null;
 
     const salvarDadosDoPrint = async (dadosExtraidos) => {
+        const lista = Array.isArray(dadosExtraidos) ? dadosExtraidos : [];
+        if (!lista.length) {
+            showToast('info', 'Nenhum dado de print para salvar.');
+            return;
+        }
+
+        const btnSalvar = document.getElementById('btn-save-prints');
         const batch = writeBatch(db);
         const guildId = getGuildContext().guildId;
 
-        dadosExtraidos.forEach(dado => {
-            const member = membersCache.find(m => m.id === dado.id);
-            if (member) {
-                const updates = {
-                    guildWar: true, 
-                    guildWarMeta: dado.gg,
-                    weeklyMeta: true,
-                    weeklyMetaValue: dado.honra,
-                    updatedAt: serverTimestamp()
-                };
+        lista.forEach(dado => {
+            const member = membersCache.find(m => String(m.id || '') === String(dado.id || ''));
+            if (!member) return;
 
-                const ref = doc(db, "guildas", guildId, __membersCollectionName(), member.visibleId);
-                batch.update(ref, updates);
-                Object.assign(member, updates, { updatedAt: Date.now() });
-            }
+            const updates = {
+                guildWar: true,
+                guildWarMeta: Number(dado.gg || 0),
+                weeklyMeta: true,
+                weeklyMetaValue: Number(dado.honra || 0),
+                updatedAt: serverTimestamp()
+            };
+
+            const docId = String(member.id || dado.id || member.visibleId || '').trim();
+            if (!docId) return;
+
+            const ref = doc(db, "guildas", guildId, __membersCollectionName(), docId);
+            batch.set(ref, updates, { merge: true });
+            Object.assign(member, updates, { updatedAt: Date.now() });
         });
 
         try {
             await batch.commit();
-            showToast('success', `${dadosExtraidos.length} membros atualizados pelo Print!`);
+            showToast('success', `${lista.length} membro(s) atualizado(s) pelo print!`);
             __setMembersCache(membersCache);
             closePrintModal();
-            const btnSalvar = document.getElementById('btn-save-prints');
-            if(btnSalvar) {
-                btnSalvar.innerHTML = 'Confirmar e Salvar Pontuações';
-                btnSalvar.disabled = false;
-            }
         } catch (e) {
             console.error(e);
             showToast('error', 'Erro ao salvar pontos dos prints.');
+        } finally {
+            if (btnSalvar) {
+                btnSalvar.innerHTML = 'Confirmar e Salvar Pontuações';
+                btnSalvar.disabled = false;
+            }
         }
     };
 
-    scannerInstance = setupPrintScanner({ onSave: salvarDadosDoPrint });
-    // -----------------------
+    async function initPrintScannerIfNeeded() {
+        if (scannerInstance) return scannerInstance;
+
+        if (!printScannerLoadPromise) {
+            printScannerLoadPromise = import('./printmembros.js')
+                .then(({ setupPrintScanner }) => {
+                    if (typeof setupPrintScanner !== 'function') {
+                        throw new Error('setupPrintScanner não foi encontrado em printmembros.js');
+                    }
+                    scannerInstance = setupPrintScanner({ onSave: salvarDadosDoPrint });
+                    scannerInstance.updateCache(membersCache);
+                    return scannerInstance;
+                })
+                .catch((e) => {
+                    console.error(e);
+                    printScannerLoadPromise = null;
+                    showToast('error', 'Erro ao carregar o leitor de prints. Confira se o arquivo printmembros.js está junto do membros.html.');
+                    return null;
+                });
+        }
+
+        return printScannerLoadPromise;
+    }
+
+    window.openPrintModal = async () => {
+        const modal = document.getElementById('print-modal');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        initIcons();
+
+        const scanner = await initPrintScannerIfNeeded();
+        if (scanner) scanner.updateCache(membersCache);
+    };
+
+    window.closePrintModal = () => {
+        document.getElementById('print-modal')?.classList.add('hidden');
+        if (scannerInstance) scannerInstance.resetScanner();
+    };
+
+
     
     function renderQuickEditList() {
        const container = document.getElementById('qe-members-list');
@@ -2388,3 +2453,664 @@
 
     window.deleteMember = (id) => {
       currentDeleteId = String(id || '').trim();
+      if (!currentDeleteId) return;
+      document.getElementById('delete-confirm-modal').classList.remove('hidden');
+      initIcons();
+    };
+
+    window.closeMoveMemberModal = () => {
+      currentMoveId = '';
+      currentMoveTargetSlot = null;
+      document.getElementById('move-member-modal').classList.add('hidden');
+    };
+
+    window.moveMember = (id) => {
+      const member = membersCache.find(x => x.id === id);
+      if (!member) return;
+      if (!canUseMultiGuildMembers) {
+        showToast('info', 'Mover membros entre guildas é um recurso do plano PRO ou superior.');
+        return;
+      }
+
+      const destinations = [1, 2, 3, 4].filter(slot => slot !== Number(currentGuildSlot) && __isGuildSlotAvailable(slot));
+      if (!destinations.length) {
+        showToast('info', 'Nenhuma outra guilda disponível para mover este membro.');
+        return;
+      }
+
+      currentMoveId = String(id || '').trim();
+      currentMoveTargetSlot = destinations[0] || null;
+
+      const optionsEl = document.getElementById('move-member-options');
+      const descEl = document.getElementById('move-member-desc');
+      if (descEl) descEl.innerHTML = `Escolha para qual guilda <b>${member.nick || member.visibleId || 'este membro'}</b> deve ser movido.`;
+      if (optionsEl) {
+        optionsEl.innerHTML = destinations.map(slot => `
+          <button
+            type="button"
+            data-move-slot="${slot}"
+            class="w-full text-left px-4 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="text-sm font-semibold text-gray-900">${__currentGuildDisplayName(slot)}</div>
+                <div class="text-[11px] text-gray-500 mt-0.5">Mover para a lista desta guilda</div>
+              </div>
+              <span class="w-4 h-4 rounded-full border-2 border-gray-300 inline-block" data-move-slot-dot="${slot}"></span>
+            </div>
+          </button>
+        `).join('');
+      }
+
+      const syncMoveSelection = () => {
+        document.querySelectorAll('[data-move-slot]').forEach((btn) => {
+          const slot = Number(btn.getAttribute('data-move-slot') || 0);
+          const active = slot === Number(currentMoveTargetSlot);
+          btn.classList.toggle('border-emerald-300', active);
+          btn.classList.toggle('bg-emerald-50', active);
+          btn.classList.toggle('border-gray-200', !active);
+          btn.classList.toggle('bg-white', !active);
+        });
+        document.querySelectorAll('[data-move-slot-dot]').forEach((dot) => {
+          const slot = Number(dot.getAttribute('data-move-slot-dot') || 0);
+          const active = slot === Number(currentMoveTargetSlot);
+          dot.classList.toggle('border-emerald-500', active);
+          dot.classList.toggle('bg-emerald-500', active);
+          dot.classList.toggle('border-gray-300', !active);
+          dot.classList.toggle('bg-white', !active);
+        });
+      };
+
+      optionsEl?.querySelectorAll('[data-move-slot]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          currentMoveTargetSlot = Number(btn.getAttribute('data-move-slot') || 0) || null;
+          syncMoveSelection();
+        });
+      });
+
+      syncMoveSelection();
+      document.getElementById('move-member-modal').classList.remove('hidden');
+      initIcons();
+    };
+
+    window.executeMoveMember = async () => {
+      const id = String(currentMoveId || '').trim();
+      const targetSlot = Math.max(1, Math.min(4, Math.floor(Number(currentMoveTargetSlot) || 0)));
+      const member = membersCache.find(x => String(x.id || '') === id);
+      if (!id || !member || !targetSlot || targetSlot === Number(currentGuildSlot)) {
+        closeMoveMemberModal();
+        return;
+      }
+
+      try {
+        const duplicate = await __findMemberInGuildSlotByVisibleId(targetSlot, member.visibleId);
+        if (duplicate) {
+          showToast('error', `Este ID já está em ${__currentGuildDisplayName(targetSlot)}.`);
+          return;
+        }
+
+        await __ensureMembersCollectionExists(targetSlot);
+
+        const guildId = getGuildContext().guildId;
+        const payload = { ...member, visibleId: member.visibleId, updatedAt: serverTimestamp() };
+        delete payload.id;
+
+        await setDoc(doc(db, 'guildas', guildId, __membersCollectionName(targetSlot), member.visibleId), payload, { merge: true });
+        await deleteDoc(doc(db, 'guildas', guildId, __membersCollectionName(currentGuildSlot), member.id));
+
+        membersCache = (membersCache || []).filter(item => String(item.id || '') !== id);
+        __setMembersCache(membersCache);
+        __syncCacheAfterMove(member, currentGuildSlot, targetSlot);
+        closeMoveMemberModal();
+        showToast('success', `Membro movido para ${__currentGuildDisplayName(targetSlot)}.`);
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Não foi possível mover o membro.');
+      }
+    };
+
+    function closeWarningPresetMenu() {
+      const menu = document.getElementById('warning-preset-menu');
+      const btn = document.getElementById('warning-preset-btn');
+      if (menu) menu.classList.add('hidden');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
+    function setWarningPresetLabel(value = '') {
+      const clean = String(value || '').trim();
+      const label = document.getElementById('warning-preset-label');
+      const preset = document.getElementById('warning-preset');
+      if (preset) preset.value = clean;
+      if (label) label.textContent = clean || 'Selecionar motivo';
+      document.querySelectorAll('.warning-preset-option').forEach((btn) => {
+        btn.classList.toggle('warning-preset-active', String(btn.dataset.warningPreset || '').trim() === clean);
+      });
+    }
+
+    window.closeWarningMemberModal = () => {
+      currentWarningId = '';
+      closeWarningPresetMenu();
+      document.getElementById('warning-member-modal')?.classList.add('hidden');
+    };
+
+    window.openWarningMemberModal = (id) => {
+      const member = membersCache.find(x => String(x.id || '') === String(id || ''));
+      if (!member) return;
+
+      currentWarningId = String(id || '').trim();
+      const warned = hasMemberWarning(member);
+      const reason = getMemberWarningReason(member);
+
+      const title = document.getElementById('warning-member-title');
+      const desc = document.getElementById('warning-member-desc');
+      const preset = document.getElementById('warning-preset');
+      const textarea = document.getElementById('warning-reason');
+      const removeBtn = document.getElementById('btn-remove-warning');
+
+      if (title) title.textContent = warned ? 'Advertência do membro' : 'Advertir membro';
+      if (desc) desc.innerHTML = `Membro: <b>${escapeHtml(member.nick || member.visibleId || 'Sem nick')}</b>`;
+      setWarningPresetLabel('');
+      if (textarea) textarea.value = reason || '';
+      if (removeBtn) removeBtn.classList.toggle('hidden', !warned);
+      closeWarningPresetMenu();
+
+      document.getElementById('warning-member-modal')?.classList.remove('hidden');
+      initIcons();
+    };
+
+    window.saveMemberWarning = async () => {
+      const id = String(currentWarningId || '').trim();
+      const member = membersCache.find(x => String(x.id || '') === id);
+      if (!id || !member) {
+        closeWarningMemberModal();
+        return;
+      }
+
+      const textarea = document.getElementById('warning-reason');
+      const reason = (textarea?.value || '').toString().trim();
+      if (!reason) {
+        showToast('error', 'Escreva ou selecione um motivo para a advertência.');
+        return;
+      }
+
+      const btn = document.getElementById('btn-save-warning');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Salvando...';
+      }
+
+      const payload = {
+        warningActive: true,
+        hasWarning: true,
+        warningReason: reason,
+        warningAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      try {
+        await setDoc(doc(db, 'guildas', getGuildContext().guildId, __membersCollectionName(), id), payload, { merge: true });
+        const idx = membersCache.findIndex(x => String(x.id || '') === id);
+        if (idx >= 0) {
+          membersCache[idx] = {
+            ...membersCache[idx],
+            warningActive: true,
+            hasWarning: true,
+            warningReason: reason,
+            warningAt: Date.now(),
+            updatedAt: Date.now()
+          };
+          __setMembersCache(membersCache);
+        }
+        closeWarningMemberModal();
+        showToast('success', 'Advertência salva.');
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Erro ao salvar advertência.');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Salvar';
+        }
+      }
+    };
+
+    window.removeMemberWarning = async () => {
+      const id = String(currentWarningId || '').trim();
+      const member = membersCache.find(x => String(x.id || '') === id);
+      if (!id || !member) {
+        closeWarningMemberModal();
+        return;
+      }
+
+      const btn = document.getElementById('btn-remove-warning');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Removendo...';
+      }
+
+      const payload = {
+        warningActive: false,
+        hasWarning: false,
+        warningReason: '',
+        warningAt: null,
+        updatedAt: serverTimestamp()
+      };
+
+      try {
+        await setDoc(doc(db, 'guildas', getGuildContext().guildId, __membersCollectionName(), id), payload, { merge: true });
+        const idx = membersCache.findIndex(x => String(x.id || '') === id);
+        if (idx >= 0) {
+          membersCache[idx] = {
+            ...membersCache[idx],
+            warningActive: false,
+            hasWarning: false,
+            warningReason: '',
+            warningAt: null,
+            updatedAt: Date.now()
+          };
+          __setMembersCache(membersCache);
+        }
+        closeWarningMemberModal();
+        showToast('success', 'Advertência removida.');
+      } catch (e) {
+        console.error(e);
+        showToast('error', 'Erro ao remover advertência.');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Remover';
+        }
+      }
+    };
+
+    document.getElementById('warning-preset-btn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const menu = document.getElementById('warning-preset-menu');
+      const btn = document.getElementById('warning-preset-btn');
+      if (!menu) return;
+      const opening = menu.classList.contains('hidden');
+      menu.classList.toggle('hidden');
+      if (btn) btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+    });
+
+    document.getElementById('warning-preset-menu')?.addEventListener('click', (e) => {
+      const option = e.target.closest('[data-warning-preset]');
+      if (!option) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const value = String(option.dataset.warningPreset || '').trim();
+      setWarningPresetLabel(value);
+      if (value) {
+        const textarea = document.getElementById('warning-reason');
+        if (textarea) textarea.value = value;
+      }
+      closeWarningPresetMenu();
+    });
+
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('warning-preset-menu');
+      const btn = document.getElementById('warning-preset-btn');
+      if (!menu || menu.classList.contains('hidden')) return;
+      if (btn?.contains(e.target) || menu.contains(e.target)) return;
+      closeWarningPresetMenu();
+    });
+
+    window.fetchNick = async () => {
+      const uid = document.getElementById('visible-id').value.trim();
+      const feedback = document.getElementById('api-feedback');
+      if(!uid) { showToast('error', 'Digite o ID'); return; }
+
+      feedback.innerHTML = '<span class="text-blue-500">Buscando...</span>';
+
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 12000);
+
+      try {
+        const url = `/api/proxy?endpoint=ff_info&query=${encodeURIComponent(uid)}`;
+        const res = await fetch(url, { method: 'GET', signal: controller.signal });
+        const data = await res.json().catch(() => ({}));
+
+        const name = data?.nick;
+        const level = data?.level;
+        const levelNum = Number(level);
+
+        if (res.ok && data?.success && name) {
+          document.getElementById('nick').value = name;
+          hasTagManualOverride = false;
+          syncHasTagToggleFromNick();
+          feedback.innerHTML = `<span class="text-emerald-600 font-bold">✓ ${name} (Nível ${Number.isFinite(levelNum) ? levelNum : '?'})</span> <span class="text-gray-500">Verifique se o nick realmente é esse! A api pode conter erros..</span>`;
+
+          syncHasTagToggleFromNick();
+        } else {
+          feedback.innerHTML = '<span class="text-red-500">Jogador não encontrado ou API indisponivel no momento!</span>';
+        }
+      } catch(e) {
+        const msg = (e?.name === 'AbortError')
+          ? 'A API demorou demais para responder.'
+          : 'Jogador não encontrado ou erro na API.';
+        feedback.innerHTML = `<span class="text-red-500">${msg}</span>`;
+      } finally {
+        clearTimeout(t);
+      }
+    };
+
+    document.getElementById('member-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('member-id').value;
+      const visibleId = document.getElementById('visible-id').value.trim();
+      
+      const rawNick = document.getElementById('nick').value.trim();
+      syncHasTagToggleFromNick();
+      syncGoalTogglesFromValues();
+      const hasTag = document.getElementById('has-tag').checked;
+      const finalNick = rawNick;
+      const guildId = getGuildContext().guildId;
+      const guildWarMetaValue = toSafeNumber(document.getElementById('guild-war-meta').value);
+      const weeklyMetaValue = toSafeNumber(document.getElementById('weekly-meta-value').value);
+
+      const payload = {
+        visibleId,
+        nick: finalNick,
+        whatsapp: document.getElementById('whatsapp').value.trim(),
+        guildWar: document.getElementById('guild-war').checked,
+        guildWarMeta: guildWarMetaValue,
+        weeklyMeta: document.getElementById('weekly-meta').checked,
+        weeklyMetaValue: weeklyMetaValue,
+        hasTag: hasTag,
+        playMode: (() => {
+          const arr = getSelectedPlayModes();
+          return arr.length ? arr : null;
+        })(),
+        joinDate: document.getElementById('join-date').value || new Date().toISOString().split('T')[0],
+        updatedAt: serverTimestamp()
+      };
+
+      try {
+        if (!id || String(id || '').trim() !== visibleId) {
+          const duplicateInOtherGuild = await __findMemberAcrossGuildsByVisibleId(visibleId, currentGuildSlot);
+          if (duplicateInOtherGuild) {
+            showToast('error', `Este ID já está em ${__currentGuildDisplayName(duplicateInOtherGuild.slot)}.`);
+            return;
+          }
+        }
+
+        if(id) {
+          if (id !== visibleId) {
+             // MIGRATION ON THE FLY (Edição de perfil)
+             await setDoc(doc(db, "guildas", guildId, __membersCollectionName(), visibleId), payload);
+             await deleteDoc(doc(db, "guildas", guildId, __membersCollectionName(), id));
+             showToast('info', 'Usuário foi migrado para o novo sistema!');
+             
+             // Update cache
+             const idx = membersCache.findIndex(m => m.id === id);
+             if (idx >= 0) membersCache[idx] = { ...membersCache[idx], ...payload, id: visibleId, updatedAt: Date.now() };
+          } else {
+             // NORMAL UPDATE
+             await setDoc(doc(db, "guildas", guildId, __membersCollectionName(), id), payload, { merge: true });
+             showToast('success', 'Membro Atualizado!');
+             
+             // Update cache
+             const idx = membersCache.findIndex(m => m.id === id);
+             if (idx >= 0) membersCache[idx] = { ...membersCache[idx], ...payload, updatedAt: Date.now() };
+          }
+        } else {
+          // CREATE NEW OR OVERWRITE (Usando sempre o ID do jogo)
+          await setDoc(doc(db, "guildas", guildId, __membersCollectionName(), visibleId), payload);
+          showToast('success', 'Adicionado (ou sobrescrito)!');
+          
+          // Tratamento no cache caso tenha sobrescrito
+          const idx = membersCache.findIndex(m => m.id === visibleId);
+          if (idx >= 0) {
+             membersCache[idx] = { ...membersCache[idx], ...payload, updatedAt: Date.now() };
+          } else {
+             membersCache.push({ id: visibleId, ...payload, updatedAt: Date.now() });
+          }
+        }
+        
+        closeModal();
+        __setMembersCache(membersCache);
+
+      } catch(err) {
+        showToast('error', 'Erro ao salvar.');
+      }
+    });
+
+    document.addEventListener('change', (ev) => {
+      if (ev && ev.target && ev.target.id === 'has-tag') {
+        hasTagManualOverride = true;
+      }
+    });
+
+    document.addEventListener('input', (ev) => {
+      if (!ev || !ev.target) return;
+      if (ev.target.id === 'nick') {
+        syncHasTagToggleFromNick();
+      }
+      if (ev.target.id === 'guild-war-meta' || ev.target.id === 'weekly-meta-value') {
+        syncGoalTogglesFromValues();
+      }
+    });
+
+
+    function bindReliableTap(el, handler) {
+      if (!el || typeof handler !== 'function') return;
+      let lastPointerTs = 0;
+      const run = (ev) => {
+        const now = Date.now();
+        if (ev.type === 'click' && lastPointerTs && (now - lastPointerTs) < 450) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+          return;
+        }
+        if (ev.type === 'pointerup') lastPointerTs = now;
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+        handler(ev);
+      };
+      el.addEventListener('pointerup', run);
+      el.addEventListener('click', run, true);
+    }
+
+    bindReliableTap(document.getElementById('btn-filter'), () => {
+      window.toggleFilterDropdown();
+    });
+
+    bindReliableTap(document.getElementById('btn-guild-slot'), () => {
+      if (!canUseMultiGuildMembers) {
+        showToast('info', 'Trocar entre guildas nesta tela é um recurso do plano PRO ou superior.');
+        return;
+      }
+      __renderGuildSlotDropdown();
+      const dropdown = document.getElementById('guild-slot-dropdown');
+      dropdown?.classList.toggle('hidden');
+      __positionGuildSlotDropdown();
+    });
+
+    bindReliableTap(document.getElementById('btn-playmode-counter'), () => {
+      window.togglePlayModeCounterDropdown();
+    });
+
+    document.getElementById('playmode-counter-dropdown')?.addEventListener('click', (e) => {
+      const option = e.target.closest('[data-playmode-filter-option]');
+      if (!option) return;
+      const filterKey = String(option.getAttribute('data-playmode-filter-option') || 'all');
+      window.applyPlayModeFilter(filterKey);
+    });
+
+    bindReliableTap(document.getElementById('btn-goal-met-filter'), () => {
+      window.toggleGoalMetDropdown();
+    });
+
+    document.getElementById('goal-met-dropdown')?.addEventListener('click', (e) => {
+      const option = e.target.closest('[data-goal-met-filter-option]');
+      if (!option) return;
+      const filterKey = String(option.getAttribute('data-goal-met-filter-option') || 'all');
+      window.applyGoalMetFilter(filterKey);
+    });
+
+    document.getElementById('guild-slot-dropdown')?.addEventListener('click', async (e) => {
+      const option = e.target.closest('[data-guild-slot-option]');
+      if (!option) return;
+      if (!canUseMultiGuildMembers) {
+        showToast('info', 'Trocar entre guildas nesta tela é um recurso do plano PRO ou superior.');
+        return;
+      }
+      const slot = Number(option.getAttribute('data-guild-slot-option') || 1);
+      await __applyGuildSlot(slot, false);
+    });
+
+    __hydrateToolbarFromCacheNow();
+
+    window.addEventListener('resize', () => {
+      __positionGuildSlotDropdown();
+      positionPlayModeCounterDropdown();
+      positionGoalMetDropdown();
+    });
+
+    // ==========================================
+    // FINALIZAÇÃO DE BOOT E AUTENTICAÇÃO
+    // ==========================================
+    initPlayModePicker();
+
+    checkAuth().then(async (user) => {
+      if(!user) return;
+      document.getElementById('btn-logout').onclick = logout;
+
+      const settingsCache = __readFreshDirectSettingsCache();
+      const cachedSlots = Array.isArray(settingsCache?.multiGuildSlots) ? normalizeGuildSlotMetaList(settingsCache.multiGuildSlots) : null;
+      currentGuildSlotsMeta = cachedSlots && cachedSlots.length
+        ? cachedSlots
+        : [{ slot: 1, name: getGuildContext()?.guildName || '', tag: settingsCache?.tag || '', exists: true }];
+      const vipTier = __getCachedVipTierFast();
+      canUseMultiGuildMembers = ['pro', 'business', 'vitalicio'].includes(vipTier);
+      currentGuildSlot = canUseMultiGuildMembers ? __readSelectedGuildSlot() : 1;
+      if (!__isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
+      __writeSelectedGuildSlot(currentGuildSlot);
+
+      memberTag = settingsCache?.tag ? String(settingsCache.tag || '').trim() : memberTag;
+      __updateCurrentMemberTag();
+      guildGoals = settingsCache?.goals ? normalizeGoalsFromAnySource(settingsCache.goals) : guildGoals;
+      __syncGuildSlotButtonState();
+      __renderGuildSlotDropdown();
+      refreshPlayModeCounterUi();
+      refreshGoalMetFilterUi();
+
+      try {
+        const [freshSlots, freshTag, freshGoals] = await Promise.all([
+          getGuildMultiConfig(4, { ttlMs: SETTINGS_SCREEN_CACHE_TTL_MS }).catch(() => null),
+          getMemberTagConfig({ ttlMs: SETTINGS_SCREEN_CACHE_TTL_MS }).catch(() => null),
+          getGuildGoalsConfig({ ttlMs: SETTINGS_SCREEN_CACHE_TTL_MS }).catch(() => null)
+        ]);
+
+        if (Array.isArray(freshSlots) && freshSlots.length) currentGuildSlotsMeta = normalizeGuildSlotMetaList(freshSlots);
+        if (freshTag) memberTag = freshTag;
+        __updateCurrentMemberTag();
+        if (freshGoals) guildGoals = normalizeGoalsFromAnySource(freshGoals);
+
+        if (!__isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
+        __writeSelectedGuildSlot(currentGuildSlot);
+        __syncGuildSlotButtonState();
+        __renderGuildSlotDropdown();
+        refreshPlayModeCounterUi();
+        refreshGoalMetFilterUi();
+        __cacheSettingsSnapshot();
+      } catch (_) {
+        __cacheSettingsSnapshot();
+      }
+
+      const hasTagEl = document.getElementById('has-tag');
+      if (hasTagEl) {
+        hasTagEl.addEventListener('change', () => {
+          if (hasTagEl.checked && !memberTag) {
+            showToast('error', 'Nenhuma tag configurada. Configure em Ajustes.');
+            hasTagEl.checked = false;
+          }
+        });
+      }
+
+      const nickEl = document.getElementById('nick');
+      if (nickEl) {
+        nickEl.addEventListener('input', syncHasTagToggleFromNick);
+        nickEl.addEventListener('blur', syncHasTagToggleFromNick);
+      }
+
+      const guildWarMetaEl = document.getElementById('guild-war-meta');
+      const weeklyMetaValueEl = document.getElementById('weekly-meta-value');
+      if (guildWarMetaEl) {
+        guildWarMetaEl.addEventListener('input', syncGoalTogglesFromValues);
+        guildWarMetaEl.addEventListener('blur', syncGoalTogglesFromValues);
+      }
+      if (weeklyMetaValueEl) {
+        weeklyMetaValueEl.addEventListener('input', syncGoalTogglesFromValues);
+        weeklyMetaValueEl.addEventListener('blur', syncGoalTogglesFromValues);
+      }
+      syncGoalTogglesFromValues();
+      
+      // Carrega a lista da guilda selecionada nesta tela
+      await __applyGuildSlot(currentGuildSlot, false);
+      
+      const searchInput = document.getElementById('search-input');
+      if (searchInput) {
+        searchInput.addEventListener('input', window.applyFiltersAndRender);
+      }
+    });
+
+  </script>
+
+  <!-- OTK Footer -->
+  <footer class="bg-white py-10 border-t border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="flex justify-center items-center gap-2 mb-10">
+            <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--footer w-10 h-10">
+            <span class="text-xl font-bold tracking-wider text-slate-900">GUILDA<span class="text-green-500">HUB</span></span>
+        </div>
+
+        <div class="flex flex-row justify-center items-start gap-4 sm:gap-12 md:gap-32 text-xs sm:text-sm mb-12">
+            
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-pink-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4s1.791-4 4-4 4 1.79 4 4-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                    <span>Instagram</span>
+                </span>
+                <a href="https://instagram.com/guildahub" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
+                <a href="https://instagram.com/ottakubrasil" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
+            </div>
+
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.23-1.15 4.41-2.91 5.74-1.71 1.32-3.95 1.77-6.09 1.47-2.07-.28-3.98-1.39-5.18-3.08-1.2-1.7-1.57-3.93-1.04-5.94.49-1.89 1.74-3.53 3.44-4.48 1.78-.99 3.94-1.12 5.84-.6v4.06c-1.27-.6-2.81-.5-3.96.26-1.13.73-1.76 2.05-1.63 3.4.14 1.28.98 2.45 2.16 2.96 1.14.51 2.5.42 3.56-.23 1.05-.63 1.71-1.76 1.75-2.98.05-3.53.02-7.07.02-10.61 0-2.31 0-4.63.02-6.94z"/></svg>
+                    <span>TikTok</span>
+                </span>
+                <a href="https://tiktok.com/@guildahub" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
+                <a href="https://tiktok.com/@ottakubrasil" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
+                <a href="https://tiktok.com/@kushinaff" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@kushinaff <span class="text-slate-400 block sm:inline text-[10px] sm:text-xs leading-none mt-1 sm:mt-0">(Parceiro)</span></a>
+            </div>
+
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                    <span>WhatsApp</span>
+                </span>
+                <a href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">Grupo do WhatsApp</a>
+            </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-slate-200 text-sm text-slate-500">
+            <p class="text-center md:text-left">
+                © 2026 Guilda HUB. Todos os direitos reservados.
+            </p>
+            <div class="flex gap-4">
+                <a href="#" class="hover:text-green-500 transition-colors">Termos</a>
+                <a href="#" class="hover:text-green-500 transition-colors">Privacidade</a>
+            </div>
+        </div>
+        
+    </div>
+</footer>
+
+</body>
+</html>
