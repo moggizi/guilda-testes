@@ -1775,20 +1775,37 @@
             const member = membersCache.find(m => String(m.id || '') === String(dado.id || ''));
             if (!member) return;
 
-            const updates = {
-                guildWar: true,
-                guildWarMeta: Number(dado.gg || 0),
-                weeklyMeta: true,
-                weeklyMetaValue: Number(dado.honra || 0),
-                updatedAt: serverTimestamp()
-            };
+            const updates = { updatedAt: serverTimestamp() };
+            const cacheUpdates = { updatedAt: Date.now() };
+
+            if (dado.gg !== undefined && dado.gg !== null && dado.gg !== '') {
+                const gg = Number(dado.gg || 0);
+                if (Number.isFinite(gg)) {
+                    updates.guildWar = true;
+                    updates.guildWarMeta = gg;
+                    cacheUpdates.guildWar = true;
+                    cacheUpdates.guildWarMeta = gg;
+                }
+            }
+
+            if (dado.honra !== undefined && dado.honra !== null && dado.honra !== '') {
+                const honra = Number(dado.honra || 0);
+                if (Number.isFinite(honra)) {
+                    updates.weeklyMeta = true;
+                    updates.weeklyMetaValue = honra;
+                    cacheUpdates.weeklyMeta = true;
+                    cacheUpdates.weeklyMetaValue = honra;
+                }
+            }
+
+            if (Object.keys(updates).length <= 1) return;
 
             const docId = String(member.id || dado.id || member.visibleId || '').trim();
             if (!docId) return;
 
             const ref = doc(db, "guildas", guildId, __membersCollectionName(), docId);
             batch.set(ref, updates, { merge: true });
-            Object.assign(member, updates, { updatedAt: Date.now() });
+            Object.assign(member, cacheUpdates);
         });
 
         try {
