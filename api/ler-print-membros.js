@@ -1,8 +1,23 @@
 // api/ler-print-membros.js
 // Vercel Serverless Function para analisar prints do Free Fire com Gemini.
-// Coloque sua chave em: Vercel > Project Settings > Environment Variables > GEMINI_API_KEY
+// Configure na Vercel: GEMINI_API_KEY
+// Opcional: GEMINI_MODEL=gemini-2.5-flash-lite
+// Opcional: GEMINI_MODELS=gemini-2.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash
+// Se existir GEMINI_MODEL=gemini-2.0-flash na Vercel, esta versão ignora automaticamente.
 
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+const DEFAULT_MODELS = [
+  // Pelos limites do AI Studio, estes são os melhores para o nível gratuito.
+  'gemini-2.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash'
+];
+
+const BLOCKED_ZERO_QUOTA_MODELS = new Set([
+  // Em alguns projetos free tier esses modelos aparecem com limite 0.
+  // Se estiverem configurados por engano na Vercel, a rota ignora e usa os modelos acima.
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite'
+]);
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -28,7 +43,7 @@ async function readJsonBody(req) {
 }
 
 function cleanBase64(value) {
-  return String(value || '').replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '').trim();
+  return String(value || '').replace(/^data:image\/[^;]+;base64,/, '').trim();
 }
 
 function simplifyMembers(members) {
@@ -40,6 +55,23 @@ function simplifyMembers(members) {
       visibleId: String(m.visibleId || ''),
       nick: String(m.nick || '')
     }));
+}
+
+function getModelsToTry() {
+  const fromList = process.env.GEMINI_MODELS;
+  const fromSingle = process.env.GEMINI_MODEL;
+  const envModels = `${fromList || ''},${fromSingle || ''}`
+    .split(',')
+    .map((m) => m.trim())
+    .filter(Boolean);
+
+  // Mesmo que a Vercel ainda esteja com GEMINI_MODEL=gemini-2.0-flash,
+  // não vamos usar esse modelo porque ele costuma vir com limite 0 no free tier.
+  const allowZeroQuotaModels = String(process.env.GEMINI_ALLOW_ZERO_QUOTA_MODELS || '').toLowerCase() === 'true';
+  const models = [...new Set([...envModels, ...DEFAULT_MODELS])]
+    .filter((model) => allowZeroQuotaModels || !BLOCKED_ZERO_QUOTA_MODELS.has(model));
+
+  return models.length ? models : DEFAULT_MODELS;
 }
 
 function buildPrompt(members) {
@@ -146,6 +178,67 @@ function normalizeRows(rows, members) {
     .filter(Boolean);
 }
 
+function friendlyGeminiError(status, geminiJson, modelsTried) {
+  const rawMessage = String(geminiJson?.error?.message || '');
+  const modelList = modelsTried.join(', ');
+
+  if (status === 429) {
+    return {
+      status: 429,
+      error:
+        `A cota do Gemini estourou ou está zerada para este projeto/modelo. ` +
+        `Na Vercel, tente trocar/remover GEMINI_MODEL e usar GEMINI_MODEL=gemini-2.5-flash-lite. ` +
+        `No Google AI Studio, confira Projeto > Limite de taxa. Modelos testados: ${modelList}.`
+    };
+  }
+
+  if (status === 400 && /model|not found|invalid/i.test(rawMessage)) {
+    return {
+      status: 400,
+      error:
+        `O modelo configurado no Gemini parece inválido ou indisponível neste projeto. ` +
+        `Use GEMINI_MODEL=gemini-2.5-flash-lite na Vercel e faça redeploy.`
+    };
+  }
+
+  if (status === 403) {
+    return {
+      status: 403,
+      error:
+        'A API key do Gemini não tem permissão ou está incorreta. Confira a variável GEMINI_API_KEY na Vercel e faça redeploy.'
+    };
+  }
+
+  return {
+    status,
+    error: rawMessage || `Erro do Gemini: ${status}`
+  };
+}
+
+async function callGemini({ model, apiKey, parts }) {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts
+        }
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json'
+      }
+    })
+  });
+
+  const json = await response.json().catch(() => null);
+  return { response, json };
+}
+
 module.exports = async function handler(req, res) {
   setCors(res);
 
@@ -191,44 +284,39 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'Uma das imagens está sem base64 válido.' });
     }
 
-    const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const models = getModelsToTry();
+    const modelsTried = [];
+    let lastFailure = null;
 
-    const geminiResponse = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts
-          }
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json'
+    for (const model of models) {
+      modelsTried.push(model);
+      const { response, json } = await callGemini({ model, apiKey, parts });
+
+      if (!response.ok) {
+        lastFailure = { status: response.status, json };
+
+        // Tenta o próximo modelo quando o problema pode ser só cota/modelo.
+        if ([400, 404, 429, 500, 503].includes(response.status)) {
+          continue;
         }
-      })
-    });
 
-    const geminiJson = await geminiResponse.json().catch(() => null);
+        const friendly = friendlyGeminiError(response.status, json, modelsTried);
+        return res.status(friendly.status).json({ error: friendly.error, modelsTried });
+      }
 
-    if (!geminiResponse.ok) {
-      const message =
-        geminiJson?.error?.message ||
-        `Erro do Gemini: ${geminiResponse.status}`;
-      return res.status(geminiResponse.status).json({ error: message });
+      const text = json?.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text || '')
+        .join('\n')
+        .trim();
+
+      const parsed = extractJson(text);
+      const rows = normalizeRows(parsed.rows, members);
+
+      return res.status(200).json({ rows, modelUsed: model });
     }
 
-    const text = geminiJson?.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text || '')
-      .join('\n')
-      .trim();
-
-    const parsed = extractJson(text);
-    const rows = normalizeRows(parsed.rows, members);
-
-    return res.status(200).json({ rows });
+    const friendly = friendlyGeminiError(lastFailure?.status || 500, lastFailure?.json, modelsTried);
+    return res.status(friendly.status).json({ error: friendly.error, modelsTried });
   } catch (error) {
     console.error('Erro em /api/ler-print-membros:', error);
     return res.status(500).json({

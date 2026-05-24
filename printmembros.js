@@ -239,7 +239,10 @@ export function setupPrintScanner({ onSave }) {
         } catch (_) {}
 
         if (!response.ok) {
-            const message = payload?.error || payload?.message || 'Erro ao analisar prints com Gemini.';
+            let message = payload?.error || payload?.message || 'Erro ao analisar prints com Gemini.';
+            if (typeof message === 'string' && message.length > 420) {
+                message = message.slice(0, 420) + '...';
+            }
             throw new Error(message);
         }
 
