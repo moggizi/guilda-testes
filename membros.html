@@ -291,7 +291,7 @@
             </button>
 
             <!-- Botão Ler Prints -->
-            <button id="btn-print-scanner" onclick="openPrintModal()" class="hidden flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95">
+            <button id="btn-print-scanner" onclick="openPrintModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95">
               <i data-lucide="scan-line" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Ler Prints</span>
             </button>
 
@@ -582,6 +582,41 @@
           Confirmar e Salvar Pontuações
         </button>
       </div>
+    </div>
+  </div>
+
+
+  <!-- MODAL DE AVISO DO PLANO PARA LEITURA DE PRINTS -->
+  <div id="print-upgrade-modal" class="fixed inset-0 z-[56] flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closePrintUpgradeModal()"></div>
+    <div class="relative bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-2xl p-6 m-0 sm:m-4 zoom-in-95">
+      <button type="button" onclick="closePrintUpgradeModal()" class="absolute right-4 top-4 p-2 rounded-xl hover:bg-gray-100 text-gray-400">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <div class="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
+        <i data-lucide="scan-line" class="w-7 h-7 text-emerald-600"></i>
+      </div>
+
+      <h3 class="text-xl font-bold text-gray-900 pr-8">Leitura de prints disponível no PRO</h3>
+      <p class="mt-2 text-sm text-gray-500 leading-relaxed">
+        O recurso de sincronizar membros por print está disponível apenas para o plano
+        <span class="font-bold text-gray-700">PRO ou superior</span>.
+      </p>
+
+      <div class="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+        <p class="text-sm text-gray-700 leading-relaxed">
+          Para liberar a leitura automática por Gemini, assine um plano.
+        </p>
+        <a href="https://guildahub.online/upgrade" class="mt-3 inline-flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black shadow-lg shadow-emerald-200 transition-all active:scale-95">
+          CLIQUE AQUI
+          <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+        </a>
+      </div>
+
+      <button type="button" onclick="closePrintUpgradeModal()" class="mt-4 w-full py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">
+        Agora não
+      </button>
     </div>
   </div>
 
@@ -891,7 +926,7 @@
     }
 
     function __canUsePrintScannerFromCache() {
-      return ['pro', 'vitalicio'].includes(__getCachedVipTierFast());
+      return ['pro', 'business', 'vitalicio'].includes(__getCachedVipTierFast());
     }
 
     function __syncPrintScannerAccessState() {
@@ -899,12 +934,13 @@
       const btn = document.getElementById('btn-print-scanner');
       if (!btn) return;
 
-      btn.classList.toggle('hidden', !canUsePrintScanner);
-      btn.classList.toggle('opacity-60', !canUsePrintScanner);
-      btn.classList.toggle('cursor-not-allowed', !canUsePrintScanner);
-      btn.disabled = !canUsePrintScanner;
-      btn.setAttribute('aria-disabled', canUsePrintScanner ? 'false' : 'true');
-      btn.title = canUsePrintScanner ? 'Ler prints com Gemini' : 'Recurso disponível apenas para planos PRO e Vitalício';
+      // O botão fica visível para todos. Quem não tem plano compatível vê o aviso ao clicar.
+      btn.classList.remove('hidden', 'opacity-60', 'cursor-not-allowed');
+      btn.disabled = false;
+      btn.setAttribute('aria-disabled', 'false');
+      btn.title = canUsePrintScanner
+        ? 'Ler prints com Gemini'
+        : 'Disponível no plano PRO ou superior';
     }
 
     function __guildSlotSelectionKey() {
@@ -1870,7 +1906,13 @@
         if (!__canUsePrintScannerFromCache()) {
             canUsePrintScanner = false;
             __syncPrintScannerAccessState();
-            showToast('info', 'Ler prints é um recurso disponível apenas para planos PRO e Vitalício.');
+            const upgradeModal = document.getElementById('print-upgrade-modal');
+            if (upgradeModal) {
+                upgradeModal.classList.remove('hidden');
+                initIcons();
+            } else {
+                showToast('info', 'Ler prints está disponível apenas no plano PRO ou superior.');
+            }
             return;
         }
 
@@ -1886,6 +1928,10 @@
     window.closePrintModal = () => {
         document.getElementById('print-modal')?.classList.add('hidden');
         if (scannerInstance) scannerInstance.resetScanner();
+    };
+
+    window.closePrintUpgradeModal = () => {
+        document.getElementById('print-upgrade-modal')?.classList.add('hidden');
     };
 
 
@@ -3028,7 +3074,7 @@
         : [{ slot: 1, name: getGuildContext()?.guildName || '', tag: settingsCache?.tag || '', exists: true }];
       const vipTier = __getCachedVipTierFast();
       canUseMultiGuildMembers = ['pro', 'business', 'vitalicio'].includes(vipTier);
-      canUsePrintScanner = ['pro', 'vitalicio'].includes(vipTier);
+      canUsePrintScanner = ['pro', 'business', 'vitalicio'].includes(vipTier);
       currentGuildSlot = canUseMultiGuildMembers ? __readSelectedGuildSlot() : 1;
       if (!__isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
       __writeSelectedGuildSlot(currentGuildSlot);
