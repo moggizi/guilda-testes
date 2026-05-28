@@ -17,7 +17,8 @@ import {
   writeBatch,
   serverTimestamp,
   addDoc,
-  collection
+  collection,
+  deleteField
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
@@ -42,7 +43,7 @@ export const functions = getFunctions(app);
 let __guildCtx = null;
 
 const __GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
-const __GUILDCTX_CACHE_VERSION = 4;
+const __GUILDCTX_CACHE_VERSION = 7;
 try {
   const raw = localStorage.getItem(__GUILDCTX_LS_KEY);
   if (raw) {
@@ -55,9 +56,10 @@ try {
         role: String(cached.role),
         email: String(cached.email),
         uid: String(cached.uid),
-        vipTier: cached.vipTier ? String(cached.vipTier) : 'free'
-      ,
-        vipExpiresAtMs: (cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null)};
+        vipTier: cached.vipTier ? String(cached.vipTier) : 'free',
+        vipExpiresAtMs: (cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null),
+        isOwner: cached.isOwner === true || (String(cached.uid || '').trim() && String(cached.guildId || '').trim() && String(cached.uid || '').trim() === String(cached.guildId || '').trim())
+      };
     }
   }
 } catch (_) {}
@@ -94,6 +96,39 @@ const __SETTINGS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 // Cache de autenticação/navegação: reduz leituras repetidas ao trocar de tela.
 // 24h para manter guildCtx_cache_v1 reaproveitável durante o dia inteiro.
 const __AUTH_CONTEXT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Admin/Líder secundário NÃO revalida em toda tela.
+// Ele revalida só no início da sessão/login; depois usa cache normal para navegar sem gastar leituras.
+const __SECONDARY_ACCESS_SESSION_PREFIX = 'secondaryAccessValidated_v1_';
+
+function __secondaryAccessSessionKey(userUid = '', guildId = '', emailLower = '') {
+  return `${__SECONDARY_ACCESS_SESSION_PREFIX}${String(userUid || '').trim()}_${String(guildId || '').trim()}_${cleanEmail(emailLower || '')}`;
+}
+
+function __hasSecondaryAccessSessionValidation(user, ctx = {}) {
+  try {
+    const key = __secondaryAccessSessionKey(user?.uid, ctx?.guildId, ctx?.email || ctx?.emailLower || user?.email || '');
+    return !!key && sessionStorage.getItem(key) === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
+function __markSecondaryAccessSessionValidated(user, guildId = '', emailLower = '') {
+  try {
+    const key = __secondaryAccessSessionKey(user?.uid, guildId, emailLower || user?.email || '');
+    if (key) sessionStorage.setItem(key, '1');
+  } catch (_) {}
+}
+
+function __clearSecondaryAccessSessionValidation() {
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const k = sessionStorage.key(i) || '';
+      if (k.startsWith(__SECONDARY_ACCESS_SESSION_PREFIX)) sessionStorage.removeItem(k);
+    }
+  } catch (_) {}
+}
 
 function __cacheIsFresh(cached, ttlMs = __SETTINGS_CACHE_TTL_MS) {
   try {
@@ -221,6 +256,7 @@ export function setSharedGuildContextCache(ctx = {}) {
     ts: Date.now()
   };
   writeSharedJsonCache(__GUILDCTX_LS_KEY, next);
+  try { __scheduleSecondaryVipLogoutFromCtx(next); } catch (_) {}
   return next;
 }
 
@@ -331,8 +367,10 @@ function __applyCachedSidebarNow() {
               email: String(cached.email),
               uid: String(cached.uid),
               vipTier: cached.vipTier ? String(cached.vipTier) : 'free',
-              vipExpiresAtMs: (cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null)
+              vipExpiresAtMs: (cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null),
+              isOwner: cached.isOwner === true
             };
+            try { __scheduleSecondaryVipLogoutFromCtx(__guildCtx); } catch (_) {}
           }
           __applyCachedSidebarNow();
         }
@@ -350,13 +388,42 @@ function __applyCachedSidebarNow() {
 })();
 
 
+
+async function __persistExpiredVipAsFree(guildId) {
+  try {
+    const gid = String(guildId || '').trim();
+    if (!gid) return false;
+
+    await Promise.allSettled([
+      setDoc(doc(db, 'configGuilda', gid), {
+        vipTier: 'free',
+        vipExpiresAt: null,
+        permissoesAtivas: false,
+        updatedAt: serverTimestamp()
+      }, { merge: true }),
+      setDoc(doc(db, 'guildas', gid), {
+        vipTier: 'free',
+        vipExpiresAt: null,
+        updatedAt: serverTimestamp()
+      }, { merge: true })
+    ]);
+
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 function __maybeDowngradeVipSync() {
   try {
     if (!__guildCtx) return;
+
     const tier = String(__guildCtx.vipTier || 'free');
     const exp = (__guildCtx.vipExpiresAtMs != null) ? Number(__guildCtx.vipExpiresAtMs) : null;
-    // FIX 1: Impede downgrade se o plano for vitalício
-    if (tier !== 'free' && tier !== 'vitalicio' && exp != null && isFinite(exp) && Date.now() > exp) {
+
+    // Se chegou em 0 dias/expirou, rebaixa de verdade no cache e no Firebase.
+    // Vitalício nunca expira.
+    if (tier !== 'free' && tier !== 'vitalicio' && exp != null && isFinite(exp) && Date.now() >= exp) {
       __guildCtx.vipTier = 'free';
       __guildCtx.vipExpiresAtMs = null;
       try {
@@ -368,17 +435,14 @@ function __maybeDowngradeVipSync() {
           vipExpiresAtMs: __guildCtx.vipExpiresAtMs,
           email: __guildCtx.email,
           uid: __guildCtx.uid,
+          isOwner: __guildCtx.isOwner === true || (String(__guildCtx.uid || '').trim() && String(__guildCtx.guildId || '').trim() && String(__guildCtx.uid || '').trim() === String(__guildCtx.guildId || '').trim()),
+          cacheVersion: __GUILDCTX_CACHE_VERSION,
           ts: Date.now()
         }));
+        try { __scheduleSecondaryVipLogoutFromCtx(__guildCtx); } catch (_) {}
       } catch (_) {}
 
-      // tenta gravar no banco (não bloqueia UI)
-      try {
-        setDoc(doc(db, 'configGuilda', __guildCtx.guildId), { vipTier: 'free', vipExpiresAt: null, updatedAt: serverTimestamp() }, { merge: true });
-      } catch (_) {}
-      try {
-        setDoc(doc(db, 'guildas', __guildCtx.guildId), { vipTier: 'free', updatedAt: serverTimestamp() }, { merge: true });
-      } catch (_) {}
+      try { __persistExpiredVipAsFree(__guildCtx.guildId); } catch (_) {}
     }
   } catch (_) {}
 }
@@ -887,6 +951,8 @@ export async function setGuildNameConfig(name) {
         vipExpiresAtMs: __guildCtx.vipExpiresAtMs,
         email: __guildCtx.email,
         uid: __guildCtx.uid,
+        isOwner: __guildCtx.isOwner === true || (String(__guildCtx.uid || '').trim() && String(__guildCtx.guildId || '').trim() && String(__guildCtx.uid || '').trim() === String(__guildCtx.guildId || '').trim()),
+        cacheVersion: __GUILDCTX_CACHE_VERSION,
         ts: Date.now()
       }));
     }
@@ -1385,6 +1451,187 @@ export async function createUpgradeSolicitacao(planId, payerName) {
 }
 
 
+
+function __isPrivilegedGuildRole(roleValue) {
+  const role = String(roleValue || '').trim();
+  return role === "Admin" || role === "Líder";
+}
+
+function __vipAllowsSecondaryAccess(tierValue, expiresAtMs) {
+  const tier = vipTierFromValue(tierValue || 'free');
+  if (!tier || tier === 'free') return false;
+  if (tier === 'vitalicio') return true;
+
+  const exp = (expiresAtMs != null && isFinite(Number(expiresAtMs))) ? Number(expiresAtMs) : null;
+  return exp == null || Date.now() < exp;
+}
+
+function __isCurrentUserGuildOwner(guildId, user, cfgData = {}, guildData = {}) {
+  try {
+    const uid = String(user?.uid || '').trim();
+    const email = cleanEmail(user?.email || '');
+    const gid = String(guildId || '').trim();
+
+    if (uid && gid && uid === gid) return true;
+
+    const cfgOwnerUid = String(cfgData?.ownerUid || '').trim();
+    const guildOwnerUid = String(guildData?.ownerUid || '').trim();
+    if (uid && (cfgOwnerUid === uid || guildOwnerUid === uid)) return true;
+
+    const cfgOwnerEmail = cleanEmail(cfgData?.ownerEmail || '');
+    const guildOwnerEmail = cleanEmail(guildData?.ownerEmail || '');
+    if (email && (cfgOwnerEmail === email || guildOwnerEmail === email)) return true;
+  } catch (_) {}
+
+  return false;
+}
+
+function __emailStillHasPrivilegedAccess(cfgData = {}, emailLower = '', roleValue = '') {
+  const email = cleanEmail(emailLower || '');
+  const role = String(roleValue || '').trim();
+  if (!email || !role) return false;
+
+  const leaders = uniq((Array.isArray(cfgData?.leaders) ? cfgData.leaders : []).map(cleanEmail)).filter(Boolean);
+  const admins = uniq((Array.isArray(cfgData?.admins) ? cfgData.admins : []).map(cleanEmail)).filter(Boolean);
+
+  if (role === "Líder") return leaders.includes(email);
+  if (role === "Admin") return admins.includes(email);
+  return false;
+}
+
+function __emailHasAnyPrivilegedAccess(cfgData = {}, emailLower = '') {
+  const email = cleanEmail(emailLower || '');
+  if (!email) return false;
+
+  const leaders = uniq((Array.isArray(cfgData?.leaders) ? cfgData.leaders : []).map(cleanEmail)).filter(Boolean);
+  const admins = uniq((Array.isArray(cfgData?.admins) ? cfgData.admins : []).map(cleanEmail)).filter(Boolean);
+
+  return leaders.includes(email) || admins.includes(email);
+}
+
+async function __downgradeOwnUserToPlayerAfterAccessRemoval(user, guildId, reason = 'access-removed') {
+  try {
+    const uid = String(user?.uid || '').trim();
+    if (!uid) return false;
+
+    await setDoc(doc(db, "users", uid), {
+      role: "Jogador",
+      guildId: deleteField(),
+      removedGuildId: String(guildId || ''),
+      accessRemovedReason: reason,
+      accessRevokedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function __clearAuthAndGuildCachesForCurrentUser(guildId = '') {
+  try { clearSharedGuildContextCache(); } catch (_) {}
+  try { localStorage.removeItem(__GUILDCTX_LS_KEY); } catch (_) {}
+  try { __clearSecondaryAccessSessionValidation(); } catch (_) {}
+
+  try {
+    const gid = String(guildId || '').trim();
+    if (!gid) return;
+
+    localStorage.removeItem(`securityConfig_${gid}`);
+    localStorage.removeItem(`guildInfo_${gid}`);
+    localStorage.removeItem(`guildGoals_${gid}`);
+    localStorage.removeItem(`tagMembros_${gid}`);
+  } catch (_) {}
+}
+
+async function __logoutWithToast(message, guildId = '') {
+  try { showToast("error", message || "Conta expirada"); } catch (_) {}
+  try { __stopSecondaryAccessLiveWatch(); } catch (_) {}
+  try { __clearAuthAndGuildCachesForCurrentUser(guildId); } catch (_) {}
+  try { await signOut(auth); } catch (_) {}
+
+  try {
+    setTimeout(() => {
+      try { window.location.href = "index.html"; } catch (_) {}
+    }, 900);
+  } catch (_) {
+    try { window.location.href = "index.html"; } catch (_) {}
+  }
+}
+
+let __secondaryVipLogoutInProgress = false;
+
+function __stopSecondaryAccessLiveWatch() {
+  // Mantido como no-op por compatibilidade com chamadas antigas.
+  // Não abrimos listener extra aqui para não gerar leitura nova.
+  __secondaryVipLogoutInProgress = false;
+}
+
+function __secondaryVipIsBlockedByCtx(ctx = {}) {
+  try {
+    if (!ctx || !ctx.guildId) return false;
+
+    const role = String(ctx.role || '').trim();
+    const uid = String(ctx.uid || '').trim();
+    const gid = String(ctx.guildId || '').trim();
+    const isOwner = ctx.isOwner === true || (!!uid && !!gid && uid === gid);
+    if (!__isPrivilegedGuildRole(role) || isOwner) return false;
+
+    const tier = vipTierFromValue(ctx.vipTier || 'free');
+    const exp = (ctx.vipExpiresAtMs != null && isFinite(Number(ctx.vipExpiresAtMs))) ? Number(ctx.vipExpiresAtMs) : null;
+    return !__vipAllowsSecondaryAccess(tier, exp);
+  } catch (_) {
+    return false;
+  }
+}
+
+async function __logoutSecondaryIfVipBlockedFromCtx(ctx = {}) {
+  try {
+    if (__secondaryVipLogoutInProgress) return false;
+    if (!__secondaryVipIsBlockedByCtx(ctx)) return false;
+
+    const current = auth.currentUser;
+    if (!current) return false;
+
+    const expectedUid = String(ctx.uid || '').trim();
+    if (expectedUid && String(current.uid || '').trim() !== expectedUid) return false;
+
+    __secondaryVipLogoutInProgress = true;
+    await __logoutWithToast('Conta expirada', ctx.guildId || '');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function __scheduleSecondaryVipLogoutFromCtx(ctx = {}) {
+  try {
+    if (!__secondaryVipIsBlockedByCtx(ctx)) return false;
+    setTimeout(() => {
+      try { __logoutSecondaryIfVipBlockedFromCtx(ctx); } catch (_) {}
+    }, 0);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function __startSecondaryAccessLiveWatch(user, ctx = {}) {
+  // Sem listener extra em configGuilda/guildas.
+  // Se alguma tela já atualizar guildCtx_cache_v1/vipTier em tempo real,
+  // este ponto só reaproveita esse valor em cache para derrubar secundários quando virar free.
+  try {
+    const nextCtx = {
+      ...(ctx || {}),
+      uid: String(user?.uid || ctx?.uid || ''),
+      email: cleanEmail(ctx?.email || ctx?.emailLower || user?.email || '')
+    };
+    __scheduleSecondaryVipLogoutFromCtx(nextCtx);
+  } catch (_) {}
+}
+
+
 function __isProtectedRouteAllowedByCachedCtx(ctx, isLoginPage) {
   try {
     if (!ctx || !ctx.guildId) return { allowed: false };
@@ -1443,6 +1690,16 @@ function __getUsableAuthContextFromCache(user) {
     if (userEmail && cachedEmail && cachedEmail !== userEmail) return null;
 
     const role = String(cached.role || 'Membro');
+
+    // Admin/Líder secundário não revalidam em toda página, para não aumentar leituras.
+    // Eles revalidam no login/início da sessão; depois a navegação usa cache de 24h.
+    // Se vier de login=1 ou ainda não validou nesta sessão, força uma checagem real.
+    if (__isPrivilegedGuildRole(role) && cached.isOwner !== true) {
+      let isLoginFlow = false;
+      try { isLoginFlow = new URLSearchParams(window.location.search || '').get('login') === '1'; } catch (_) {}
+      if (isLoginFlow || !__hasSecondaryAccessSessionValidation(user, cached)) return null;
+    }
+
     return {
       ...cached,
       role,
@@ -1467,7 +1724,8 @@ function __applyAuthContextFromCache(ctx, user) {
     vipTier: ctx.vipTier ? String(ctx.vipTier) : 'free',
     vipExpiresAtMs: (ctx.vipExpiresAtMs != null ? Number(ctx.vipExpiresAtMs) : null),
     email: cleanEmail(ctx.email || ctx.emailLower || user?.email || ''),
-    uid: String(user?.uid || ctx.uid || '')
+    uid: String(user?.uid || ctx.uid || ''),
+    isOwner: ctx.isOwner === true || (String(user?.uid || ctx.uid || '').trim() && String(ctx.guildId || '').trim() && String(user?.uid || ctx.uid || '').trim() === String(ctx.guildId || '').trim())
   };
 
   try {
@@ -1486,6 +1744,7 @@ function __applyAuthContextFromCache(ctx, user) {
   const roleEl = document.getElementById("user-role");
   if (roleEl) roleEl.textContent = role;
   try { applyVipUiAndGates(__guildCtx.vipTier || 'free'); } catch (_) {}
+  try { __scheduleSecondaryVipLogoutFromCtx(__guildCtx); } catch (_) {}
   try { applyCeoNavVisibility(); } catch (_) {}
 }
 
@@ -1495,6 +1754,7 @@ export function checkAuth(redirectToLogin = true) {
       const isLoginPage = /index\.html$|\/$/i.test(window.location.pathname || "");
 
       if (!user) {
+        try { __stopSecondaryAccessLiveWatch(); } catch (_) {}
         if (redirectToLogin && !isLoginPage) window.location.href = "index.html";
         resolve(null);
         return;
@@ -1511,6 +1771,7 @@ export function checkAuth(redirectToLogin = true) {
         const routeCheck = __isProtectedRouteAllowedByCachedCtx(cachedCtx, isLoginPage);
         if (routeCheck.allowed) {
           __applyAuthContextFromCache(cachedCtx, user);
+          try { __startSecondaryAccessLiveWatch(user, cachedCtx); } catch (_) {}
           try { __flushOneTimeSignupToast(); } catch (_) {}
           resolve(user);
           return;
@@ -1574,10 +1835,14 @@ export function checkAuth(redirectToLogin = true) {
       if (hint && ["Líder", "Admin", "Jogador"].includes(hint)) role = hint;
 
       const resolved = await resolveRoleInGuild(guildId, user.email || "");
-      if (!role || role === "Membro") role = resolved;
+      if (resolved && resolved !== "Membro") {
+        role = resolved;
+      } else if (!role) {
+        role = resolved || "Membro";
+      }
 
-      // Se o resolve der "Membro" por algum motivo, mas o /users diz que é Admin/Líder, não derruba o login.
-      if (role === "Membro" && hint && hint !== "Membro") role = hint;
+      // Importante: Admin/Líder secundário precisa estar na lista atual de configGuilda.
+      // Não confiamos mais apenas no role salvo em users/{uid}, pois o e-mail pode ter sido removido.
       if (role === "Líder") {
         normalizeConfigGuilda(guildId);
       }
@@ -1587,6 +1852,7 @@ export function checkAuth(redirectToLogin = true) {
       let vipTier = 'free';
       let vipExpiresAtMs = null;
       let __cfgData = null;
+      let __guildData = null;
 
       // Preferência: vipTier e vipExpiresAt vêm de /configGuilda/{guildId}
       try {
@@ -1617,6 +1883,7 @@ export function checkAuth(redirectToLogin = true) {
           const gSnap = await getDoc(doc(db, "guildas", guildId));
           if (gSnap.exists()) {
             const g = gSnap.data() || {};
+            __guildData = g;
             const rawVip2 = g.vipTier ?? g.vip ?? g.planoVip ?? g.planoVIP ?? g.vipLevel ?? g.vipPlano ?? g.vipName ?? g.plano ?? g.plan ?? g.tier;
             const v2 = vipTierFromValue(rawVip2);
             if (v2 && (v2 !== 'free' || !vipTier || vipTier === 'free')) vipTier = v2;
@@ -1636,20 +1903,24 @@ export function checkAuth(redirectToLogin = true) {
         } catch (_) {}
       }
 
+
+      // Se o /guildas não precisou ser lido para plano, ainda tentamos ler só o próprio doc
+      // quando necessário para confirmar dono. Não consulta coleção inteira.
+      if (!__guildData) {
+        try {
+          const gOwnerSnap = await getDoc(doc(db, "guildas", guildId));
+          if (gOwnerSnap.exists()) __guildData = gOwnerSnap.data() || {};
+        } catch (_) {}
+      }
+
       // ✅ Verificação automática de expiração (somente se vipExpiresAt existir)
-      // FIX 3: Garante que vitalício JAMAIS seja expirado/rebaixado pro FREE
+      // Se chegou em 0 dias/expirou, grava FREE de verdade em configGuilda e guildas.
+      // Vitalício JAMAIS é expirado/rebaixado.
       if (vipTier && vipTier !== 'free' && vipTier !== 'vitalicio' && vipExpiresAtMs != null && isFinite(vipExpiresAtMs)) {
-        if (Date.now() > vipExpiresAtMs) {
+        if (Date.now() >= vipExpiresAtMs) {
           vipTier = 'free';
           vipExpiresAtMs = null;
-
-          // Tenta gravar no banco (não quebra caso não tenha permissão)
-          try {
-            await setDoc(doc(db, 'configGuilda', guildId), { vipTier: 'free', vipExpiresAt: null, updatedAt: serverTimestamp() }, { merge: true });
-          } catch (_) {}
-          try {
-            await setDoc(doc(db, 'guildas', guildId), { vipTier: 'free', updatedAt: serverTimestamp() }, { merge: true });
-          } catch (_) {}
+          try { await __persistExpiredVipAsFree(guildId); } catch (_) {}
         }
       }
 
@@ -1657,30 +1928,59 @@ export function checkAuth(redirectToLogin = true) {
 
 // (VIP) Sincroniza o campo único que libera/bloqueia Admin e Líder secundário
 let __permissoesAtivas = null;
+const __planoPermiteSecundarios = __vipAllowsSecondaryAccess(vipTier, vipExpiresAtMs);
 try {
   __permissoesAtivas = await __syncPermissoesAtivasIfNeeded(guildId, __cfgData, vipTier, vipExpiresAtMs);
-  if (__permissoesAtivas == null && __cfgData && __cfgData.permissoesAtivas !== undefined) {
-    __permissoesAtivas = (__cfgData.permissoesAtivas !== false);
+
+  // Se a escrita do campo permissoesAtivas falhar por regra, ainda assim a decisão
+  // local precisa seguir o plano real. Free/expirado nunca libera secundários.
+  if (!__planoPermiteSecundarios) {
+    __permissoesAtivas = false;
+  } else if (__permissoesAtivas == null) {
+    // Plano ativo libera secundários mesmo se o campo permissoesAtivas estiver ausente/desatualizado.
+    // O campo continua sendo sincronizado quando as regras permitirem.
+    __permissoesAtivas = true;
+  }
+} catch (_) {
+  __permissoesAtivas = !!__planoPermiteSecundarios;
+}
+
+const __isOwner = __isCurrentUserGuildOwner(guildId, user, __cfgData || {}, __guildData || {});
+const __hintWasPrivileged = __isPrivilegedGuildRole(hint);
+const __roleIsPrivileged = __isPrivilegedGuildRole(role);
+
+// Se o e-mail foi removido de Admin/Líder, a própria conta rebaixa sozinha.
+// Não fazemos busca em users; só atualizamos o próprio users/{uid}.
+try {
+  if (!__isOwner && __hintWasPrivileged) {
+    const stillHasHintAccess = __emailHasAnyPrivilegedAccess(__cfgData || {}, emailLower);
+    if (!stillHasHintAccess) {
+      await __downgradeOwnUserToPlayerAfterAccessRemoval(user, guildId, 'removed-from-configGuilda');
+      await __logoutWithToast("Seu acesso a esta guilda foi removido.", guildId);
+      resolve(null);
+      return;
+    }
   }
 } catch (_) {}
 
 // (VIP) Se estiver bloqueado: derruba Admin e Líder secundário (o dono continua)
 try {
-  const ownerEmail = __cfgData?.ownerEmail ? cleanEmail(__cfgData.ownerEmail) : "";
-  const isOwner = (guildId === user.uid) || (!!ownerEmail && ownerEmail === emailLower);
   const permissoesAtivas = (__permissoesAtivas == null) ? true : !!__permissoesAtivas;
 
   if (!permissoesAtivas) {
-    const isSecondaryLeader = (role === "Líder" && !isOwner);
+    const isSecondaryLeader = (role === "Líder" && !__isOwner);
     const isAdmin = (role === "Admin");
-    if (isSecondaryLeader || isAdmin) {
-      try { showToast("error", "Conta expirada"); } catch (_) {}
-      try { await signOut(auth); } catch (_) {}
-      try { localStorage.removeItem(__GUILDCTX_LS_KEY); } catch (_) {}
-      window.location.href = "index.html";
+    if (isSecondaryLeader || isAdmin || (__hintWasPrivileged && !__isOwner)) {
+      await __logoutWithToast("Conta expirada", guildId);
       resolve(null);
       return;
     }
+  }
+} catch (_) {}
+
+try {
+  if (__roleIsPrivileged && !__isOwner) {
+    __markSecondaryAccessSessionValidated(user, guildId, emailLower);
   }
 } catch (_) {}
 
@@ -1691,14 +1991,16 @@ try {
         vipTier,
         vipExpiresAtMs,
         email: emailLower,
-        uid: user.uid
+        uid: user.uid,
+        isOwner: __isOwner === true
       };
 
       let __ceoOkForCache = false;
       try { __ceoOkForCache = await __refreshCeoStatus(emailLower); } catch (_) {}
       try {
-        setSharedGuildContextCache({ guildId, guildName, role, vipTier, vipExpiresAtMs, email: emailLower, uid: user.uid, isCeo: __ceoOkForCache });
+        setSharedGuildContextCache({ guildId, guildName, role, vipTier, vipExpiresAtMs, email: emailLower, uid: user.uid, isOwner: __isOwner === true, isCeo: __ceoOkForCache });
       } catch (_) {}
+      try { __startSecondaryAccessLiveWatch(user, __guildCtx); } catch (_) {}
       try { applyVipUiAndGates(vipTier); } catch (_) {}
       try { applyCeoNavVisibility(); } catch (_) {}
 
@@ -1726,8 +2028,16 @@ try {
       const isCampPage = path.endsWith("/camp") || path.endsWith("/camp.html") || path.includes("camp.html");
 
       if (role === "Membro") {
+        // Se users/{uid} ainda diz Admin/Líder, mas configGuilda não confirma mais,
+        // a conta já foi tratada acima como acesso removido. Não deixa seguir com cache/role antigo.
+        if (__hintWasPrivileged && !__isOwner) {
+          await __downgradeOwnUserToPlayerAfterAccessRemoval(user, guildId, 'privileged-role-not-confirmed');
+          await __logoutWithToast("Seu acesso a esta guilda foi removido.", guildId);
+          resolve(null);
+          return;
+        }
+
         // Só derruba o login quando NÃO existe vínculo em /users e o papel realmente não foi reconhecido.
-        // Isso evita logout indevido de Admin/Líder secundário.
         const hasUserLink = !!(userProfile && userProfile.guildId);
         const hint = (roleHint || "").toString().trim();
         if (!hasUserLink && (!hint || hint === "Membro")) {
@@ -1825,6 +2135,12 @@ function __ensureVipTagsIndex() {
 
 export function applyVipUiAndGates(tierRaw) {
   const tier = normalizeVipTier(tierRaw || getVipTier());
+  try {
+    if (__guildCtx) {
+      __guildCtx.vipTier = tier;
+      __scheduleSecondaryVipLogoutFromCtx(__guildCtx);
+    }
+  } catch (_) {}
 
   const vipLabel = document.getElementById("vip-label");
   if (vipLabel) {
@@ -1920,6 +2236,7 @@ export async function logout() {
     await signOut(auth);
   } finally {
     try {
+      __clearSecondaryAccessSessionValidation();
       localStorage.removeItem(__GUILDCTX_LS_KEY);
       localStorage.removeItem("membersList");
       localStorage.removeItem("dashboard_stats");

@@ -117,6 +117,15 @@
   </div>
 </div>
 
+            <div class="relative">
+              <button id="btn-lines-guild-slot" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95" title="Guilda">
+                <i data-lucide="users" class="w-4 h-4 text-emerald-500"></i>
+                <span id="lines-guild-slot-label" class="hidden sm:inline">Guilda 1</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
+              </button>
+              <div id="lines-guild-slot-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
+            </div>
+
             <button id="btn-new-line" title="Recurso PLUS" onclick="openLineModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
               <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
             </button>
@@ -215,6 +224,7 @@
     </div>
   </div>
 
+  <script type="module" src="./lines.js"></script>
   <script type="module">
 
     import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildContext } from './logic.js';
@@ -262,9 +272,32 @@
     const ctx = getGuildContext();
     if (ctx?.guildId) guildId = ctx.guildId;
 
-    const keyLines = () => guildId ? `linesList_${guildId}` : 'linesList';
-    const keyMembers = () => guildId ? `membersList_${guildId}` : 'membersList'; // mesmo cache da tela de membros
-    const keyLinesCount = () => guildId ? `linesCount_${guildId}` : 'linesCount';
+    const secondaryLines = () => window.linesSecondaryGuilds || null;
+    const keyLines = () => secondaryLines()?.keyLines?.(guildId) || (guildId ? `linesList_${guildId}` : 'linesList');
+    const keyMembers = () => secondaryLines()?.keyMembers?.(guildId) || (guildId ? `membersList_${guildId}` : 'membersList'); // mesmo cache da tela de membros
+    const keyLinesCount = () => secondaryLines()?.keyLinesCount?.(guildId) || (guildId ? `linesCount_${guildId}` : 'linesCount');
+    const currentLinesCollectionName = () => secondaryLines()?.linesCollectionName?.() || 'lines';
+    const currentMembersCollectionName = () => secondaryLines()?.membersCollectionName?.() || 'membros';
+
+    let activeMembersCacheKey = keyMembers();
+    let activeLinesCacheKey = keyLines();
+
+    function readMembersCacheForCurrentGuild() {
+      const keys = secondaryLines()?.memberCacheKeys?.(guildId) || [keyMembers()];
+      for (const key of (Array.isArray(keys) ? keys : [keyMembers()])) {
+        try {
+          const raw = key ? localStorage.getItem(key) : null;
+          if (!raw) continue;
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) return arr;
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    function writeMembersCacheForCurrentGuild(list) {
+      try { localStorage.setItem(keyMembers(), JSON.stringify(list || [])); } catch(_) {}
+    }
 
     // Controle de UI (evita salvar antes do ctx/auth resolver)
     function setUiReady(ready) {
@@ -641,11 +674,8 @@
     // ---- Cache --------------------------------------------------------------
     function loadCached() {
       try {
-        const rawM = localStorage.getItem(keyMembers());
-        if (rawM) {
-          const arr = JSON.parse(rawM);
-          if (Array.isArray(arr)) members = arr;
-        }
+        const arr = readMembersCacheForCurrentGuild();
+        if (Array.isArray(arr)) members = arr;
       } catch(_) {}
 
       if (!guildId) return;
@@ -680,11 +710,11 @@
     async function fetchMembersFromDB() {
       if (!guildId) return;
       try {
-        const snap = await getDocs(collection(db, 'guildas', guildId, 'membros'));
+        const snap = await getDocs(collection(db, 'guildas', guildId, currentMembersCollectionName()));
         const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         // mantém no mesmo cache usado na tela de membros (ajuda a seleção aqui e lá)
         members = arr;
-        try { localStorage.setItem(keyMembers(), JSON.stringify(arr)); } catch(_) {}
+        writeMembersCacheForCurrentGuild(arr);
       } catch (e) {
         console.warn('fetchMembersFromDB', e);
       }
@@ -692,7 +722,8 @@
 
     async function fetchLinesFromDB() {
       if (!guildId) return [];
-      const snap = await getDocs(collection(db, 'guildas', guildId, 'lines'));
+      const linesCollection = currentLinesCollectionName();
+      const snap = await getDocs(collection(db, 'guildas', guildId, linesCollection));
       const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
       // Migração leve: se doc antigo não tiver memberIds mas tiver members, grava memberIds (ajuda anti-duplicação)
@@ -705,7 +736,7 @@
           if (!hasMemberIds && hasMembers) {
             const ids = data.members.map(m => m?.id).filter(Boolean).map(v => String(v));
             if (ids.length) {
-              fixes.push(updateDoc(doc(db, 'guildas', guildId, 'lines', d.id), { memberIds: ids }).catch(()=>{}));
+              fixes.push(updateDoc(doc(db, 'guildas', guildId, linesCollection, d.id), { memberIds: ids }).catch(()=>{}));
             }
           }
         }
@@ -731,15 +762,23 @@
         }
         if (!guildId) return;
 
+        const nextMembersCacheKey = keyMembers();
+        const nextLinesCacheKey = keyLines();
+        if (nextMembersCacheKey !== activeMembersCacheKey) {
+          activeMembersCacheKey = nextMembersCacheKey;
+          members = [];
+        }
+        if (nextLinesCacheKey !== activeLinesCacheKey) {
+          activeLinesCacheKey = nextLinesCacheKey;
+          allLines = [];
+        }
+
         if (force) showToast('info', 'Atualizando...');
 
         // 1) sempre tenta pegar membros do cache (mesmo esquema da tela de membros)
         try {
-          const rawM = localStorage.getItem(keyMembers());
-          if (rawM) {
-            const arr = JSON.parse(rawM);
-            if (Array.isArray(arr)) members = arr;
-          }
+          const arr = readMembersCacheForCurrentGuild();
+          if (Array.isArray(arr)) members = arr;
         } catch(_) {}
 
         // no atualizar forçado, sempre recarrega membros também
@@ -926,7 +965,7 @@
       // Verificação de duplicação direto no Firestore antes de colocar na UI do modal
       try {
         const qx = query(
-          collection(db, 'guildas', guildId, 'lines'),
+          collection(db, 'guildas', guildId, currentLinesCollectionName()),
           where('memberIds', 'array-contains', String(id)),
           limit(1)
         );
@@ -1033,9 +1072,9 @@
 
         let savedId = editingLineId;
         if (editingLineId) {
-          await updateDoc(doc(db, 'guildas', guildId, 'lines', editingLineId), payload);
+          await updateDoc(doc(db, 'guildas', guildId, currentLinesCollectionName(), editingLineId), payload);
         } else {
-          const ref = await addDoc(collection(db, 'guildas', guildId, 'lines'), payload);
+          const ref = await addDoc(collection(db, 'guildas', guildId, currentLinesCollectionName()), payload);
           savedId = ref.id;
           editingLineId = ref.id;
         }
@@ -1077,7 +1116,7 @@
         }
         if (!guildId) throw new Error('Guilda não resolvida.');
 
-        await deleteDoc(doc(db, 'guildas', guildId, 'lines', editingLineId));
+        await deleteDoc(doc(db, 'guildas', guildId, currentLinesCollectionName(), editingLineId));
 
         // --- CORREÇÃO DO CACHE: Filtra e salva as referências localmente
         const before = Array.isArray(allLines) ? allLines : [];
@@ -1203,11 +1242,33 @@
     };
 
     // ---- Boot ---------------------------------------------------------------
+    window.addEventListener('lines:guild-slot-changed', async () => {
+      activeMembersCacheKey = keyMembers();
+      activeLinesCacheKey = keyLines();
+      members = [];
+      allLines = [];
+      closeLineModal();
+      const list = document.getElementById('lines-list');
+      if (list) {
+        list.innerHTML = `
+          <div class="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse flex items-center gap-3">
+            <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
+            <div class="flex-1 space-y-2">
+              <div class="h-4 bg-gray-200 rounded w-1/3"></div>
+              <div class="h-3 bg-gray-100 rounded w-1/4"></div>
+            </div>
+          </div>
+        `;
+      }
+      await loadLines(false);
+    });
+
     // Sync entre abas: se membros/lines cache mudar, essa tela atualiza sem ler Firestore
     window.addEventListener('storage', (ev) => {
       if (!guildId) return;
 
-      if (ev.key === keyMembers()) {
+      const memberKeys = secondaryLines()?.memberCacheKeys?.(guildId) || [keyMembers()];
+      if ((Array.isArray(memberKeys) ? memberKeys : [keyMembers()]).includes(ev.key)) {
         try {
           const arr = JSON.parse(ev.newValue || '[]');
           if (Array.isArray(arr)) members = arr;
