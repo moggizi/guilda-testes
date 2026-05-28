@@ -17,9 +17,9 @@
       "source": "/free_fire/api",
       "destination": "/free_fire/api.html"
     },
-    {
+   {
       "source": "/free_fire/api/info",
-      "destination": "/api/free_fire/api/info"
+      "destination": "/api/free_fire/info"
     },
     {
       "source": "/members",
