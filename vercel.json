@@ -5,52 +5,52 @@
     {
       "source": "/index/index",
       "destination": "/",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/index/index.html",
       "destination": "/",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/index.html",
       "destination": "/",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/dashboard/dashboard",
       "destination": "/dashboard",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/dashboard/dashboard.html",
       "destination": "/dashboard",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/dashboard.html",
       "destination": "/dashboard",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/membros/membros",
       "destination": "/membros",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/membros/membros.html",
       "destination": "/membros",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/membros.html",
       "destination": "/membros",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/members.html",
       "destination": "/members",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/lines/lines",
