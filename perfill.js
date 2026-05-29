@@ -10,6 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { setupSidebar, initIcons, logout, getGuildContext, showToast, auth, db } from './logic.js';
+import { readCachedSidebarProfile, cacheSidebarProfile, applyCachedSidebarProfile } from './cache.js';
 
 const qs = (id) => document.getElementById(id);
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
@@ -215,6 +216,8 @@ function waitForProfileAuth() {
         return;
       }
 
+      try { hydrateProfileFromCache(user); } catch (_) {}
+
       try {
         profileAccessContext = await resolveProfileAccessContext(user);
       } catch (error) {
@@ -229,6 +232,7 @@ function waitForProfileAuth() {
       }
 
       applyProfileSidebarContext(profileAccessContext, user);
+      try { hydrateProfileFromCache(user); } catch (_) {}
       resolve(user);
     });
   });
@@ -555,6 +559,60 @@ function setMainFormVisible(isVisible) {
 function setCreateModalVisible(isVisible) {
   els.modalCreate?.classList.toggle('hidden', !isVisible);
   els.modalCreate?.classList.toggle('flex', isVisible);
+}
+
+function hydrateProfileFromCache(user = auth.currentUser) {
+  try {
+    const cached = readCachedSidebarProfile(user);
+    if (!cached) return false;
+
+    const ctx = getProfileAccessContext();
+    const profileId = String(cached.profileId || cached.id || cached.gameIdMigrated || cached.gameId || '').trim();
+    const nick = String(cached.nick || cached.nome || cached.name || '').trim();
+    const bio = String(cached.cat || cached.bio || '').trim().slice(0, 100);
+    const foto = String(cached.foto || cached.photo || cached.avatar || '').trim();
+    const role = normalizeRoleLabel(ctx.role || cached.role || 'Membro');
+    const guildName = String(ctx.guildName || cached.guilda || cached.guildName || 'Sem guilda').trim();
+    const email = String(user?.email || ctx.email || cached.email || '').trim();
+
+    currentUserProfileId = currentUserProfileId || profileId;
+    currentProfileData = {
+      ...(currentProfileData || {}),
+      ...(cached || {}),
+      id: profileId || cached.id || currentUserProfileId || '',
+      uid: user?.uid || cached.uid || '',
+      email,
+      cat: bio,
+      bio,
+      foto
+    };
+
+    if (els.inputNick && !els.inputNick.value && nick) els.inputNick.value = nick;
+    if (els.inputBio && !els.inputBio.value && bio) {
+      els.inputBio.value = bio;
+      if (els.bioCounter) els.bioCounter.textContent = `${els.inputBio.value.length}/100`;
+    }
+
+    if (foto && !currentBase64Photo) setPhotoUI(foto);
+
+    if (els.viewGameId && (!els.viewGameId.value || els.viewGameId.value === '--') && profileId) els.viewGameId.value = profileId;
+    if (els.viewUid && (!els.viewUid.value || els.viewUid.value === '--') && user?.uid) els.viewUid.value = user.uid;
+    if (els.viewEmail && (!els.viewEmail.value || els.viewEmail.value === '--') && email) els.viewEmail.value = email;
+    if (els.viewGuild && (!els.viewGuild.value || els.viewGuild.value === '--')) els.viewGuild.value = guildName || 'Sem guilda';
+
+    if (els.viewRole) {
+      els.viewRole.textContent = role;
+      els.viewRole.className = `inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide ${getRoleStyle(role)}`;
+    }
+
+    applyCachedSidebarProfile(user);
+    setLoadingVisible(false);
+    setCreateModalVisible(false);
+    setMainFormVisible(true);
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 function resetCreateBtn() {
@@ -1086,6 +1144,19 @@ function fillProfileForm(data) {
   els.bioCounter.textContent = `${els.inputBio.value.length}/100`;
   
   setPhotoUI(data.foto || '');
+  try {
+    cacheSidebarProfile({
+      ...(data || {}),
+      id: data.id || currentUserProfileId,
+      email: data.email || auth.currentUser?.email || '',
+      foto: data.foto || '',
+      cat: data.cat || data.bio || '',
+      guildId: data.guildId || ctx.guildId || '',
+      guilda: actualGuildName,
+      role: actualRole
+    }, auth.currentUser);
+    applyCachedSidebarProfile(auth.currentUser);
+  } catch (_) {}
 
   els.viewGameId.value = data.id || currentUserProfileId || '--';
   els.viewUid.value = data.uid || '--';
@@ -1223,8 +1294,14 @@ async function handleSaveProfile(e) {
 
     currentProfileData = {
       ...(currentProfileData || {}),
+      id: currentUserProfileId,
+      email: auth.currentUser?.email || currentProfileData?.email || '',
       ...payload
     };
+    try {
+      cacheSidebarProfile(currentProfileData, auth.currentUser);
+      applyCachedSidebarProfile(auth.currentUser);
+    } catch (_) {}
 
     if (isAcceptedPartner(currentProfileData, currentMonetizeData)) {
       await setDoc(doc(db, 'monetize', currentUserProfileId), {

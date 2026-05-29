@@ -2,12 +2,10 @@ import {
   getGuildContext,
   getVipTier,
   getGuildMultiConfig,
-  getSharedCache,
-  setSharedCache,
-  readSharedJsonCache,
   showToast,
   initIcons
 } from './logic.js';
+import { getSharedCache, setSharedCache, readSharedJsonCache } from './cache.js';
 
 const MAX_GUILD_SLOTS = 4;
 const CACHE_TTL_MS = 5 * 60 * 1000;

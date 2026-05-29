@@ -321,11 +321,15 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #343634; }
 html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #464946; }
 
 .theme-toggle-wrap {
-  margin: 0 0 8px;
+  margin: 14px 0 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--theme-border);
 }
 
 .theme-toggle-wrap--sidebar {
   margin: auto 12px 12px;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .theme-toggle-btn {

@@ -22,6 +22,18 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+import {
+  cacheGet as __cacheGetGlobal,
+  cacheSet as __cacheSetGlobal,
+  cacheRemove as __cacheRemoveGlobal,
+  cacheReadJson as __cacheReadJsonGlobal,
+  cacheWriteJson as __cacheWriteJsonGlobal,
+  cacheWriteJsonStamped as __cacheWriteJsonStampedGlobal,
+  cacheIsFresh as __cacheIsFreshGlobal,
+  readCachedSidebarProfile as __readCachedSidebarProfileGlobal,
+  cacheSidebarProfile as __cacheSidebarProfileGlobal,
+  applyCachedSidebarProfile as __applyCachedSidebarProfileGlobal
+} from "./cache.js";
 
 // Firebase config
 export const firebaseConfig = {
@@ -54,7 +66,7 @@ try {
         guildId: String(cached.guildId),
         guildName: cached.guildName ? String(cached.guildName) : null,
         role: String(cached.role),
-        email: String(cached.email),
+        email: String(cached.email || cached.emailLower || ''),
         uid: String(cached.uid),
         vipTier: cached.vipTier ? String(cached.vipTier) : 'free',
         vipExpiresAtMs: (cached.vipExpiresAtMs != null ? Number(cached.vipExpiresAtMs) : null),
@@ -131,16 +143,7 @@ function __clearSecondaryAccessSessionValidation() {
 }
 
 function __cacheIsFresh(cached, ttlMs = __SETTINGS_CACHE_TTL_MS) {
-  try {
-    if (!cached) return false;
-    const ts = Number(cached.ts || 0);
-    if (!Number.isFinite(ts) || ts <= 0) return false;
-    const ttl = Number(ttlMs);
-    if (!Number.isFinite(ttl) || ttl <= 0) return false;
-    return (Date.now() - ts) < ttl;
-  } catch (_) {
-    return false;
-  }
+  return __cacheIsFreshGlobal(cached, ttlMs);
 }
 
 function __shouldUseCache(cached, options = {}) {
@@ -148,20 +151,73 @@ function __shouldUseCache(cached, options = {}) {
 }
 
 function __readJsonCache(key) {
-  try {
-    if (!key) return null;
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) || null) : null;
-  } catch (_) {
-    return null;
-  }
+  return __cacheReadJsonGlobal(key, null);
 }
 
 function __writeJsonCache(key, value = {}) {
+  __cacheWriteJsonStampedGlobal(key, value);
+}
+
+const __SIDEBAR_PROFILE_CACHE_PREFIX = 'sidebarProfile_v1_';
+
+function __sidebarProfileUid(userOrUid = null) {
+  if (typeof userOrUid === 'string') return String(userOrUid || '').trim();
+  return String(
+    userOrUid?.uid ||
+    auth.currentUser?.uid ||
+    __guildCtx?.uid ||
+    ''
+  ).trim();
+}
+
+function __sidebarProfileCacheKey(userOrUid = null) {
+  const uid = __sidebarProfileUid(userOrUid);
+  return uid ? `${__SIDEBAR_PROFILE_CACHE_PREFIX}${uid}` : '';
+}
+
+function __applySidebarAvatarPhoto(photoValue = '') {
+  const foto = String(photoValue || '').trim();
+  const hasPhoto = !!foto;
+
   try {
-    if (!key) return;
-    localStorage.setItem(key, JSON.stringify({ ...(value || {}), ts: Date.now() }));
+    document.querySelectorAll('#sidebar-avatar').forEach((img) => {
+      if (!img) return;
+      if (hasPhoto) {
+        if (img.getAttribute('src') !== foto) img.setAttribute('src', foto);
+        img.classList.remove('hidden');
+      } else {
+        img.setAttribute('src', '');
+        img.classList.add('hidden');
+      }
+    });
+
+    document.querySelectorAll('#sidebar-avatar-icon').forEach((icon) => {
+      icon?.classList.toggle('hidden', hasPhoto);
+    });
   } catch (_) {}
+}
+
+export function readCachedSidebarProfile(userOrUid = null) {
+  const uid = __sidebarProfileUid(userOrUid);
+  return uid ? __readCachedSidebarProfileGlobal(uid) : null;
+}
+
+export function cacheSidebarProfile(profile = {}, userOrUid = null) {
+  const uid = __sidebarProfileUid(userOrUid);
+  if (!uid) return null;
+  const source = profile || {};
+
+  return __cacheSidebarProfileGlobal({
+    ...source,
+    uid,
+    email: source.email || source.playerEmail || auth.currentUser?.email || '',
+    id: source.id || source.gameIdMigrated || source.gameId || source.profileId || ''
+  }, uid);
+}
+
+export function applyCachedSidebarProfile(userOrUid = null) {
+  const uid = __sidebarProfileUid(userOrUid);
+  return uid ? __applyCachedSidebarProfileGlobal(uid) : false;
 }
 
 
@@ -169,39 +225,23 @@ function __writeJsonCache(key, value = {}) {
 // Mantém um único ponto de leitura/escrita de cache para as telas novas.
 // As telas antigas continuam usando as funções já existentes neste arquivo.
 export function getSharedCache(key) {
-  try {
-    return key ? localStorage.getItem(key) : null;
-  } catch (_) {
-    return null;
-  }
+  return __cacheGetGlobal(key);
 }
 
 export function setSharedCache(key, value) {
-  try {
-    if (key) localStorage.setItem(key, value);
-  } catch (_) {}
+  __cacheSetGlobal(key, value);
 }
 
 export function removeSharedCache(key) {
-  try {
-    if (key) localStorage.removeItem(key);
-  } catch (_) {}
+  __cacheRemoveGlobal(key);
 }
 
 export function readSharedJsonCache(key, fallback = null) {
-  try {
-    const raw = getSharedCache(key);
-    return raw ? (JSON.parse(raw) || fallback) : fallback;
-  } catch (_) {
-    return fallback;
-  }
+  return __cacheReadJsonGlobal(key, fallback);
 }
 
 export function writeSharedJsonCache(key, value) {
-  try {
-    if (!key) return;
-    setSharedCache(key, JSON.stringify(value));
-  } catch (_) {}
+  __cacheWriteJsonGlobal(key, value);
 }
 
 export function isSharedCacheFresh(cached, ttlMs = __SETTINGS_CACHE_TTL_MS) {
@@ -220,7 +260,7 @@ function __roleCacheFlags(roleValue, ctx = {}) {
 
 export function getSharedGuildContextCache() {
   const cached = readSharedJsonCache(__GUILDCTX_LS_KEY, null);
-  if (cached && cached.guildId && cached.uid && cached.email && cached.role) {
+  if (cached && cached.guildId && cached.uid && (cached.email || cached.emailLower) && cached.role) {
     // Cache antigo, criado antes da correção do plano, podia salvar vipTier como free
     // mesmo quando a guilda era paga. Rejeita só esse caso para forçar 1 refresh seguro.
     if (cached.cacheVersion !== __GUILDCTX_CACHE_VERSION && (!cached.vipTier || String(cached.vipTier).toLowerCase().trim() === 'free')) {
@@ -316,6 +356,7 @@ function __applyCachedSidebarNow() {
   try {
     const roleEl = document.getElementById("user-role");
     const emailEl = document.getElementById("user-email");
+    try { applyCachedSidebarProfile(__guildCtx?.uid || auth.currentUser); } catch (_) {}
 
     if (__guildCtx) {
       if (emailEl) {
@@ -1743,6 +1784,7 @@ function __applyAuthContextFromCache(ctx, user) {
   if (emailEl) emailEl.textContent = user?.email || __guildCtx.email || "";
   const roleEl = document.getElementById("user-role");
   if (roleEl) roleEl.textContent = role;
+  try { applyCachedSidebarProfile(user || __guildCtx?.uid); } catch (_) {}
   try { applyVipUiAndGates(__guildCtx.vipTier || 'free'); } catch (_) {}
   try { __scheduleSecondaryVipLogoutFromCtx(__guildCtx); } catch (_) {}
   try { applyCeoNavVisibility(); } catch (_) {}
@@ -1793,6 +1835,10 @@ export function checkAuth(redirectToLogin = true) {
         const uSnap = await getDoc(doc(db, "users", user.uid));
         if (uSnap.exists()) {
           userProfile = uSnap.data() || {};
+          try {
+            cacheSidebarProfile(userProfile, user);
+            applyCachedSidebarProfile(user);
+          } catch (_) {}
           if (userProfile.guildId) guildId = String(userProfile.guildId);
           if (userProfile.role) roleHint = String(userProfile.role);
         }
@@ -2195,6 +2241,8 @@ export function setupSidebar() {
   const sidebar = document.getElementById("sidebar");
   const overlay = document.getElementById("sidebar-overlay");
   const btn = document.getElementById("mobile-menu-btn");
+
+  try { __applyCachedSidebarNow(); } catch (_) {}
 
   if (!sidebar || !overlay || !btn) return;
 

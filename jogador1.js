@@ -16,6 +16,7 @@ import {
   limit,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { cacheSidebarProfile } from './cache.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyC7UJxBOViZj8ELjw-Xvy645QYfDfpBzxM",
@@ -73,6 +74,16 @@ let currentUser = null;
 let currentProfileId = null;
 let currentProfile = null;
 let currentBase64Photo = '';
+
+function cacheSidebarProfileLocal(profile = {}, user = currentUser) {
+  try {
+    cacheSidebarProfile({
+      ...(profile || {}),
+      id: profile.id || profile.gameIdMigrated || profile.gameId || currentProfileId || '',
+      email: profile.email || profile.playerEmail || user?.email || ''
+    }, user);
+  } catch (_) {}
+}
 
 function initIcons() {
   try {
@@ -273,6 +284,7 @@ function fillPlayerDashboard(user, profile = {}) {
   if (els.profileStatus) els.profileStatus.textContent = 'Perfil carregado.';
 
   setPhoto(profile.foto || '');
+  cacheSidebarProfileLocal(currentProfile, user);
   initIcons();
 }
 
@@ -327,6 +339,7 @@ async function saveProfile(event) {
     };
 
     fillPlayerDashboard(currentUser, currentProfile);
+    cacheSidebarProfileLocal(currentProfile, currentUser);
     showToast('success', 'Perfil atualizado com sucesso!');
   } catch (error) {
     console.error(error);

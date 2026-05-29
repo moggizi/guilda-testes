@@ -5,7 +5,8 @@
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import { collection, getDocs, doc, getDoc, onSnapshot, setDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { getSharedCache, setSharedCache, removeSharedCache, readSharedJsonCache, writeSharedJsonCache, isSharedCacheFresh, getSharedGuildContextCache, setSharedGuildContextCache, clearSharedGuildContextCache } from './logic.js';
+    import { getSharedGuildContextCache, setSharedGuildContextCache, clearSharedGuildContextCache } from './logic.js';
+    import { getSharedCache, setSharedCache, removeSharedCache, readSharedJsonCache, writeSharedJsonCache, isSharedCacheFresh, cacheSidebarProfile, applyCachedSidebarProfile } from './cache.js';
 
     const GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
     const SETTINGS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -108,6 +109,7 @@
       try {
         const ctx = getGuildContext();
         if (!ctx?.guildId) return false;
+        try { applyCachedSidebarProfile(ctx.uid || auth.currentUser); } catch (_) {}
 
         const emailEl = document.getElementById('user-email');
         if (emailEl && (ctx.email || ctx.emailLower)) emailEl.textContent = ctx.email || ctx.emailLower || '';
@@ -487,6 +489,7 @@
           const emailLower = cleanEmail(user.email);
           const emailEl = document.getElementById('user-email');
           if (emailEl) emailEl.textContent = user.email || '';
+          try { applyCachedSidebarProfile(user); } catch (_) {}
 
           const cachedCtx = getSharedGuildContextCache();
           if (hasCompleteSidebarIdentity(cachedCtx, user)) {
@@ -527,6 +530,10 @@
             const uSnap = await getDoc(doc(db, 'users', user.uid));
             if (uSnap.exists()) {
               userProfile = uSnap.data() || {};
+              try {
+                cacheSidebarProfile(userProfile, user);
+                applyCachedSidebarProfile(user);
+              } catch (_) {}
               if (userProfile.guildId) guildId = String(userProfile.guildId);
               if (userProfile.role) roleHint = String(userProfile.role);
             }
