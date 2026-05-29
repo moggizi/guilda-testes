@@ -3,15 +3,15 @@
   "rewrites": [
     {
       "source": "/",
-      "destination": "/index.html"
+      "destination": "/index/index.html"
     },
     {
       "source": "/dashboard",
-      "destination": "/dashboard.html"
+      "destination": "/dashboard/dashboard.html"
     },
     {
       "source": "/membros",
-      "destination": "/membros.html"
+      "destination": "/membros/membros.html"
     },
     {
       "source": "/free_fire/api",
@@ -23,61 +23,61 @@
     },
     {
       "source": "/members",
-      "destination": "/membros.html"
+      "destination": "/membros/membros.html"
     },
     {
       "source": "/rec",
-      "destination": "/camp.html"
+      "destination": "/eventos/eventos.html"
     },
     {
       "source": "/recrutar",
-      "destination": "/camp.html"
+      "destination": "/recrutar/recrutar.html"
     },
     {
       "source": "/admin",
-      "destination": "/admin.html"
+      "destination": "/admin/admin.html"
     },
     {
       "source": "/jogador",
-      "destination": "/jogador.html"
+      "destination": "/jogador/jogador.html"
     },
     {
       "source": "/lines",
-      "destination": "/lines.html"
+      "destination": "/lines/lines.html"
     },
     {
       "source": "/ajustes",
-      "destination": "/ajustes.html"
+      "destination": "/ajustes/ajustes.html"
     },
     {
       "source": "/upgrade",
-      "destination": "/upgrade.html"
+      "destination": "/upgrade/upgrade.html"
     },
     {
       "source": "/chefe",
-      "destination": "/chefe.html"
+      "destination": "/chefe/chefe.html"
     },
     {
       "source": "/recrutamento",
-      "destination": "/eventos.html"
+      "destination": "/eventos/eventos.html"
     },
     {
       "source": "/stats",
-      "destination": "/stats.html"
+      "destination": "/stats/stats.html"
     },
     {
       "source": "/suporte",
-      "destination": "/suporte.html"
+      "destination": "/suporte/suporte.html"
     },
 
     {
       "source": "/painel",
-      "destination": "/painel_keys_ff_admin.html"
+      "destination": "/painel_keys_ff_admin/painel_keys_ff_admin.html"
     },
     
     {
       "source": "/perfil-guilda",
-      "destination": "/perfil-guilda.html"
+      "destination": "/perfil-guilda/perfil-guilda.html"
     }
   ]
 }

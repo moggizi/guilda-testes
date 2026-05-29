@@ -593,3 +593,48 @@ html[data-theme="light"] body.bg-darkbg :where(h1.text-white, h2.text-white, h3.
 html[data-theme="light"] body.bg-darkbg .bg-black {
   background-color: #0f172a !important;
 }
+
+.app-boot-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(16, 185, 129, 0.14), transparent 34%),
+    var(--theme-bg, #f8fafc);
+  color: var(--theme-text, #0f172a);
+  transition: opacity 0.22s ease, visibility 0.22s ease;
+}
+
+.app-boot-loader--hide {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.app-boot-loader__box {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.app-boot-loader__mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 3px solid rgba(148, 163, 184, 0.24);
+  border-top-color: var(--theme-accent, #10b981);
+  animation: appBootSpin 0.72s linear infinite;
+}
+
+.app-boot-loader__text {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--theme-muted, #64748b);
+}
+
+@keyframes appBootSpin {
+  to { transform: rotate(360deg); }
+}

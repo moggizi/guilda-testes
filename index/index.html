@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+      <script src="../theme.js"></script>
+    <script src="../app-loader.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guilda HUB - O fim da bagunça na sua Guilda</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="../style.css">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4180060434572846"
+     crossorigin="anonymous"></script>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900 font-sans">
+    
+  <div id="sidebar-overlay" class="fixed inset-0 z-40 hidden bg-black/40"></div>
+  <aside id="sidebar" class="fixed left-0 top-0 z-50 h-full w-[280px] -translate-x-full bg-white backdrop-blur border-r border-slate-200 transition-transform">
+    <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
+        <div class="leading-tight">
+          <div class="text-slate-900 font-black">Guilda • HUB</div>
+          <div class="text-xs text-slate-500">Início</div>
+        </div>
+      </div>
+      <button id="sidebar-close" class="h-10 w-10 grid place-items-center rounded-xl hover:bg-slate-100">
+        <i data-lucide="x" class="h-5 w-5 text-slate-700"></i>
+      </button>
+    </div>
+
+    <nav class="p-3 flex flex-col gap-2">
+      <a href="../index/index.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
+        <i data-lucide="home" class="h-4 w-4"></i>
+        <span class="font-semibold">Início</span>
+      </a>
+      <a href="../eventos/eventos.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
+        <i data-lucide="users-round" class="h-4 w-4"></i>
+        <span class="font-semibold">Recrutamentos</span>
+      </a>
+      <a href="../suporte/suporte.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
+        <i data-lucide="help-circle" class="h-4 w-4"></i>
+        <span class="font-semibold">Suporte</span>
+      </a>
+    </nav>
+  </aside>
+
+
+
+    <!-- Navbar -->
+    <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
+<div class="mx-auto w-full max-w-6xl px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <button id="sidebar-open" class="h-10 w-10 grid place-items-center rounded-xl bg-white ring-1 ring-slate-200 text-slate-900 shadow-sm hover:bg-slate-50">
+        <i data-lucide="menu" class="h-5 w-5 text-slate-900"></i>
+      </button>
+      <div class="leading-tight">
+        <div class="font-black text-slate-900">Guilda • HUB</div>
+        <div class="text-xs text-slate-500">Início</div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <nav class="hidden md:flex items-center gap-6">
+        <a href="../eventos/eventos.html" class="text-sm font-semibold text-slate-700 hover:text-slate-900">Recrutamento</a>
+        <a href="../suporte/suporte.html" class="text-sm font-semibold text-slate-700 hover:text-slate-900">Suporte</a>
+      </nav>
+
+      <button id="open-auth-top" type="button" class="bg-gradient-to-r from-emerald-500 to-green-500 text-white px-4 py-2 rounded-xl font-black text-sm hover:opacity-90 transition-opacity shadow-md shadow-emerald-500/20">
+        Entrar
+      </button>
+    </div>
+  </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="pt-6 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative overflow-hidden md:overflow-visible">
+        <!-- Decorative background element -->
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[500px] md:h-[500px] bg-green-400/10 blur-[100px] rounded-full pointer-events-none"></div>
+        
+       <div class="text-center relative z-10 max-w-3xl mx-auto">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold uppercase tracking-[0.18em] mb-6 border border-green-200">
+        <i data-lucide="crosshair" class="w-3 h-3"></i>
+        Feito para guildas de Free Fire
+    </div>
+            
+            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 text-slate-900">
+                O fim da bagunça na sua <span class="text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-emerald-500">Guilda.</span>
+            </h1>
+            
+            <p class="text-lg md:text-xl text-slate-600 mb-10 max-w-2xl mx-auto leading-relaxed">
+                Abandone grupos confusos e planilhas improvisadas. Um painel centralizado para organizar membros, lines, eventos e hierarquia num só lugar.
+            </p>
+            
+            <div class="flex justify-center items-center">
+                <button id="open-auth-3" type="button" class="w-full sm:w-auto bg-gradient-to-r from-green-500 to-emerald-500 text-white px-8 py-4 rounded-md font-bold text-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg shadow-green-500/30">
+                    Começar Agora <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section class="py-20 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center max-w-3xl mx-auto mb-14">
+            <h2 class="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+                Controle total nas suas mãos
+            </h2>
+            <p class="text-slate-600 text-lg">
+                Tudo o que a liderança precisa para uma gestão profissional.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-stretch">
+
+            <!-- Card 1 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="users" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Gestão de Membros</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Organize os jogadores da sua guilda, monte lines e acompanhe a situação de cada membro em um só lugar.</p>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="target" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Controle de Pontos</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Acompanhe os pontos dos membros com mais clareza, sem depender de prints, planilhas soltas ou anotações confusas.</p>
+            </div>
+
+            <!-- Card 3 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="shield-check" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Cargos e Permissões</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Defina líderes, admins e outras funções com permissões específicas para cada nível da guilda.</p>
+            </div>
+
+            <!-- Card 4 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="user-plus" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Recrutamento</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Organize o recrutamento da guilda, encontre novos membros e deixe as entradas muito mais práticas.</p>
+            </div>
+
+            <!-- Card 5 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="layers-3" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Multi-Guilda</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Gerencie várias guildas em uma única conta, com mais praticidade e sem precisar ficar trocando de painel.</p>
+            </div>
+
+            <!-- Card 6 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="bar-chart-3" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Estatísticas e Rankings</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Acompanhe gráficos semanais, compare o desempenho da semana atual com a passada e veja o ranking geral de pontos da guilda.</p>
+            </div>
+
+        </div>
+    </div>
+</section>
+    <!-- CTA Section -->
+    <section class="py-24 relative overflow-hidden bg-slate-50">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+            <h2 class="text-4xl font-bold mb-6 text-slate-900">Pronto para elevar o nível da sua Guilda?</h2>
+            <p class="text-slate-600 text-lg mb-10">
+                Junte-se a dezenas de líderes que já automatizaram a organização e focam-se apenas no que importa: <strong class="text-slate-900">vencer.</strong>
+            </p>
+            <button type="button" onclick="openAuth()" class="bg-slate-900 text-white px-10 py-4 rounded-md font-extrabold text-lg hover:bg-slate-800 transition-colors shadow-xl shadow-slate-900/10">
+                Criar Minha Guilda Grátis
+            </button>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-white py-10 border-t border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="flex justify-center items-center gap-2 mb-10">
+            <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--footer w-10 h-10">
+            <span class="text-xl font-bold tracking-wider text-slate-900">GUILDA<span class="text-green-500">HUB</span></span>
+        </div>
+
+        <div class="flex flex-row justify-center items-start gap-4 sm:gap-12 md:gap-32 text-xs sm:text-sm mb-12">
+            
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-pink-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4s1.791-4 4-4 4 1.79 4 4-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                    <span>Instagram</span>
+                </span>
+                <a href="https://instagram.com/guildahub" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
+                <a href="https://instagram.com/ottakubrasil" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
+            </div>
+
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.23-1.15 4.41-2.91 5.74-1.71 1.32-3.95 1.77-6.09 1.47-2.07-.28-3.98-1.39-5.18-3.08-1.2-1.7-1.57-3.93-1.04-5.94.49-1.89 1.74-3.53 3.44-4.48 1.78-.99 3.94-1.12 5.84-.6v4.06c-1.27-.6-2.81-.5-3.96.26-1.13.73-1.76 2.05-1.63 3.4.14 1.28.98 2.45 2.16 2.96 1.14.51 2.5.42 3.56-.23 1.05-.63 1.71-1.76 1.75-2.98.05-3.53.02-7.07.02-10.61 0-2.31 0-4.63.02-6.94z"/></svg>
+                    <span>TikTok</span>
+                </span>
+                <a href="https://tiktok.com/@guildahub" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
+                <a href="https://tiktok.com/@ottakubrasil" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
+                <a href="https://tiktok.com/@kushinaff" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@kushinaff <span class="text-slate-400 block sm:inline text-[10px] sm:text-xs leading-none mt-1 sm:mt-0">(Parceiro)</span></a>
+            </div>
+
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                    <span>WhatsApp</span>
+                </span>
+                <a href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">Grupo do WhatsApp</a>
+            </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-slate-200 text-sm text-slate-500">
+            <p class="text-center md:text-left">
+                © 2026 Guilda HUB. Todos os direitos reservados.
+            </p>
+            <div class="flex gap-4">
+                <a href="#" class="hover:text-green-500 transition-colors">Termos</a>
+                <a href="#" class="hover:text-green-500 transition-colors">Privacidade</a>
+            </div>
+        </div>
+        
+    </div>
+</footer>
+
+
+    
+
+    <!-- Auth Drawer (mantém 100% da lógica original) -->
+<div id="auth-backdrop" class="drawer-backdrop fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"></div>
+
+  <aside id="auth-drawer" class="drawer-panel fixed right-0 top-0 z-50 h-full w-full max-w-md border-l border-slate-200 bg-white shadow-2xl">
+    <div class="flex h-full flex-col">
+      <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+        
+      <div class="flex items-center gap-3">
+          <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
+          <div>
+            <div class="text-sm font-black leading-tight">Acesse Guilda • HUB</div>
+            <div class="text-xs font-medium text-slate-500">Entrar ou criar conta</div>
+          </div>
+        </div>
+
+        <button id="close-auth" type="button"
+          class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-[.98] transition"
+          aria-label="Fechar">
+          <i data-lucide="x" class="h-5 w-5 text-slate-700"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-5 py-5">
+        <!-- Login -->
+        <form id="login-form" class="flex flex-col gap-3">
+          <div>
+            <label class="text-xs font-bold text-slate-600 ml-1">Email</label>
+            <input id="email" type="email"
+              class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all"
+              placeholder="seuemail@exemplo.com" required />
+          </div>
+
+          <div>
+            <label class="text-xs font-bold text-slate-600 ml-1">Senha</label>
+            <div class="relative">
+              <input id="password" type="password"
+                class="w-full px-4 py-3 pr-24 rounded-xl border border-slate-200 outline-none text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all"
+                placeholder="••••••••" required />
+              <button type="button" data-password-toggle="password"
+                class="absolute inset-y-0 right-2 my-auto h-9 px-3 rounded-lg text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                aria-label="Mostrar senha">Mostrar</button>
+            </div>
+          </div>
+
+          <button id="btn-login" type="submit"
+            class="mt-1 w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-green-700 text-white font-bold text-sm shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95 flex items-center justify-center gap-2">
+            <span>Entrar</span>
+          </button>
+
+          <div class="text-[10px] text-slate-500 text-center leading-tight px-2">
+            Use um usuário de líder/admin (ou login de jogador).
+          </div>
+        </form>
+
+        <!-- Toggle -->
+        <div class="mt-4 flex items-center justify-center gap-2 text-sm text-slate-600">
+          <span id="login-hint">Não tem conta?</span>
+          <button id="btn-show-signup" type="button" class="font-semibold text-emerald-700 hover:underline">Criar conta</button>
+          <button id="btn-show-login" type="button" class="hidden font-semibold text-emerald-700 hover:underline">Voltar para Login</button>
+        </div>
+
+        <!-- Signup -->
+        <form id="signup-form" class="hidden mt-6 space-y-4">
+          <div class="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-sm font-black text-slate-900">Você é dono de guilda?</p>
+                <p id="signup-mode-desc" class="mt-1 text-xs font-medium leading-relaxed text-slate-500">
+                  Ative se você vai criar e administrar uma guilda na plataforma.
+                </p>
+              </div>
+
+              <label class="relative inline-flex cursor-pointer items-center pt-1">
+                <input id="signup-is-owner" type="checkbox" class="peer sr-only" checked>
+                <span class="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-emerald-500 after:absolute after:left-0.5 after:top-1.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5"></span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-gameid">ID do usuário</label>
+            <input id="signup-gameid" type="text" inputmode="numeric" required
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+              placeholder="Ex: 123456789" />
+            <p class="mt-1 text-xs font-semibold text-amber-600">
+              Importante: coloque o ID do seu usuário/personagem. NÃO coloque o ID da guilda.
+            </p>
+          </div>
+
+          <div id="signup-guild-wrap">
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-guild-name">Nome da guilda</label>
+            <input id="signup-guild-name" type="text" required
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+              placeholder="Ex: Ottakubrasil" />
+            <p class="mt-1 text-xs text-slate-500">Esse nome identifica sua guilda no painel.</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-nick">Nome/Nick</label>
+            <input id="signup-nick" type="text" required maxlength="30"
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+              placeholder="Ex: moggizi" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-email">Email</label>
+            <input id="signup-email" type="email" required inputmode="email" autocomplete="email"
+              pattern="^[a-zA-Z0-9._%+-]+@(gmail\.com|yahoo\.com)$"
+              title="Use apenas e-mail @gmail.com ou @yahoo.com"
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+              placeholder="seuemail@gmail.com" />
+            <p class="mt-1 text-xs text-slate-500">Permitido apenas @gmail.com ou @yahoo.com.</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-password">Senha</label>
+            <div class="relative">
+              <input id="signup-password" type="password" required minlength="6"
+                pattern="[A-Za-z0-9?.!#@_]{6,}"
+                title="Mínimo 6 caracteres. Sem espaços. Permitido: letras, números e ? . ! # @ _"
+                class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-24 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                placeholder="mínimo 6 caracteres" />
+              <button type="button" data-password-toggle="signup-password"
+                class="absolute inset-y-0 right-2 my-auto h-9 px-3 rounded-lg text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                aria-label="Mostrar senha">Mostrar</button>
+            </div>
+            <p class="mt-1 text-xs text-slate-500">Mínimo 6 caracteres. Sem espaços. Permitido: letras, números e ? . ! # @ _.</p>
+          </div>
+
+          <button id="btn-signup" type="submit"
+            class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 active:scale-[.98] transition">
+            <span>Criar conta</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Toast -->
+  <div id="toast-container" class="fixed top-5 right-5 z-[60] flex flex-col gap-2"></div>
+
+<!-- Scripts -->
+<script type="module" src="./index.js"></script>
+</body>
+</html>

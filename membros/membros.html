@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+    <script src="../theme.js"></script>
+    <script src="../app-loader.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Membros - Guild Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../style.css" />
+
+  <style>
+    /* switch */
+    .switch{position:relative;display:inline-block;width:46px;height:26px}
+    .switch input{opacity:0;width:0;height:0}
+    .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#e5e7eb;transition:.2s;border-radius:999px}
+    .slider:before{position:absolute;content:"";height:20px;width:20px;left:3px;bottom:3px;background:white;transition:.2s;border-radius:999px;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+    .switch input:checked + .slider{background:#10b981}
+    .switch input:focus + .slider{box-shadow:0 0 0 4px rgba(16,185,129,.18)}
+    .switch input:checked + .slider:before{transform:translateX(20px)}
+  
+    /* playMode picker (check-circle, multi select) */
+    .pm-wrap{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+    .pm-option{display:flex;align-items:center;gap:.55rem;padding:.75rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;transition:.15s;font-size:.875rem;color:#374151}
+    .pm-option:hover{background:#f9fafb}
+    .pm-circle{width:18px;height:18px;border-radius:999px;border:2px solid #d1d5db;display:inline-block;position:relative;flex:0 0 auto;transition:.2s;}
+    .pm-option.pm-selected{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12); background-color: #ecfdf5;}
+    .pm-option.pm-selected .pm-circle{border-color:#10b981;background:#10b981}
+    .pm-option.pm-selected .pm-circle:after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(45deg)}
+
+    /* playMode counter dropdown */
+    .counter-option{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.85rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;transition:.15s;text-align:left}
+    .counter-option:hover{background:#f9fafb}
+    .counter-option.counter-active{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12);background:#ecfdf5}
+    .counter-option-label{font-size:.875rem;font-weight:600;color:#374151}
+    .counter-option-count{min-width:2.2rem;padding:.25rem .55rem;border-radius:999px;background:#f3f4f6;color:#6b7280;font-size:.75rem;font-weight:700;text-align:center}
+    .counter-option.counter-active .counter-option-count{background:#10b981;color:#fff}
+
+    /* melhora toque dos botões de filtro no mobile */
+    #btn-guild-slot,
+    #btn-playmode-counter,
+    #btn-goal-met-filter,
+    #btn-filter{
+      min-height:48px;
+      touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;
+      position:relative;
+      z-index:1;
+    }
+    #btn-guild-slot *,
+    #btn-playmode-counter *,
+    #btn-goal-met-filter *,
+    #btn-filter *{
+      pointer-events:none;
+    }
+    @media (max-width: 640px){
+      #btn-guild-slot,
+      #btn-playmode-counter,
+      #btn-goal-met-filter,
+      #btn-filter{
+        flex:1 1 calc(50% - .25rem);
+        justify-content:center;
+        padding-left:.75rem;
+        padding-right:.75rem;
+      }
+      #guild-slot-label,
+      #playmode-filter-label,
+      #goal-met-filter-label,
+      #filter-label{
+        display:none !important;
+      }
+    }
+
+    /* advertência do membro */
+    .member-warning-card{
+      border-color:#f59e0b !important;
+      background:linear-gradient(135deg,#fff7ed 0%,#ffffff 55%,#fef2f2 100%);
+      box-shadow:0 8px 24px rgba(245,158,11,.10);
+    }
+    .member-warning-avatar{
+      background:linear-gradient(135deg,#f59e0b,#ef4444) !important;
+    }
+    .warning-reason-box{
+      background:linear-gradient(135deg,#fffbeb 0%,#fff7ed 100%);
+      border:1px solid #fcd34d;
+    }
+    .warning-preset-button{
+      width:100%;
+      min-height:48px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:.75rem;
+      padding:.75rem 1rem;
+      border-radius:14px;
+      border:1px solid #e5e7eb;
+      background:#fff;
+      color:#374151;
+      font-size:.875rem;
+      font-weight:600;
+      text-align:left;
+      transition:.15s;
+      box-shadow:0 1px 2px rgba(15,23,42,.04);
+      touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .warning-preset-button:hover{background:#fffbeb;border-color:#fcd34d}
+    .warning-preset-button:focus{outline:none;border-color:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.14)}
+    .warning-preset-button *{pointer-events:none}
+    .warning-preset-menu{
+      position:absolute;
+      left:0;
+      right:0;
+      top:calc(100% + .5rem);
+      z-index:80;
+      padding:.5rem;
+      border-radius:18px;
+      border:1px solid #fed7aa;
+      background:#fff;
+      box-shadow:0 18px 50px rgba(15,23,42,.16);
+      max-height:260px;
+      overflow-y:auto;
+    }
+    .warning-preset-option{
+      width:100%;
+      display:flex;
+      align-items:center;
+      gap:.65rem;
+      padding:.78rem .85rem;
+      border-radius:14px;
+      color:#374151;
+      font-size:.875rem;
+      font-weight:600;
+      text-align:left;
+      transition:.15s;
+    }
+    .warning-preset-option:hover{background:#fffbeb;color:#92400e}
+    .warning-preset-option.warning-preset-active{background:#fff7ed;color:#b45309;box-shadow:inset 0 0 0 1px #fed7aa}
+    .warning-preset-option-icon{
+      width:1.75rem;
+      height:1.75rem;
+      border-radius:999px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      background:#fffbeb;
+      border:1px solid #fde68a;
+      flex:0 0 auto;
+    }
+
+    /* Quick Edit specific fixes */
+    .animate-in { animation: fadeIn 0.2s ease-out forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .zoom-in-95 { animation: zoomIn 0.2s ease-out forwards; }
+    @keyframes zoomIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+  </style>
+</head>
+<body class="bg-gray-50/80">
+
+  <div class="flex min-h-screen">
+    <!-- Menu Mobile Overlay -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
+
+    <!-- Sidebar -->
+  <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
+  <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+    <div class="flex items-center gap-3">
+      <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
+      <div>
+        <h1 class="font-bold text-gray-900 text-lg">Guilda e eventos</h1>
+        <p class="text-xs text-gray-400">Menu</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
+    <a href="../dashboard/dashboard.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="house" class="w-5 h-5"></i> Painel
+    </a>
+
+    <a href="../perfil-guilda/perfil-guilda.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Estatísticas
+    </a>
+
+    <a href="../membros/membros.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
+      <i data-lucide="users" class="w-5 h-5"></i> Membros
+    </a>
+
+    <a href="../lines/lines.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="layers" class="w-5 h-5"></i> Lines /Equipe
+    </a>
+
+    <a href="../ajustes/ajustes.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
+    </a>
+
+    <a href="../upgrade/upgrade.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="sparkles" class="w-5 h-5"></i> Assinatura
+    </a>
+
+    <a href="../recrutar/recrutar.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
+    </a>
+
+    <a href="../admin/admin.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="settings" class="w-5 h-5"></i> Admin
+    </a>
+
+     <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
+    </a>
+
+    <a id="nav-chefe" href="../chefe/chefe.html" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="crown" class="w-5 h-5"></i> Chefe
+    </a>
+  </nav>
+
+  <div class="shrink-0 p-4 border-t border-gray-100 bg-white">
+    <a href="../perfil/perfil.html" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50 hover:bg-emerald-100 transition-colors">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-emerald-200/50 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden border border-emerald-300">
+          <img id="sidebar-avatar" src="" alt="" class="w-full h-full object-cover hidden">
+          <i id="sidebar-avatar-icon" data-lucide="user" class="w-4 h-4"></i>
+        </div>
+
+        <div>
+          <p id="user-role" class="text-sm font-bold">Meu Perfil</p>
+          <p id="user-email" class="text-[10px] opacity-80 truncate w-28">Configurações</p>
+        </div>
+      </div>
+    </a>
+
+    <button id="btn-logout" class="w-full mt-2 flex items-center justify-center gap-2 py-2 text-sm font-semibold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+      <i data-lucide="log-out" class="w-4 h-4"></i> Sair
+    </button>
+  </div>
+</aside>
+
+<!-- Conteúdo -->
+<main class="flex-1 min-w-0 relative lg:ml-72">
+      <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
+<div class="flex items-center gap-3 px-4 py-3 sm:px-6">
+          <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500"><i data-lucide="menu" class="w-5 h-5"></i></button>
+          <h1 class="text-lg font-semibold text-gray-900">Membros</h1>
+        </div>
+      </header>
+
+      <div class="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
+        
+        <!-- Cabeçalho com Filtros e Botão Adicionar -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div><h2 class="text-2xl font-bold text-gray-900">Membros</h2><p class="text-gray-500 text-sm mt-1" id="member-count">Carregando...</p></div>
+          
+          <div class="flex flex-wrap items-center justify-end gap-2 relative w-full sm:w-auto">
+            
+            <!-- Seletor de Guilda -->
+            <div class="relative">
+              <button id="btn-guild-slot" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+                <i data-lucide="users" class="w-4 h-4 text-emerald-500"></i>
+                <span id="guild-slot-label" class="hidden sm:inline">Guilda 1</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
+              </button>
+              <div id="guild-slot-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
+            </div>
+
+            <!-- Contador/Filtro por Função -->
+            <div class="relative">
+              <button id="btn-playmode-counter" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+                <i data-lucide="shield" class="w-4 h-4 text-emerald-500"></i>
+                <span id="playmode-filter-label" class="hidden sm:inline">Função</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
+              </button>
+              <div id="playmode-counter-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
+            </div>
+
+            <!-- Filtro por meta cumprida na modalidade -->
+            <div class="relative">
+              <button id="btn-goal-met-filter" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+                <i data-lucide="check-check" class="w-4 h-4 text-emerald-500"></i>
+                <span id="goal-met-filter-label" class="hidden sm:inline">Meta cumprida</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
+              </button>
+              <div id="goal-met-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
+            </div>
+
+            <!-- Botão Edição Rápida Novo -->
+            <button onclick="openQuickEditModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+              <i data-lucide="zap" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Edição Rápida</span>
+            </button>
+
+            <!-- Botão Ler Prints -->
+            <button id="btn-print-scanner" onclick="openPrintModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95">
+              <i data-lucide="scan-line" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Ler Prints</span>
+            </button>
+
+            <!-- Dropdown Filtro Avançado -->
+            <div class="relative">
+              <button id="btn-filter" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
+                <i data-lucide="filter" class="w-4 h-4"></i> <span class="hidden sm:inline" id="filter-label">Todos</span>
+              </button>
+              
+              <!-- Menu de Opções (Painel Completo) -->
+              <div id="filter-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-4 transform origin-top-right transition-all">
+                
+                <button onclick="applyFilter('all', 'Todos')" class="w-full text-left px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 rounded-xl transition-colors mb-3">
+                  Exibir Todos
+                </button>
+
+                <!-- Filtro Tag -->
+                <div class="mb-3">
+                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Tag</p>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button onclick="applyFilter('with-tag', 'Com Tag')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-tag">
+                      <span class="pm-circle scale-[0.85]"></span> Com Tag
+                    </button>
+                    <button onclick="applyFilter('no-tag', 'Sem Tag')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-tag">
+                      <span class="pm-circle scale-[0.85]"></span> Sem Tag
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Filtro GG -->
+                <div class="mb-3">
+                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Guerra (GG)</p>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button onclick="applyFilter('with-gg', 'GG Batida')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-gg">
+                      <span class="pm-circle scale-[0.85]"></span> Bateu
+                    </button>
+                    <button onclick="applyFilter('no-gg', 'Faltou GG')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-gg">
+                      <span class="pm-circle scale-[0.85]"></span> Faltou
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Filtro Semanal -->
+                <div class="mb-3">
+                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Semanal (honra)</p>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button onclick="applyFilter('with-weekly', 'Semanal Batida')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-weekly">
+                      <span class="pm-circle scale-[0.85]"></span> Bateu
+                    </button>
+                    <button onclick="applyFilter('no-weekly', 'Faltou Semanal')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-weekly">
+                      <span class="pm-circle scale-[0.85]"></span> Faltou
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Filtro Todas as Metas -->
+                <div class="pt-2 border-t border-gray-100">
+                  <button onclick="applyFilter('all-met', 'Metas Batidas')" class="w-full px-3 py-2.5 text-sm font-bold text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors flex items-center justify-center gap-2">
+                    <i data-lucide="check-check" class="w-4 h-4"></i> Todas as Metas
+                  </button>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Botão Adicionar Original -->
+            <button onclick="openModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
+              <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <div class="flex-1 relative">
+            <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+            <input type="text" id="search-input" placeholder="Buscar por nick ou ID..." class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm transition-all bg-white">
+          </div>
+          <button onclick="loadMembers(true)" class="flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 hover:bg-gray-50 transition-colors" title="Atualizar">↻</button>
+        </div>
+
+        <div id="members-list" class="space-y-3">
+          <!-- Placeholder de carregamento -->
+           <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
+              <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
+              <div class="flex-1 space-y-2">
+                 <div class="h-4 bg-gray-200 rounded w-1/3"></div>
+                 <div class="h-3 bg-gray-100 rounded w-1/4"></div>
+              </div>
+           </div>
+           <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
+              <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
+              <div class="flex-1 space-y-2">
+                 <div class="h-4 bg-gray-200 rounded w-1/3"></div>
+                 <div class="h-3 bg-gray-100 rounded w-1/4"></div>
+              </div>
+           </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL (Adicionar/Editar Original) -->
+  <div id="modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closeModal()"></div>
+    <div class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in">
+      <div class="sticky top-0 bg-white border-b border-gray-100 p-4 flex items-center justify-between rounded-t-2xl z-10">
+        <h3 id="modal-title" class="text-lg font-bold text-gray-900">Novo Membro</h3>
+        <button onclick="closeModal()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+    <form id="member-form" class="p-5 space-y-5">
+        <input type="hidden" id="member-id">
+        <input type="hidden" id="join-date">
+        
+        <div>
+          <label class="text-sm font-medium text-gray-700 mb-1 block">ID do Jogador *</label>
+          <div class="flex gap-2">
+            <input id="visible-id" type="text" placeholder="Ex: 123456789" class="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" required>
+            <button type="button" onclick="fetchNick()" class="flex items-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all">
+              <i data-lucide="search" class="w-4 h-4"></i> Buscar
+            </button>
+          </div>
+          <div id="api-feedback" class="mt-2 text-xs"></div>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium text-gray-700 mb-1 block">Nick *</label>
+          <input id="nick" type="text" placeholder="Nome do jogador" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" required>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium text-gray-700 mb-1 block">WhatsApp</label>
+          <input id="whatsapp" type="text" placeholder="11999999999" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm">
+        </div>
+
+        <div class="mt-6">
+          <p class="text-sm font-semibold text-gray-900">Modo de jogo</p>
+          <input type="hidden" id="play-mode" value="" />
+
+          <div id="playmode-wrap" class="pm-wrap mt-3">
+            <button type="button" class="pm-option" data-value="Rush">
+              <span class="pm-circle" aria-hidden="true"></span>
+              <span>Rush</span>
+            </button>
+            <button type="button" class="pm-option" data-value="Full Gás">
+              <span class="pm-circle" aria-hidden="true"></span>
+              <span>Full Gás</span>
+            </button>
+            <button type="button" class="pm-option" data-value="Curandeiro">
+              <span class="pm-circle" aria-hidden="true"></span>
+              <span>Curandeiro</span>
+            </button>
+            <button type="button" class="pm-option" data-value="Fuzileiro">
+              <span class="pm-circle" aria-hidden="true"></span>
+              <span>Fuzileiro</span>
+            </button>
+            <button type="button" class="pm-option" data-value="Suporte">
+              <span class="pm-circle" aria-hidden="true"></span>
+              <span>Suporte</span>
+            </button>
+          </div>
+        </div>
+
+        <hr class="border-gray-100">
+
+        <!-- Toggles -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="text-sm font-medium text-gray-700">Guerra de Guilda</label>
+            <label class="switch"><input type="checkbox" id="guild-war"><span class="slider"></span></label>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Meta da Guerra</label>
+            <input id="guild-war-meta" type="number" value="0" class="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none text-sm">
+          </div>
+        </div>
+
+        <hr class="border-gray-100">
+
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="text-sm font-medium text-gray-700">Meta Semanal</label>
+            <label class="switch"><input type="checkbox" id="weekly-meta"><span class="slider"></span></label>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Valor da Meta</label>
+            <input id="weekly-meta-value" type="number" value="0" class="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none text-sm">
+          </div>
+        </div>
+
+        <hr class="border-gray-100">
+
+        <div class="flex items-center justify-between">
+          <label class="text-sm font-medium text-gray-700">Tem Tag</label>
+          <label class="switch">
+            <input type="checkbox" id="has-tag">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="sticky bottom-0 bg-white border-t border-gray-100 pt-4 flex gap-3">
+          <button type="button" onclick="closeModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm hover:bg-gray-50">Cancelar</button>
+          <button type="submit" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-medium text-sm shadow-lg hover:shadow-xl">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL DE EDIÇÃO RÁPIDA -->
+  <div id="quick-edit-modal" class="fixed inset-0 z-[55] flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closeQuickEditModal()"></div>
+    <div class="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl animate-in">
+      
+      <!-- Header -->
+      <div class="bg-white border-b border-gray-100 p-4 flex flex-col gap-4 rounded-t-2xl z-10 shrink-0">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <i data-lucide="zap" class="w-4 h-4 text-emerald-600"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900">Edição Rápida</h3>
+          </div>
+          <button onclick="closeQuickEditModal()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+        
+        <!-- Botões de Zerar Tudo -->
+        <div class="flex gap-2">
+          <button onclick="promptZero('gg')" class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-xs transition-colors">
+            <i data-lucide="swords" class="w-3.5 h-3.5"></i> Zerar GG
+          </button>
+          <button onclick="promptZero('semanal')" class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-xs transition-colors">
+            <i data-lucide="target" class="w-3.5 h-3.5"></i> Zerar Semanal
+          </button>
+        </div>
+      </div>
+
+      <!-- Lista de Membros para Edição Rápida -->
+      <div class="p-4 overflow-y-auto flex-1 bg-gray-50/50">
+        <div id="qe-members-list" class="space-y-2">
+          <!-- Gerado via JS -->
+        </div>
+      </div>
+
+      <!-- Footer / Botão Salvar (Oculto inicialmente) -->
+      <div class="bg-white border-t border-gray-100 p-4 shrink-0 rounded-b-2xl">
+        <button id="qe-save-btn" onclick="saveQuickEdits()" class="hidden w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold text-sm shadow-lg hover:shadow-xl transition-all">
+          Salvar Alterações
+        </button>
+        <p id="qe-info-text" class="text-center text-xs text-gray-400 font-medium">Selecione as opções acima para habilitar o salvamento.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL DE LEITURA DE PRINTS -->
+  <div id="print-modal" class="fixed inset-0 z-[55] flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closePrintModal()"></div>
+    <div class="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl animate-in">
+
+      <div class="bg-white border-b border-gray-100 p-4 flex flex-col gap-4 rounded-t-2xl z-10 shrink-0">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <i data-lucide="scan-line" class="w-4 h-4 text-emerald-600"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900">Sincronizar por Print</h3>
+          </div>
+          <button onclick="closePrintModal()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+
+        <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-emerald-200 rounded-2xl bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer transition-colors">
+          <div class="flex flex-col items-center justify-center pt-5 pb-6">
+            <i data-lucide="upload-cloud" class="w-8 h-8 mb-2 text-emerald-500"></i>
+            <p class="mb-1 text-sm text-gray-700"><span class="font-semibold">Clique para enviar</span> os prints</p>
+            <p class="text-xs text-gray-400">PNG, JPG ou WEBP • máximo 6 por vez</p>
+          </div>
+          <input id="upload-prints" type="file" class="hidden" accept="image/*" multiple>
+        </label>
+        <p id="print-status" class="text-xs text-center text-gray-500">Selecione os prints para começar a leitura.</p>
+      </div>
+
+      <div class="p-4 overflow-y-auto flex-1 bg-gray-50/50">
+        <div id="print-results" class="space-y-2"></div>
+      </div>
+
+      <div class="bg-white border-t border-gray-100 p-4 rounded-b-2xl">
+        <button id="btn-save-prints" class="hidden w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold text-sm shadow-lg shadow-emerald-200 hover:shadow-xl transition-all active:scale-95">
+          Confirmar e Salvar Pontuações
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- MODAL DE AVISO DO PLANO PARA LEITURA DE PRINTS -->
+  <div id="print-upgrade-modal" class="fixed inset-0 z-[56] flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closePrintUpgradeModal()"></div>
+    <div class="relative bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-2xl p-6 m-0 sm:m-4 zoom-in-95">
+      <button type="button" onclick="closePrintUpgradeModal()" class="absolute right-4 top-4 p-2 rounded-xl hover:bg-gray-100 text-gray-400">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <div class="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
+        <i data-lucide="scan-line" class="w-7 h-7 text-emerald-600"></i>
+      </div>
+
+      <h3 class="text-xl font-bold text-gray-900 pr-8">Leitura de prints disponível no PRO</h3>
+      <p class="mt-2 text-sm text-gray-500 leading-relaxed">
+        O recurso de sincronizar membros por print está disponível apenas para o plano
+        <span class="font-bold text-gray-700">PRO ou superior</span>.
+      </p>
+
+      <div class="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+        <p class="text-sm text-gray-700 leading-relaxed">
+          Para liberar a leitura automática por Gemini, assine um plano.
+        </p>
+        <a href="https://guildahub.online/upgrade" class="mt-3 inline-flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black shadow-lg shadow-emerald-200 transition-all active:scale-95">
+          CLIQUE AQUI
+          <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+        </a>
+      </div>
+
+      <button type="button" onclick="closePrintUpgradeModal()" class="mt-4 w-full py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">
+        Agora não
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL DE CONFIRMAÇÃO (Para Zerar) -->
+  <div id="confirm-modal" class="fixed inset-0 z-[60] flex items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeConfirmModal()"></div>
+    <div class="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
+      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4 mx-auto">
+        <i data-lucide="alert-triangle" class="w-7 h-7 text-red-600"></i>
+      </div>
+      <h3 id="confirm-title" class="text-xl font-bold text-center text-gray-900 mb-2">Zerar Metas?</h3>
+      <p id="confirm-desc" class="text-sm text-center text-gray-500 mb-6 leading-relaxed">Isso irá redefinir todos os pontos para 0 e marcar como incompleto para TODOS os membros.</p>
+      <div class="flex gap-3">
+        <button onclick="closeConfirmModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
+        <button onclick="executeZero()" class="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-lg shadow-red-200 transition-all active:scale-95">Sim, Zerar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE CONFIRMAÇÃO (Para Excluir Membro) -->
+  <div id="delete-confirm-modal" class="fixed inset-0 z-[61] flex items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeleteConfirmModal()"></div>
+    <div class="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
+      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4 mx-auto">
+        <i data-lucide="trash-2" class="w-7 h-7 text-red-600"></i>
+      </div>
+      <h3 class="text-xl font-bold text-center text-gray-900 mb-2">Excluir membro?</h3>
+      <p class="text-sm text-center text-gray-500 mb-6 leading-relaxed">Essa ação irá remover este membro da guilda.<br><br><span class="text-red-500 font-bold">Atenção: É irreversível.</span></p>
+      <div class="flex gap-3">
+        <button type="button" onclick="closeDeleteConfirmModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
+        <button type="button" onclick="executeDeleteMember()" class="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-lg shadow-red-200 transition-all active:scale-95">Sim, Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE MOVER MEMBRO -->
+  <div id="move-member-modal" class="fixed inset-0 z-[62] flex items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeMoveMemberModal()"></div>
+    <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
+      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-emerald-100 mb-4 mx-auto">
+        <i data-lucide="arrow-right-left" class="w-7 h-7 text-emerald-600"></i>
+      </div>
+      <h3 class="text-xl font-bold text-center text-gray-900 mb-2">Mover membro</h3>
+      <p id="move-member-desc" class="text-sm text-center text-gray-500 mb-5 leading-relaxed">Escolha para qual guilda este membro deve ser movido.</p>
+      <div id="move-member-options" class="space-y-2 mb-6"></div>
+      <div class="flex gap-3">
+        <button type="button" onclick="closeMoveMemberModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
+        <button type="button" id="btn-confirm-move-member" onclick="executeMoveMember()" class="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-200 transition-all active:scale-95">Mover</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE ADVERTÊNCIA -->
+  <div id="warning-member-modal" class="fixed inset-0 z-[63] flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeWarningMemberModal()"></div>
+    <div class="relative bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 m-0 sm:m-4 zoom-in-95">
+      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 mb-4 mx-auto">
+        <i data-lucide="triangle-alert" class="w-7 h-7 text-amber-600"></i>
+      </div>
+      <h3 id="warning-member-title" class="text-xl font-bold text-center text-gray-900 mb-2">Advertir membro</h3>
+      <p id="warning-member-desc" class="text-sm text-center text-gray-500 mb-5 leading-relaxed">Escolha um motivo ou escreva manualmente.</p>
+
+      <div class="space-y-4">
+        <div class="relative">
+          <label class="text-sm font-semibold text-gray-700 mb-1 block">Motivo rápido</label>
+          <input type="hidden" id="warning-preset" value="">
+          <button id="warning-preset-btn" type="button" class="warning-preset-button" aria-expanded="false" aria-controls="warning-preset-menu">
+            <span id="warning-preset-label" class="truncate">Selecionar motivo</span>
+            <i data-lucide="chevron-down" class="w-4 h-4 text-amber-500 shrink-0"></i>
+          </button>
+          <div id="warning-preset-menu" class="warning-preset-menu hidden">
+            <button type="button" class="warning-preset-option" data-warning-preset="">
+              <span class="warning-preset-option-icon">✍️</span>
+              <span>Escrever manualmente</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="Acabou a luz (de novo)">
+              <span class="warning-preset-option-icon">💡</span>
+              <span>Acabou a luz (de novo)</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="O tataravô faleceu">
+              <span class="warning-preset-option-icon">🪦</span>
+              <span>O tataravô faleceu</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="O peixe teve que ir ao hospital">
+              <span class="warning-preset-option-icon">🐟</span>
+              <span>O peixe teve que ir ao hospital</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="A internet caiu bem na hora">
+              <span class="warning-preset-option-icon">📶</span>
+              <span>A internet caiu bem na hora</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="Foi comprar pão e desapareceu">
+              <span class="warning-preset-option-icon">🥖</span>
+              <span>Foi comprar pão e desapareceu</span>
+            </button>
+            <button type="button" class="warning-preset-option" data-warning-preset="Dormiu no lobby">
+              <span class="warning-preset-option-icon">😴</span>
+              <span>Dormiu no lobby</span>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-sm font-semibold text-gray-700 mb-1 block">Motivo da advertência</label>
+          <textarea id="warning-reason" rows="4" maxlength="500" placeholder="Escreva o motivo..." class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none text-sm resize-none"></textarea>
+          <p class="mt-1 text-[11px] text-gray-400">Esse motivo fica salvo no próprio documento do membro.</p>
+        </div>
+      </div>
+
+      <div class="flex gap-3 mt-6">
+        <button type="button" onclick="closeWarningMemberModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
+        <button type="button" id="btn-remove-warning" onclick="removeMemberWarning()" class="hidden flex-1 py-3 rounded-xl border border-red-200 bg-red-50 text-red-600 font-bold text-sm hover:bg-red-100 transition-colors">Remover</button>
+        <button type="button" id="btn-save-warning" onclick="saveMemberWarning()" class="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-lg shadow-amber-200 transition-all active:scale-95">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./membros.js"></script>
+
+  <!-- OTK Footer -->
+  <footer class="bg-white py-10 border-t border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="flex justify-center items-center gap-2 mb-10">
+            <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--footer w-10 h-10">
+            <span class="text-xl font-bold tracking-wider text-slate-900">GUILDA<span class="text-green-500">HUB</span></span>
+        </div>
+
+        <div class="flex flex-row justify-center items-start gap-4 sm:gap-12 md:gap-32 text-xs sm:text-sm mb-12">
+            
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-pink-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4s1.791-4 4-4 4 1.79 4 4-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                    <span>Instagram</span>
+                </span>
+                <a href="https://instagram.com/guildahub" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
+                <a href="https://instagram.com/ottakubrasil" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
+            </div>
+
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.23-1.15 4.41-2.91 5.74-1.71 1.32-3.95 1.77-6.09 1.47-2.07-.28-3.98-1.39-5.18-3.08-1.2-1.7-1.57-3.93-1.04-5.94.49-1.89 1.74-3.53 3.44-4.48 1.78-.99 3.94-1.12 5.84-.6v4.06c-1.27-.6-2.81-.5-3.96.26-1.13.73-1.76 2.05-1.63 3.4.14 1.28.98 2.45 2.16 2.96 1.14.51 2.5.42 3.56-.23 1.05-.63 1.71-1.76 1.75-2.98.05-3.53.02-7.07.02-10.61 0-2.31 0-4.63.02-6.94z"/></svg>
+                    <span>TikTok</span>
+                </span>
+                <a href="https://tiktok.com/@guildahub" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
+                <a href="https://tiktok.com/@ottakubrasil" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
+                <a href="https://tiktok.com/@kushinaff" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">@kushinaff <span class="text-slate-400 block sm:inline text-[10px] sm:text-xs leading-none mt-1 sm:mt-0">(Parceiro)</span></a>
+            </div>
+
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+                <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                    <span>WhatsApp</span>
+                </span>
+                <a href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" class="text-slate-500 hover:text-green-500 transition-colors">Grupo do WhatsApp</a>
+            </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-slate-200 text-sm text-slate-500">
+            <p class="text-center md:text-left">
+                © 2026 Guilda HUB. Todos os direitos reservados.
+            </p>
+            <div class="flex gap-4">
+                <a href="#" class="hover:text-green-500 transition-colors">Termos</a>
+                <a href="#" class="hover:text-green-500 transition-colors">Privacidade</a>
+            </div>
+        </div>
+        
+    </div>
+</footer>
+
+</body>
+</html>

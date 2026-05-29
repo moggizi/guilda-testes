@@ -1,0 +1,1139 @@
+import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildContext } from '../logic.js';
+    import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, addDoc, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    setupSidebar();
+    initIcons();
+
+    // VIP (usa cache instantâneo; o tempo real fica no logic.js para o menu)
+    try {
+      const rawCtx = localStorage.getItem('guildCtx_cache_v1');
+      const c = rawCtx ? JSON.parse(rawCtx) : null;
+      applyVip(c?.vipTier);
+    } catch(_) {}
+
+    function tierRank(t){
+      const s = (t || 'free').toString().toLowerCase().trim();
+      if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life')) return 2;
+      if (s === 'pro' || s === 'business' || s.includes('business') || s.includes('buss')) return 2;
+      if (s === 'plus' || s.includes('plus')) return 1;
+      return 0;
+    }
+    function applyVip(tier){
+      const rank = tierRank(tier);
+      const badge = document.getElementById('plus-badge-lines');
+
+      // FREE = mostra tag PLUS
+      if(rank === 0){
+        if(badge) badge.classList.remove('hidden');
+      } else {
+        if(badge) badge.classList.add('hidden');
+      }
+    }
+
+    // ---- Estado ------------------------------------------------------------
+    let guildId = null;
+    let members = [];        // cache local de membros (para picker / snapshots)
+    let lines = [];          // lines visíveis/renderizadas
+    let allLines = [];       // fonte completa das lines
+    let editingLineId = null;
+    let selectedMemberIds = []; // para modal
+    let currentSortMode = 'all';
+
+    // Cache keys (por guilda)
+    const ctx = getGuildContext();
+    if (ctx?.guildId) guildId = ctx.guildId;
+
+    const secondaryLines = () => window.linesSecondaryGuilds || null;
+    const keyLines = () => secondaryLines()?.keyLines?.(guildId) || (guildId ? `linesList_${guildId}` : 'linesList');
+    const keyMembers = () => secondaryLines()?.keyMembers?.(guildId) || (guildId ? `membersList_${guildId}` : 'membersList'); // mesmo cache da tela de membros
+    const keyLinesCount = () => secondaryLines()?.keyLinesCount?.(guildId) || (guildId ? `linesCount_${guildId}` : 'linesCount');
+    const currentLinesCollectionName = () => secondaryLines()?.linesCollectionName?.() || 'lines';
+    const currentMembersCollectionName = () => secondaryLines()?.membersCollectionName?.() || 'membros';
+
+    let activeMembersCacheKey = keyMembers();
+    let activeLinesCacheKey = keyLines();
+
+    function readMembersCacheForCurrentGuild() {
+      const keys = secondaryLines()?.memberCacheKeys?.(guildId) || [keyMembers()];
+      for (const key of (Array.isArray(keys) ? keys : [keyMembers()])) {
+        try {
+          const raw = key ? localStorage.getItem(key) : null;
+          if (!raw) continue;
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) return arr;
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    function writeMembersCacheForCurrentGuild(list) {
+      try { localStorage.setItem(keyMembers(), JSON.stringify(list || [])); } catch(_) {}
+    }
+
+    // Controle de UI (evita salvar antes do ctx/auth resolver)
+    function setUiReady(ready) {
+      const bNew = document.getElementById('btn-new-line');
+      const bRef = document.getElementById('btn-refresh-lines');
+      [bNew, bRef].forEach(b => {
+        if (!b) return;
+        b.disabled = !ready;
+        b.classList.toggle('opacity-50', !ready);
+        b.classList.toggle('pointer-events-none', !ready);
+      });
+    }
+
+    setUiReady(!!guildId);
+
+
+    // ---- Utilitários --------------------------------------------------------
+    const normalize = (s) => (s || '').toString().toLowerCase().trim();
+    const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean).map(String)));
+
+    function escapeHtml(v) {
+      return (v ?? '').toString()
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+    
+    // Função para formatar o modo de jogo recebido
+    function formatPlayMode(playMode) {
+      if (!playMode) return '';
+      const arr = Array.isArray(playMode) ? playMode : [playMode];
+      const valid = arr.map(v => (v || '').trim()).filter(Boolean);
+      return valid.join(' • ');
+    }
+
+    function parseLooseNumber(v) {
+      if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+      if (typeof v === 'boolean') return v ? 1 : 0;
+      if (v == null) return 0;
+
+      const raw = String(v).trim();
+      if (!raw) return 0;
+
+      const compact = raw.toLowerCase().replace(/\s+/g, '');
+      if (/^-?\d+(?:[.,]\d+)?k$/.test(compact)) {
+        const n = Number(compact.replace('k','').replace(',', '.'));
+        return Number.isFinite(n) ? Math.round(n * 1000) : 0;
+      }
+
+      if (/^-?\d+(?:[.,]\d+)?m$/.test(compact)) {
+        const n = Number(compact.replace('m','').replace(',', '.'));
+        return Number.isFinite(n) ? Math.round(n * 1000000) : 0;
+      }
+
+      const only = raw.replace(/[^\d,.-]/g, '');
+      if (!only) return 0;
+
+      let normalized = only;
+      const hasComma = normalized.includes(',');
+      const hasDot = normalized.includes('.');
+      if (hasComma && hasDot) {
+        normalized = normalized.replace(/\./g, '').replace(',', '.');
+      } else if (hasComma) {
+        normalized = normalized.replace(/\./g, '').replace(',', '.');
+      } else {
+        const parts = normalized.split('.');
+        if (parts.length > 2) normalized = normalized.replace(/\./g, '');
+      }
+
+      const num = Number(normalized);
+      return Number.isFinite(num) ? num : 0;
+    }
+
+    function formatPoints(v) {
+      return Math.round(parseLooseNumber(v)).toLocaleString('pt-BR');
+    }
+
+    function resolveMemberObj(memberRef) {
+      if (!memberRef) return null;
+      if (typeof memberRef === 'string') return getMemberById(memberRef) || { id: memberRef };
+      if (memberRef.id) return getMemberById(memberRef.id) || memberRef;
+      return memberRef;
+    }
+
+    function readFirstNumericField(obj, keys) {
+      if (!obj || typeof obj !== 'object') return null;
+      for (const key of (keys || [])) {
+        const value = obj[key];
+        const num = parseLooseNumber(value);
+        if (value !== undefined && value !== null && `${value}`.trim() !== '' && Number.isFinite(num)) return num;
+      }
+      return null;
+    }
+
+    function getMemberPointBreakdown(memberRef) {
+      const m = resolveMemberObj(memberRef) || {};
+      
+      const ggKeys = ['guildWarMeta', 'guerraMeta', 'guildWar', 'guerra', 'pontosGG','pontosGg','ggPoints','pontos_gg','pontuacaoGG','pontuacaoGg','guerraGuilda','guerraDeGuilda','pontosGuilda','pontosGuerra','guildPoints','scoreGG','ggAtual','totalGG'];
+      const honraKeys = ['weeklyMetaValue', 'metaSemanalValor', 'weeklyMeta', 'metaSemanal', 'pontosHonra','pontoshonra','honraPoints','pontos_honra','pontuacaoHonra','honraAtual','scoreHonra','totalHonra','honra'];
+      
+      let gg = readFirstNumericField(m, ggKeys);
+      let honra = readFirstNumericField(m, honraKeys);
+
+      if (gg == null) gg = readNumericByKeyHint(m, 'gg');
+      if (honra == null) honra = readNumericByKeyHint(m, 'honra');
+
+      if (gg == null) gg = readNumericByKeyHint(m, 'guerra') || readNumericByKeyHint(m, 'war');
+      if (honra == null) honra = readNumericByKeyHint(m, 'meta');
+
+      gg = parseLooseNumber(gg);
+      honra = parseLooseNumber(honra);
+
+      return {
+        gg,
+        honra,
+        total: gg + honra
+      };
+    }
+
+    function getLineMemberRefs(line) {
+      const ids = uniq([
+        ...(Array.isArray(line?.memberIds) ? line.memberIds : []),
+        ...(Array.isArray(line?.members) ? line.members.map((m) => (typeof m === 'string' ? m : m?.id)) : [])
+      ].map((id) => String(id || '')).filter(Boolean));
+
+      if (ids.length) {
+        return ids.map((id) => getMemberById(id) || ((Array.isArray(line?.members) ? line.members : []).find((m) => String(typeof m === 'string' ? m : m?.id) === id) || { id }));
+      }
+
+      return Array.isArray(line?.members) ? line.members : [];
+    }
+
+    function getSortModeLabel(mode = currentSortMode) {
+      if (mode === 'gg') return 'GG';
+      if (mode === 'honra') return 'Honra';
+      return 'GG + honra';
+    }
+
+    function getLinePointBreakdown(line, mode = currentSortMode) {
+      const memberRefs = getLineMemberRefs(line);
+      let gg = 0;
+      let honra = 0;
+      for (const ref of memberRefs) {
+        const pts = getMemberPointBreakdown(ref);
+        gg += pts.gg;
+        honra += pts.honra;
+      }
+      const total = gg + honra;
+      const active = mode === 'gg' ? gg : mode === 'honra' ? honra : total;
+      return { gg, honra, total, active };
+    }
+
+    function sortLinesByPoints(list, mode = currentSortMode) {
+      return [...(Array.isArray(list) ? list : [])].sort((a, b) => {
+        const ap = getLinePointBreakdown(a, mode).active;
+        const bp = getLinePointBreakdown(b, mode).active;
+        if (bp !== ap) return bp - ap;
+        return (Number(a?.number || 0) || 0) - (Number(b?.number || 0) || 0);
+      });
+    }
+
+    function getVisibleLines(baseList = allLines) {
+      const q = normalize(document.getElementById('search-input')?.value || '');
+      const base = Array.isArray(baseList) ? baseList : [];
+      const filtered = !q ? base : base.filter(l => {
+        const name = normalize(getDisplayName(l));
+        if (name.includes(q)) return true;
+
+        const mem = getLineMemberRefs(l);
+        for (const it of mem) {
+          const id = (typeof it === 'string') ? it : (it?.id || '');
+          const m = (typeof it === 'string') ? getMemberById(id) : (getMemberById(id) || it);
+          const nick = normalize(m?.nick || '');
+          const vid = normalize(m?.visibleId || m?.playerId || id);
+          if (nick.includes(q) || vid.includes(q)) return true;
+        }
+        return false;
+      });
+
+      return sortLinesByPoints(filtered, currentSortMode);
+    }
+
+    function updateLinesView(baseList = allLines) {
+      renderLines(getVisibleLines(baseList));
+    }
+
+    function setCount() {
+      const el = document.getElementById('lines-count');
+      if (!el) return;
+      const total = Array.isArray(allLines) ? allLines.length : 0;
+      el.textContent = `${total} line${total === 1 ? '' : 's'}`;
+      try { if (guildId) localStorage.setItem(keyLinesCount(), String(total)); } catch(_) {}
+    }
+
+    function calcNextNumber() {
+      const nums = allLines.map(l => Number(l.number || 0)).filter(n => Number.isFinite(n));
+      const max = nums.length ? Math.max(...nums) : 0;
+      return max + 1;
+    }
+
+    function getDisplayName(line) {
+      const n = (line.name || '').toString().trim();
+      if (n) return n;
+      const num = Number(line.number || 0) || 0;
+      return num ? `Line ${num}` : 'Line';
+    }
+
+    function badge(text, icon) {
+      if (!text && text !== 0) return '';
+      return `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-bold">
+        <i data-lucide="${icon}" class="w-3.5 h-3.5"></i>${text}
+      </span>`;
+    }
+
+    function detailBox(label, ok, meta) {
+      const v = (ok === true || ok === 'Sim' || ok === 'sim') ? 'Sim' : (ok === false || ok === 'Não' || ok === 'nao' || ok === 'não') ? 'Não' : (ok || '-');
+      const cls = (v === 'Sim') ? 'text-emerald-600' : (v === 'Não') ? 'text-red-500' : 'text-gray-700';
+      return `<div class="bg-white rounded-xl p-3 border border-gray-100">
+        <p class="text-xs text-gray-400 mb-1">${label}</p>
+        <p class="text-xs font-bold ${cls}">${v}${meta ? ` • <span class="text-gray-400 font-semibold">${meta}</span>` : ''}</p>
+      </div>`;
+    }
+
+    function mapMemberSnap(m) {
+      const points = getMemberPointBreakdown(m);
+      return {
+        id: (m.id || '').toString(),
+        nick: (m.nick || m.nickname || '').toString(),
+        visibleId: (m.visibleId || m.playerId || m.uid || m.id || '').toString(),
+        whatsapp: (m.whatsapp || '').toString(),
+        guildWar: m.guildWar ?? m.guerra ?? null,
+        guildWarMeta: (m.guildWarMeta || '').toString(),
+        weeklyMeta: m.weeklyMeta ?? null,
+        weeklyMetaValue: (m.weeklyMetaValue || '').toString(),
+        hasTag: m.hasTag ?? null,
+        playMode: m.playMode ?? null,
+        pontosGG: points.gg,
+        pontosHonra: points.honra
+      };
+    }
+
+    function getMemberById(id) {
+      const sid = String(id || '');
+      return members.find(x => String(x.id) === sid) || null;
+    }
+
+    function computeMembersUsedInLines(allLines) {
+      const used = new Set();
+      for (const l of (allLines || [])) {
+        const arr = (l.members || l.memberIds || []);
+        for (const it of arr) {
+          if (typeof it === 'string') used.add(it);
+          else if (it && it.id) used.add(String(it.id));
+        }
+      }
+      return used;
+    }
+
+    function currentGuildLineDisplayName() {
+      const fromLinesModule = secondaryLines()?.displayName?.();
+      if (fromLinesModule) return String(fromLinesModule || '').trim();
+      return (getGuildContext()?.guildName || '').toString().trim() || 'Guilda principal';
+    }
+
+    function buildLineCopyText(line) {
+      const name = getDisplayName(line);
+      const memberRefs = getLineMemberRefs(line);
+      const memberSnaps = memberRefs.map((ref) => {
+        const id = typeof ref === 'string' ? ref : (ref?.id || '');
+        return mapMemberSnap(getMemberById(id) || ref || { id });
+      });
+      const pts = getLinePointBreakdown(line, 'all');
+      const memberLines = memberSnaps.length
+        ? memberSnaps.map((m, index) => {
+          const mp = getMemberPointBreakdown(m);
+          const nick = m.nick || 'Sem Nick';
+          const id = m.visibleId || m.id || '-';
+          const mode = formatPlayMode(m.playMode);
+          const modeText = mode ? ` | ${mode}` : '';
+          return `${index + 1}. ${nick} | ID: ${id}${modeText} | GG: ${formatPoints(mp.gg)} | Honra: ${formatPoints(mp.honra)} | Total: ${formatPoints(mp.total)}`;
+        })
+        : ['Sem membros na line.'];
+
+      return [
+        `Dados da line`,
+        ``,
+        `Line: ${name}`,
+        `Guilda: ${currentGuildLineDisplayName()}`,
+        `Membros: ${memberSnaps.length}/10`,
+        `Pontuacao: GG ${formatPoints(pts.gg)} | Honra ${formatPoints(pts.honra)} | Total ${formatPoints(pts.total)}`,
+        ``,
+        `Membros:`,
+        ...memberLines
+      ].join('\n');
+    }
+
+    // ---- Render -------------------------------------------------------------
+    function renderLines(list) {
+      const el = document.getElementById('lines-list');
+      if (!el) return;
+
+      const safeList = Array.isArray(list) ? list : [];
+      lines = safeList;
+      setCount();
+
+      if (!safeList.length) {
+        el.innerHTML = `<div class="bg-white rounded-2xl p-8 border border-gray-100 text-center text-gray-400 text-sm">0 lines.</div>`;
+        initIcons();
+        return;
+      }
+
+      el.innerHTML = safeList.map(l => {
+        const name = getDisplayName(l);
+        const memArr = getLineMemberRefs(l).map(x => {
+          const id = typeof x === 'string' ? x : (x?.id || '');
+          const current = getMemberById(id);
+          const base = current || x || { id, nick:'', visibleId:'' };
+          return mapMemberSnap(base);
+        });
+        const count = memArr.length;
+        const preview = memArr.slice(0, 10);
+        const pts = getLinePointBreakdown(l, currentSortMode);
+        const pointsLabel = currentSortMode === 'gg' ? 'pts GG' : currentSortMode === 'honra' ? 'pts honra' : 'pts';
+        const pointsTitle = currentSortMode === 'gg' ? `GG: ${formatPoints(pts.gg)}` : currentSortMode === 'honra' ? `Honra: ${formatPoints(pts.honra)}` : `GG + honra: ${formatPoints(pts.total)}`;
+
+        return `
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
+            <div class="w-full flex items-center gap-3 p-4 cursor-pointer" onclick="toggleLineDetails('${l.id}')">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
+                ${escapeHtml(name.charAt(0).toUpperCase())}
+              </div>
+
+              <div class="flex-1 min-w-0">
+                <p class="font-semibold text-gray-900 text-sm truncate">${escapeHtml(name)}</p>
+                <p class="text-xs text-gray-400 truncate">${count}/10 membros</p>
+              </div>
+
+              <div class="hidden sm:flex gap-1.5">
+                ${badge(`Line ${Number(l.number||0)||'—'}`, 'hash')}
+                ${badge(`${count}/10`, 'users')}
+              </div>
+
+              <div class="text-right shrink-0">
+                <p class="text-sm font-extrabold text-emerald-700 leading-none">${formatPoints(pts.active)}</p>
+                <p class="text-[10px] text-gray-400 mt-1">${escapeHtml(getSortModeLabel(currentSortMode))}</p>
+              </div>
+
+              <div class="text-gray-300"><i data-lucide="chevron-down" class="w-5 h-5"></i></div>
+            </div>
+
+            <div id="line-details-${l.id}" class="hidden border-t border-gray-100 p-4 bg-gray-50/50 space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="bg-white rounded-xl p-3 border border-gray-100">
+                  <p class="text-xs text-gray-400 mb-1">Nome</p>
+                  <p class="text-xs font-bold text-gray-800 truncate">${escapeHtml(name)}</p>
+                </div>
+                <div class="bg-white rounded-xl p-3 border border-gray-100">
+                  <p class="text-xs text-gray-400 mb-1">Participantes</p>
+                  <p class="text-xs font-bold text-gray-800">${count}/10</p>
+                </div>
+                <div class="bg-white rounded-xl p-3 border border-emerald-100 bg-emerald-50/50">
+                  <p class="text-xs text-emerald-700 mb-1">Pontuação total</p>
+                  <p class="text-xs font-extrabold text-emerald-700">${escapeHtml(pointsTitle)}</p>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                ${preview.length ? preview.map(m => {
+                  const mp = getMemberPointBreakdown(m);
+                  const memberActive = currentSortMode === 'gg' ? mp.gg : currentSortMode === 'honra' ? mp.honra : mp.total;
+                  const memberPointsLabel = currentSortMode === 'gg' ? 'GG' : currentSortMode === 'honra' ? 'Honra' : 'Total';
+                  const pmText = formatPlayMode(m.playMode);
+                  return `
+                  <button class="w-full text-left bg-white rounded-2xl border border-gray-100 p-3 flex items-center gap-3 hover:bg-gray-50 transition-colors" onclick="openMemberView('${m.id}')">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center shrink-0 text-white font-bold text-xs">${escapeHtml((m.nick||'?').charAt(0).toUpperCase())}</div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-semibold text-gray-900 truncate">${escapeHtml(m.nick || 'Sem Nick')}</p>
+                      <div class="flex items-center gap-1.5 mt-0.5">
+                        <p class="text-[11px] text-gray-400 truncate">ID: ${escapeHtml(m.visibleId || m.id || '-')}</p>
+                        ${pmText ? `<span class="shrink-0 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[9px] font-bold uppercase tracking-wide">${escapeHtml(pmText)}</span>` : ''}
+                      </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                      <p class="text-xs font-extrabold text-emerald-700">${formatPoints(memberActive)}</p>
+                      <p class="text-[10px] text-gray-400">${escapeHtml(memberPointsLabel)}</p>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-5 h-5 text-gray-300"></i>
+                  </button>
+                `}).join('') : `<div class="text-sm text-gray-400 text-center py-3">Sem membros na line.</div>`}
+              </div>
+
+              <div class="flex gap-2 pt-2">
+                <button onclick="copyLineData('${l.id}')" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-white transition-colors">Copiar</button>
+                <button onclick="editLine('${l.id}')" class="flex-1 py-2.5 rounded-xl border border-emerald-200 text-emerald-700 font-bold text-sm hover:bg-emerald-50 transition-colors">Editar</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      initIcons();
+    }
+
+    window.toggleLineDetails = (id) => {
+      const el = document.getElementById(`line-details-${id}`);
+      if (!el) return;
+      el.classList.toggle('hidden');
+      initIcons();
+    };
+
+    window.copyLineData = async (id) => {
+      const line = allLines.find(l => String(l.id) === String(id));
+      if (!line) {
+        showToast('error', 'Line nao encontrada.');
+        return;
+      }
+
+      const text = buildLineCopyText(line);
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.setAttribute('readonly', 'true');
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          textarea.remove();
+        }
+        showToast('success', 'Dados da line copiados.');
+      } catch (e) {
+        console.warn(e);
+        showToast('error', 'Nao foi possivel copiar a line.');
+      }
+    };
+
+    // ---- Cache --------------------------------------------------------------
+    function loadCached() {
+      try {
+        const arr = readMembersCacheForCurrentGuild();
+        if (Array.isArray(arr)) members = arr;
+      } catch(_) {}
+
+      if (!guildId) return;
+
+      // count cache (pra evitar "Carregando..." mesmo sem lista)
+      try {
+        const c = localStorage.getItem(keyLinesCount());
+        if (c !== null) {
+          const el = document.getElementById('lines-count');
+          if (el) el.textContent = `${Number(c)||0} line${Number(c)==1?'':'s'}`;
+        }
+      } catch(_) {}
+
+      try {
+        const raw = localStorage.getItem(keyLines());
+        if (!raw) return;
+        const cached = JSON.parse(raw);
+        if (Array.isArray(cached)) {
+          allLines = cached;
+          updateLinesView(allLines);
+        }
+      } catch(_) {}
+    }
+
+    function saveCached(list) {
+      if (!guildId) return;
+      try { localStorage.setItem(keyLines(), JSON.stringify(list || [])); } catch(_) {}
+      try { localStorage.setItem(keyLinesCount(), String((list || []).length)); } catch(_) {}
+    }
+
+    // ---- Firestore ----------------------------------------------------------
+    async function fetchMembersFromDB() {
+      if (!guildId) return;
+      try {
+        const snap = await getDocs(collection(db, 'guildas', guildId, currentMembersCollectionName()));
+        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // mantém no mesmo cache usado na tela de membros (ajuda a seleção aqui e lá)
+        members = arr;
+        writeMembersCacheForCurrentGuild(arr);
+      } catch (e) {
+        console.warn('fetchMembersFromDB', e);
+      }
+    }
+
+    async function fetchLinesFromDB() {
+      if (!guildId) return [];
+      const linesCollection = currentLinesCollectionName();
+      const snap = await getDocs(collection(db, 'guildas', guildId, linesCollection));
+      const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Migração leve: se doc antigo não tiver memberIds mas tiver members, grava memberIds (ajuda anti-duplicação)
+      try {
+        const fixes = [];
+        for (const d of snap.docs) {
+          const data = d.data() || {};
+          const hasMemberIds = Array.isArray(data.memberIds) && data.memberIds.length > 0;
+          const hasMembers = Array.isArray(data.members) && data.members.length > 0;
+          if (!hasMemberIds && hasMembers) {
+            const ids = data.members.map(m => m?.id).filter(Boolean).map(v => String(v));
+            if (ids.length) {
+              fixes.push(updateDoc(doc(db, 'guildas', guildId, linesCollection, d.id), { memberIds: ids }).catch(()=>{}));
+            }
+          }
+        }
+        if (fixes.length) Promise.all(fixes).catch(()=>{});
+      } catch (_) {}
+
+      // garante shape
+      return arr.map((l) => ({
+        id: l.id,
+        name: (l.name || '').toString(),
+        number: Number(l.number || 0) || 0,
+        members: Array.isArray(l.members) ? l.members : [],
+        memberIds: Array.isArray(l.memberIds) ? l.memberIds : []
+      }));
+    }
+
+    // ---- Load principal -----------------------------------------------------
+    window.loadLines = async (force=false) => {
+      try {
+        if (!guildId) {
+          const c = getGuildContext();
+          if (c?.guildId) guildId = c.guildId;
+        }
+        if (!guildId) return;
+
+        const nextMembersCacheKey = keyMembers();
+        const nextLinesCacheKey = keyLines();
+        if (nextMembersCacheKey !== activeMembersCacheKey) {
+          activeMembersCacheKey = nextMembersCacheKey;
+          members = [];
+        }
+        if (nextLinesCacheKey !== activeLinesCacheKey) {
+          activeLinesCacheKey = nextLinesCacheKey;
+          allLines = [];
+        }
+
+        if (force) showToast('info', 'Atualizando...');
+
+        // 1) sempre tenta pegar membros do cache (mesmo esquema da tela de membros)
+        try {
+          const arr = readMembersCacheForCurrentGuild();
+          if (Array.isArray(arr)) members = arr;
+        } catch(_) {}
+
+        // no atualizar forçado, sempre recarrega membros também
+        if (force) {
+          await fetchMembersFromDB();
+        } else if (!Array.isArray(members) || members.length === 0) {
+          await fetchMembersFromDB();
+        }
+
+        // 2) lines: se não for force, usa cache e NÃO lê Firestore
+        if (!force) {
+          try {
+            const raw = localStorage.getItem(keyLines());
+            if (raw) {
+              const cached = JSON.parse(raw);
+              if (Array.isArray(cached)) {
+                allLines = cached;
+                updateLinesView(allLines);
+                return;
+              }
+            }
+          } catch(_) {}
+        }
+
+        // 3) Firestore só quando: force OU cache vazio
+        const arr = await fetchLinesFromDB();
+        allLines = Array.isArray(arr) ? arr : [];
+        saveCached(allLines);
+        updateLinesView(allLines);
+
+        if (force) showToast('success', 'Atualizado!');
+      } catch (e) {
+        console.warn(e);
+        if (force) showToast('error', 'Falha ao atualizar.');
+      }
+    };
+
+    // ---- Modal de Line ------------------------------------------------------
+    function closeMemberPickerMenu() {
+      const menu = document.getElementById('member-picker-menu');
+      const caret = document.getElementById('member-picker-caret');
+      if (menu) menu.classList.add('hidden');
+      if (caret) caret.textContent = '▾';
+    }
+
+    function openMemberPickerMenu() {
+      const menu = document.getElementById('member-picker-menu');
+      const caret = document.getElementById('member-picker-caret');
+      if (menu) menu.classList.remove('hidden');
+      if (caret) caret.textContent = '▴';
+    }
+
+    window.toggleMemberPickerMenu = () => {
+      const menu = document.getElementById('member-picker-menu');
+      if (!menu) return;
+      if (menu.classList.contains('hidden')) openMemberPickerMenu();
+      else closeMemberPickerMenu();
+    };
+
+    function updateMemberPickerLabel() {
+      const picker = document.getElementById('member-picker');
+      const label = document.getElementById('member-picker-label');
+      if (!picker || !label) return;
+      const selected = picker.options[picker.selectedIndex];
+      label.textContent = selected && selected.value ? selected.textContent : 'Selecione um membro...';
+    }
+
+    window.pickMemberOption = (id) => {
+      const picker = document.getElementById('member-picker');
+      if (!picker) return;
+      picker.value = String(id || '');
+      updateMemberPickerLabel();
+      closeMemberPickerMenu();
+    };
+
+    function updatePickerOptions() {
+      const picker = document.getElementById('member-picker');
+      const optionsBox = document.getElementById('member-picker-options');
+      if (!picker || !optionsBox) return;
+
+      const used = computeMembersUsedInLines(allLines);
+      for (const id of selectedMemberIds) used.delete(String(id));
+
+      const available = (members || []).filter(m => m?.id && !used.has(String(m.id)) && !selectedMemberIds.includes(String(m.id)))
+        .sort((a,b) => normalize(a.nick).localeCompare(normalize(b.nick)));
+
+      picker.innerHTML = `<option value="">Selecione um membro...</option>` + available
+        .map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.nick || 'Sem Nick')} • ID: ${escapeHtml(m.visibleId || m.id)}</option>`).join('');
+
+      optionsBox.innerHTML = available.length ? available.map(m => {
+        const pmText = formatPlayMode(m.playMode);
+        return `
+        <button type="button" class="w-full flex items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-3 text-left hover:border-emerald-100 hover:bg-emerald-50/60 transition-colors" onclick="pickMemberOption('${escapeHtml(m.id)}')">
+          <span class="min-w-0">
+            <span class="block text-sm font-semibold text-gray-800 truncate">${escapeHtml(m.nick || 'Sem Nick')}</span>
+            <span class="block text-xs text-gray-400 truncate">ID: ${escapeHtml(m.visibleId || m.id)}${pmText ? ` <span class="text-emerald-600 font-medium ml-1">• ${escapeHtml(pmText)}</span>` : ''}</span>
+          </span>
+          <span class="text-emerald-600 text-xs font-bold">Selecionar</span>
+        </button>
+      `}).join('') : `<div class="px-3 py-4 text-center text-sm text-gray-400">Nenhum membro disponível.</div>`;
+
+      picker.value = '';
+      updateMemberPickerLabel();
+      closeMemberPickerMenu();
+    }
+
+    function renderSelected() {
+      const box = document.getElementById('selected-members');
+      const countEl = document.getElementById('selected-count');
+      if (countEl) countEl.textContent = `${selectedMemberIds.length}/10`;
+
+      if (!box) return;
+      if (selectedMemberIds.length === 0) {
+        box.innerHTML = `<div class="text-sm text-gray-400 text-center py-2">Nenhum membro selecionado.</div>`;
+        updatePickerOptions();
+        return;
+      }
+
+      box.innerHTML = selectedMemberIds.map(id => {
+        const m = getMemberById(id) || { id, nick: '', visibleId: id };
+        return `
+          <div class="bg-white rounded-2xl border border-gray-100 p-3 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center text-white font-bold text-xs">${(m.nick || '?').charAt(0).toUpperCase()}</div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-gray-900 truncate">${m.nick || 'Sem Nick'}</p>
+              <p class="text-xs text-gray-400 truncate">ID: ${(m.visibleId || m.id || '-')}</p>
+            </div>
+            <button class="p-2 rounded-xl hover:bg-gray-50" onclick="removeSelectedMember('${id}')">
+              <i data-lucide="trash-2" class="w-4 h-4 text-red-400"></i>
+            </button>
+          </div>
+        `;
+      }).join('');
+      updatePickerOptions();
+      initIcons();
+    }
+
+    window.openLineModal = async () => {
+      editingLineId = null;
+      selectedMemberIds = [];
+
+      // garante guildId/members
+      if (!guildId) {
+        const c = getGuildContext();
+        if (c?.guildId) guildId = c.guildId;
+      }
+      if (!guildId) {
+        showToast('error', 'Guilda não resolvida. Faça login novamente.');
+        return;
+      }
+      if (!Array.isArray(members) || members.length === 0) await fetchMembersFromDB();
+
+      document.getElementById('line-modal-title').textContent = 'Nova Line';
+      document.getElementById('line-name').value = '';
+      document.getElementById('btn-delete-line').classList.add('hidden');
+
+      document.getElementById('line-modal').classList.remove('hidden');
+      renderSelected();
+    };
+
+    window.closeLineModal = () => {
+      document.getElementById('line-modal').classList.add('hidden');
+      closeMemberPickerMenu();
+    };
+
+    // Agora o botão de Adicionar Membro é assíncrono e verifica no BD
+    window.addPickedMember = async () => {
+      const picker = document.getElementById('member-picker');
+      const btn = document.getElementById('btn-add-member');
+      const id = picker?.value;
+      if (!id) return;
+
+      if (selectedMemberIds.length >= 10) {
+        showToast('error', 'Máximo de 10 membros por line.');
+        return;
+      }
+
+      // UX de verificando...
+      if(btn) {
+        btn.disabled = true;
+        btn.textContent = 'Verificando...';
+      }
+
+      // Verificação de duplicação direto no Firestore antes de colocar na UI do modal
+      try {
+        const qx = query(
+          collection(db, 'guildas', guildId, currentLinesCollectionName()),
+          where('memberIds', 'array-contains', String(id)),
+          limit(1)
+        );
+        const sx = await getDocs(qx);
+        
+        if (!sx.empty) {
+          const d0 = sx.docs[0];
+          // Se a line que ele já está NÃO for a line atual que você está editando
+          if (!editingLineId || d0.id !== String(editingLineId)) {
+            showToast('warn', 'Aviso: Este membro já está em outra line! Aperte ↻ na lista para atualizar seu painel.');
+            if(btn) { btn.disabled = false; btn.textContent = 'Adicionar'; }
+            return; // Bloqueia a adição
+          }
+        }
+      } catch (e) {
+        console.warn("Falha na checagem anti-duplicação", e);
+      }
+
+      if(btn) {
+        btn.disabled = false;
+        btn.textContent = 'Adicionar';
+      }
+
+      selectedMemberIds.push(String(id));
+      selectedMemberIds = uniq(selectedMemberIds).slice(0,10);
+      picker.value = '';
+      renderSelected();
+    };
+
+    window.removeSelectedMember = (id) => {
+      selectedMemberIds = selectedMemberIds.filter(x => String(x) !== String(id));
+      renderSelected();
+    };
+
+    window.editLine = async (id) => {
+      const line = allLines.find(l => String(l.id) === String(id));
+      if (!line) return;
+
+      editingLineId = line.id;
+      const name = (line.name || '').toString().trim();
+      document.getElementById('line-modal-title').textContent = 'Editar Line';
+      document.getElementById('line-name').value = name;
+
+      const memArr = getLineMemberRefs(line);
+      selectedMemberIds = uniq(memArr.map(x => (typeof x === 'string') ? x : (x?.id))).slice(0,10);
+
+      document.getElementById('btn-delete-line').classList.remove('hidden');
+      document.getElementById('line-modal').classList.remove('hidden');
+      renderSelected();
+    };
+
+    window.saveLine = async () => {
+      if (!guildId) { showToast('info','Carregando sua guilda...'); return; }
+
+      // Gate local (evita bypass via console)
+      try {
+        const raw = localStorage.getItem('guildCtx_cache_v1');
+        const ctx = raw ? JSON.parse(raw) : null;
+        const tier = (ctx?.vipTier || 'free').toString().toLowerCase();
+        const isPlusOrPro = tier !== 'free';
+        if (!isPlusOrPro) {
+          showToast('warn', 'Recurso PLUS: faça upgrade para salvar Lines.');
+          return;
+        }
+      } catch (_) {}
+      try {
+        if (!guildId) {
+          const c = getGuildContext();
+          if (c?.guildId) guildId = c.guildId;
+        }
+        if (!guildId) throw new Error('Guilda não resolvida.');
+
+        // validações
+        selectedMemberIds = uniq(selectedMemberIds);
+        if (selectedMemberIds.length === 0) {
+          showToast('error', 'Selecione pelo menos 1 membro.');
+          return;
+        }
+        if (selectedMemberIds.length > 10) selectedMemberIds = selectedMemberIds.slice(0,10);
+
+        const rawName = (document.getElementById('line-name').value || '').toString().trim();
+        let number = 0;
+
+        if (editingLineId) {
+          const existing = allLines.find(l => String(l.id) === String(editingLineId));
+          number = Number(existing?.number || 0) || 0;
+        } else {
+          number = calcNextNumber();
+        }
+
+        const memberSnaps = selectedMemberIds.map(id => mapMemberSnap(getMemberById(id) || { id }));
+
+        const payload = {
+          name: rawName,
+          number,
+          memberIds: selectedMemberIds,
+          members: memberSnaps,
+          updatedAt: serverTimestamp(),
+        };
+
+        if (!editingLineId) payload.createdAt = serverTimestamp();
+
+        showToast('info', 'Salvando...');
+
+        let savedId = editingLineId;
+        if (editingLineId) {
+          await updateDoc(doc(db, 'guildas', guildId, currentLinesCollectionName(), editingLineId), payload);
+        } else {
+          const ref = await addDoc(collection(db, 'guildas', guildId, currentLinesCollectionName()), payload);
+          savedId = ref.id;
+          editingLineId = ref.id;
+        }
+
+        // --- CORREÇÃO DO CACHE: Atualiza localmente com as informações precisas
+        const lineObj = {
+          id: String(savedId),
+          name: payload.name || '',
+          number: payload.number || 0,
+          memberIds: Array.isArray(payload.memberIds) ? payload.memberIds.map(String) : [],
+          members: Array.isArray(payload.members) ? payload.members : [],
+          updatedAt: Date.now()
+        };
+
+        const idx = allLines.findIndex(l => String(l.id) === String(savedId));
+        if (idx >= 0) {
+          allLines[idx] = lineObj;
+        } else {
+          allLines.unshift(lineObj);
+        }
+
+        saveCached(allLines);
+        updateLinesView(allLines);
+
+        closeLineModal();
+        showToast('success', 'Line salva!');
+      } catch (e) {
+        console.warn(e);
+        showToast('error', 'Erro ao salvar a line.');
+      }
+    };
+
+    window.deleteLine = async () => {
+      try {
+        if (!editingLineId) return;
+        if (!guildId) {
+          const c = getGuildContext();
+          if (c?.guildId) guildId = c.guildId;
+        }
+        if (!guildId) throw new Error('Guilda não resolvida.');
+
+        await deleteDoc(doc(db, 'guildas', guildId, currentLinesCollectionName(), editingLineId));
+
+        // --- CORREÇÃO DO CACHE: Filtra e salva as referências localmente
+        const before = Array.isArray(allLines) ? allLines : [];
+        allLines = before.filter(l => String(l.id) !== String(editingLineId));
+        
+        saveCached(allLines);
+        updateLinesView(allLines);
+
+        editingLineId = null;
+        closeLineModal();
+        showToast('success', 'Line excluída!');
+      } catch(e) {
+        console.warn(e);
+        showToast('error', 'Erro ao excluir.');
+      }
+    };
+
+    // ---- Pesquisa -----------------------------------------------------------
+    function applySearch() {
+      updateLinesView(allLines);
+    }
+
+    document.getElementById('search-input')?.addEventListener('input', applySearch);
+   document.addEventListener('click', (ev) => {
+      // Fecha a lista de membros se clicar fora
+      const wrapMember = document.getElementById('member-picker-wrap');
+      if (wrapMember && !wrapMember.contains(ev.target)) closeMemberPickerMenu();
+
+      // Fecha a lista de filtros se clicar fora
+      const wrapSort = document.getElementById('sort-picker-wrap');
+      if (wrapSort && !wrapSort.contains(ev.target)) {
+        document.getElementById('sort-picker-menu')?.classList.add('hidden');
+        const caret = document.getElementById('sort-picker-caret');
+        if (caret) caret.textContent = '▾';
+      }
+    });
+
+    window.toggleSortPickerMenu = () => {
+      const menu = document.getElementById('sort-picker-menu');
+      const caret = document.getElementById('sort-picker-caret');
+      if (!menu) return;
+      if (menu.classList.contains('hidden')) {
+        menu.classList.remove('hidden');
+        caret.textContent = '▴';
+      } else {
+        menu.classList.add('hidden');
+        caret.textContent = '▾';
+      }
+    };
+
+    window.pickSortOption = (value, label) => {
+      const labelEl = document.getElementById('sort-picker-label');
+      if (labelEl) labelEl.textContent = label;
+      
+      const menu = document.getElementById('sort-picker-menu');
+      if (menu) {
+        menu.classList.add('hidden');
+        
+        // NOVO: Faz o botão clicado ficar verde e tira dos outros
+        const buttons = menu.querySelectorAll('button');
+        buttons.forEach(btn => {
+          if (btn.textContent.trim() === label) {
+            btn.classList.remove('text-gray-700');
+            btn.classList.add('bg-emerald-50', 'text-emerald-700');
+          } else {
+            btn.classList.remove('bg-emerald-50', 'text-emerald-700');
+            btn.classList.add('text-gray-700');
+          }
+        });
+      }
+      
+      const caret = document.getElementById('sort-picker-caret');
+      if (caret) caret.textContent = '▾';
+      
+      currentSortMode = value;
+      updateLinesView(allLines);
+    };
+
+    // ---- Visual do membro (igual estilo da tela de membros) -----------------
+    window.openMemberView = (id) => {
+      const m = getMemberById(id) || null;
+      if (!m) {
+        showToast('error', 'Membro não encontrado no cache. Atualize a lista de membros.');
+        return;
+      }
+      const snap = mapMemberSnap(m);
+      const pmText = formatPlayMode(snap.playMode);
+      
+      const body = document.getElementById('member-view-body');
+      body.innerHTML = `
+        <div class="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center text-white font-bold">${(snap.nick||'?').charAt(0).toUpperCase()}</div>
+            <div class="min-w-0">
+              <p class="text-base font-extrabold text-gray-900 truncate">${snap.nick || 'Sem Nick'}</p>
+              <div class="flex items-center gap-2 mt-0.5">
+                <p class="text-xs text-gray-400">ID: ${snap.visibleId || snap.id || '-'}</p>
+                ${pmText ? `<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wide">${escapeHtml(pmText)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 grid grid-cols-2 gap-3">
+            ${detailBox('Guerra', snap.guildWar, snap.guildWarMeta)}
+            ${detailBox('Meta Semanal', snap.weeklyMeta, snap.weeklyMetaValue)}
+            <div class="bg-white rounded-xl p-3 border border-gray-100">
+              <p class="text-xs text-gray-400 mb-1">Tag</p>
+              ${snap.hasTag ? '<span class="text-emerald-500 font-bold text-xs">Sim</span>' : '<span class="text-red-400 text-xs">Não</span>'}
+            </div>
+            <div class="bg-white rounded-xl p-3 border border-gray-100">
+              <p class="text-xs text-gray-400 mb-1">WhatsApp</p>
+              ${snap.whatsapp ? `<a href="https://wa.me/55${snap.whatsapp}" target="_blank" class="text-emerald-600 text-xs hover:underline">${snap.whatsapp}</a>` : '<span class="text-xs text-gray-400">-</span>'}
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('member-view-modal').classList.remove('hidden');
+      initIcons();
+    };
+
+    window.closeMemberView = () => {
+      document.getElementById('member-view-modal').classList.add('hidden');
+    };
+
+    // ---- Boot ---------------------------------------------------------------
+    window.addEventListener('lines:guild-slot-changed', async () => {
+      activeMembersCacheKey = keyMembers();
+      activeLinesCacheKey = keyLines();
+      members = [];
+      allLines = [];
+      closeLineModal();
+      const list = document.getElementById('lines-list');
+      if (list) {
+        list.innerHTML = `
+          <div class="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse flex items-center gap-3">
+            <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
+            <div class="flex-1 space-y-2">
+              <div class="h-4 bg-gray-200 rounded w-1/3"></div>
+              <div class="h-3 bg-gray-100 rounded w-1/4"></div>
+            </div>
+          </div>
+        `;
+      }
+      await loadLines(false);
+    });
+
+    // Sync entre abas: se membros/lines cache mudar, essa tela atualiza sem ler Firestore
+    window.addEventListener('storage', (ev) => {
+      if (!guildId) return;
+
+      const memberKeys = secondaryLines()?.memberCacheKeys?.(guildId) || [keyMembers()];
+      if ((Array.isArray(memberKeys) ? memberKeys : [keyMembers()]).includes(ev.key)) {
+        try {
+          const arr = JSON.parse(ev.newValue || '[]');
+          if (Array.isArray(arr)) members = arr;
+        } catch(_) {}
+        // atualiza nomes nos cards e picker
+        updateLinesView(allLines);
+        updatePickerOptions();
+        initIcons();
+      }
+
+      if (ev.key === keyLines() || ev.key === keyLinesCount()) {
+        loadCached();
+      }
+    });
+
+    // 1) Renderiza cache imediatamente (sem piscar)
+    loadCached();
+
+    // 2) Auth e sync em background
+    checkAuth().then(async () => {
+      // refaz guildId pelo ctx já resolvido
+      const c = getGuildContext();
+      if (c?.guildId) guildId = c.guildId;
+      setUiReady(!!guildId);
+      const lo = document.getElementById('btn-logout');
+      if (lo) lo.onclick = logout;
+
+      await loadLines(false);
+    });
