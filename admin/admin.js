@@ -6,7 +6,7 @@ import { checkAuth, setupSidebar, initIcons, showToast, logout, auth, db, getGui
 try {
   const ctx = getGuildContext();
   if (ctx && ctx.role === 'Admin') {
-    window.location.replace('../dashboard/dashboard.html');
+    window.location.replace('/dashboard');
   }
 } catch (_) {}
 

@@ -354,7 +354,7 @@ async function saveProfile(event) {
 async function logout() {
   try {
     await signOut(auth);
-    window.location.href = 'index.html';
+    window.location.href = '/';
   } catch (error) {
     console.error(error);
     showToast('error', 'Erro ao sair da conta.');
@@ -425,7 +425,7 @@ setDashboardVisible(false);
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
-    window.location.href = 'index.html';
+    window.location.href = '/';
     return;
   }
 

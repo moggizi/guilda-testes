@@ -151,7 +151,7 @@ function resolveRecruitmentRoleFromConfig(cfg = {}, emailLower = '', uid = '') {
 async function resolveRecruitmentAccessContext() {
   const user = await waitRecruitmentAuthUser();
   if (!user) {
-    window.location.href = 'index.html';
+    window.location.href = '/';
     return null;
   }
 
@@ -186,7 +186,7 @@ async function resolveRecruitmentAccessContext() {
 
   if (!guildId) {
     showToast('error', 'Essa conta não está vinculada a uma guilda.');
-    window.location.href = 'index.html';
+    window.location.href = '/';
     return null;
   }
 
@@ -211,7 +211,7 @@ async function resolveRecruitmentAccessContext() {
 
   if (!isRecruitmentManagerRole(role)) {
     showToast('error', 'Apenas Líder ou Admin podem acessar o recrutamento.');
-    window.location.href = 'dashboard.html';
+    window.location.href = '/dashboard';
     return null;
   }
 
@@ -1315,7 +1315,7 @@ function bootManagementMode() {
     const roleAllowed = syncRecruitmentRoleUi();
     if (!roleAllowed) {
       showToast('error', 'Apenas Líder ou Admin podem acessar o recrutamento.');
-      window.location.href = 'dashboard.html';
+      window.location.href = '/dashboard';
       return;
     }
     const ctx = activeGuildContext() || {};

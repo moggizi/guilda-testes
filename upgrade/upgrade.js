@@ -418,7 +418,7 @@ import { checkAuth, setupSidebar, initIcons, logout, getVipTier, showToast, getG
         if (statusLabelFromMp(data.status) === 'aprovado') {
           stopPoll();
           showToast('success', 'Pagamento aprovado! Liberando plano…');
-          setTimeout(() => window.location.href = 'dashboard.html', 1200);
+          setTimeout(() => window.location.href = '/dashboard', 1200);
         }
       } catch (_) {
       }

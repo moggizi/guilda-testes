@@ -223,7 +223,7 @@
             if (k.startsWith('securityConfig_') || k.startsWith('tagMembros_')) removeSharedCache(k);
           }
         } catch (_) {}
-        window.location.href = 'index.html';
+        window.location.href = '/';
       }
     }
 
@@ -479,9 +479,9 @@
     function checkAuth(redirectToLogin = true) {
       return new Promise((resolve) => {
         onAuthStateChanged(auth, async (user) => {
-          const isLoginPage = /index\.html$|\/$/i.test(window.location.pathname || '');
+          const isLoginPage = /(^\/$)|(^\/index\/?$)|(^\/index\/index\.html$)|index\.html$/i.test(window.location.pathname || '');
           if (!user) {
-            if (redirectToLogin && !isLoginPage) window.location.href = 'index.html';
+            if (redirectToLogin && !isLoginPage) window.location.href = '/';
             resolve(null);
             return;
           }
@@ -515,7 +515,7 @@
             }
 
             if (String(cachedCtx.role || '') === 'Jogador') {
-              window.location.href = 'jogador.html';
+              window.location.href = '/jogador';
               resolve(null); return;
             }
 
@@ -546,7 +546,7 @@
           }
           if (!guildId) {
             try { await signOut(auth); } catch (_) {}
-            if (!isLoginPage) window.location.href = 'index.html';
+            if (!isLoginPage) window.location.href = '/';
             resolve(null); return;
           }
 
@@ -608,7 +608,7 @@
               showToast('error', 'Conta expirada');
               try { await signOut(auth); } catch (_) {}
               clearSharedGuildContextCache();
-              window.location.href = 'index.html';
+              window.location.href = '/';
               resolve(null); return;
             }
           } catch (_) {}
@@ -644,17 +644,17 @@
           if (roleEl) roleEl.textContent = role;
 
           const path = (window.location.pathname || '').toLowerCase();
-          const isDashboardPage = path.endsWith('/dashboard') || path.endsWith('/dashboard.html') || path.includes('dashboard.html');
+          const isDashboardPage = path.endsWith('/dashboard') || path.endsWith('/dashboard.html') || path.includes('/dashboard');
           if (role === 'Membro') {
             const hasUserLink = !!(userProfile && userProfile.guildId);
             if (!hasUserLink && (!hint || hint === 'Membro')) {
               try { await signOut(auth); } catch (_) {}
-              if (!isLoginPage) window.location.href = 'index.html';
+              if (!isLoginPage) window.location.href = '/';
               resolve(null); return;
             }
           }
           if (role === 'Jogador') {
-            window.location.href = 'jogador.html';
+            window.location.href = '/jogador';
             resolve(null); return;
           }
           // No dashboard o admin pode entrar. Páginas antigas continuam protegidas pelo logic.js.

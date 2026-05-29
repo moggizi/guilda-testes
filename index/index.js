@@ -567,7 +567,7 @@ async function createOwnerAccount(user, { gameId, guildName, nick }) {
   }, { merge: true });
 
   await batch.commit();
-  return { redirectTo: 'dashboard.html?login=1', promoDays, partnerRef };
+  return { redirectTo: '/dashboard?login=1', promoDays, partnerRef };
 }
 
 async function createPlayerAccount(user, { gameId, nick }) {
@@ -594,7 +594,7 @@ async function createPlayerAccount(user, { gameId, nick }) {
     updatedAt: serverTimestamp()
   }, { merge: true });
 
-  return { redirectTo: 'jogador.html?login=1', promoDays: 0 };
+  return { redirectTo: '/jogador?login=1', promoDays: 0 };
 }
 
 async function findUserProfile(user) {
@@ -638,15 +638,15 @@ async function resolveLoginRedirect(user) {
   const role = String(profile?.role || '').trim();
 
   if (role === 'Jogador' && !profile?.guildId) {
-    return 'jogador.html?login=1';
+    return '/jogador?login=1';
   }
 
   if (role === 'Jogador') {
-    return 'jogador.html?login=1';
+    return '/jogador?login=1';
   }
 
   if (profile?.guildId) {
-    return 'dashboard.html?login=1';
+    return '/dashboard?login=1';
   }
 
   // Não consulta/varre configGuilda para descobrir guilda por e-mail.
@@ -654,7 +654,7 @@ async function resolveLoginRedirect(user) {
 
   try {
     const ownerCfg = await getDoc(doc(db, 'configGuilda', user.uid));
-    if (ownerCfg.exists()) return 'dashboard.html?login=1';
+    if (ownerCfg.exists()) return '/dashboard?login=1';
   } catch (_) {}
 
   throw new Error('incomplete-account');

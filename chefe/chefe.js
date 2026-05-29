@@ -121,7 +121,7 @@ import { checkAuth, setupSidebar, initIcons, logout, db, ensureCeoStatus, applyC
       const isCEO = await ensureCeoStatus();
       if (!isCEO) {
         showToast('error', 'Acesso negado: Apenas o Chefe pode entrar aqui.');
-        window.location.href = 'dashboard.html';
+        window.location.href = '/dashboard';
         return;
       }
       

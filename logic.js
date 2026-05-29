@@ -1594,10 +1594,10 @@ async function __logoutWithToast(message, guildId = '') {
 
   try {
     setTimeout(() => {
-      try { window.location.href = "index.html"; } catch (_) {}
+      try { window.location.href = "/"; } catch (_) {}
     }, 900);
   } catch (_) {
-    try { window.location.href = "index.html"; } catch (_) {}
+    try { window.location.href = "/"; } catch (_) {}
   }
 }
 
@@ -1681,7 +1681,7 @@ function __isProtectedRouteAllowedByCachedCtx(ctx, isLoginPage) {
     const path = (window.location.pathname || "").toLowerCase();
     const isAdminPage = path.endsWith("/admin") || path.endsWith("/admin.html") || path.includes("admin.html");
     const isMembersPage = path.endsWith("/membros") || path.endsWith("/membros.html") || path.includes("membros.html");
-    const isDashboardPage = path.endsWith("/dashboard") || path.endsWith("/dashboard.html") || path.includes("dashboard.html");
+    const isDashboardPage = path.endsWith("/dashboard") || path.endsWith("/dashboard.html") || path.includes("/dashboard");
     const isSettingsPage = path.endsWith("/ajustes") || path.endsWith("/ajustes.html") || path.includes("ajustes.html");
     const isLinesPage = path.endsWith("/lines") || path.endsWith("/lines.html") || path.includes("lines.html");
     const isUpgradePage = path.endsWith("/upgrade") || path.endsWith("/upgrade.html") || path.includes("upgrade.html");
@@ -1692,19 +1692,19 @@ function __isProtectedRouteAllowedByCachedCtx(ctx, isLoginPage) {
       path.endsWith("/recrutamento") || path.endsWith("/recrutamento.html") || path.includes("recrutamento.html") ||
       path.endsWith("/rec") || path.endsWith("/rec.html") || path.includes("rec.html") ||
       path.endsWith("/camp") || path.endsWith("/camp.html") || path.includes("camp.html");
-    const isPlayerPage = path.endsWith("/jogador") || path.endsWith("/jogador.html") || path.includes("jogador.html");
+    const isPlayerPage = path.endsWith("/jogador") || path.endsWith("/jogador.html") || path.includes("/jogador");
 
-    if (isChefePage && ctx.isCeo !== true) return { allowed: false, redirectTo: 'dashboard.html' };
+    if (isChefePage && ctx.isCeo !== true) return { allowed: false, redirectTo: '/dashboard' };
 
     if (role === "Jogador") {
-      if (!isPlayerPage) return { allowed: false, redirectTo: 'jogador.html' };
+      if (!isPlayerPage) return { allowed: false, redirectTo: '/jogador' };
       return { allowed: true };
     }
 
     if (role === "Admin") {
-      if (isAdminPage) return { allowed: false, redirectTo: 'dashboard.html' };
+      if (isAdminPage) return { allowed: false, redirectTo: '/dashboard' };
       if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage && !isRecruitmentPage && !isUpgradePage) {
-        return { allowed: false, redirectTo: 'dashboard.html' };
+        return { allowed: false, redirectTo: '/dashboard' };
       }
     }
 
@@ -1793,11 +1793,11 @@ function __applyAuthContextFromCache(ctx, user) {
 export function checkAuth(redirectToLogin = true) {
   return new Promise((resolve) => {
     onAuthStateChanged(auth, async (user) => {
-      const isLoginPage = /index\.html$|\/$/i.test(window.location.pathname || "");
+      const isLoginPage = /(^\/$)|(^\/index\/?$)|(^\/index\/index\.html$)|index\.html$/i.test(window.location.pathname || "");
 
       if (!user) {
         try { __stopSecondaryAccessLiveWatch(); } catch (_) {}
-        if (redirectToLogin && !isLoginPage) window.location.href = "index.html";
+        if (redirectToLogin && !isLoginPage) window.location.href = "/";
         resolve(null);
         return;
       }
@@ -1859,7 +1859,7 @@ export function checkAuth(redirectToLogin = true) {
       // Se ainda não resolveu, a conta não está vinculada a nenhuma guilda -> não criar nada automaticamente.
       if (!guildId) {
         try { await signOut(auth); } catch (_) {}
-        if (!isLoginPage) window.location.href = "index.html";
+        if (!isLoginPage) window.location.href = "/";
         resolve(null);
         return;
       }
@@ -2057,7 +2057,7 @@ try {
       const path = (window.location.pathname || "").toLowerCase();
       const isAdminPage = path.endsWith("/admin") || path.endsWith("/admin.html") || path.includes("admin.html");
       const isMembersPage = path.endsWith("/membros") || path.endsWith("/membros.html") || path.includes("membros.html");
-      const isDashboardPage = path.endsWith("/dashboard") || path.endsWith("/dashboard.html") || path.includes("dashboard.html");
+      const isDashboardPage = path.endsWith("/dashboard") || path.endsWith("/dashboard.html") || path.includes("/dashboard");
       const isSettingsPage = path.endsWith("/ajustes") || path.endsWith("/ajustes.html") || path.includes("ajustes.html");
       const isLinesPage = path.endsWith("/lines") || path.endsWith("/lines.html") || path.includes("lines.html");
       const isUpgradePage = path.endsWith("/upgrade") || path.endsWith("/upgrade.html") || path.includes("upgrade.html");
@@ -2088,23 +2088,23 @@ try {
         const hint = (roleHint || "").toString().trim();
         if (!hasUserLink && (!hint || hint === "Membro")) {
           try { await signOut(auth); } catch (_) {}
-          if (!isLoginPage) window.location.href = "index.html";
+          if (!isLoginPage) window.location.href = "/";
           resolve(null);
           return;
         }
       }
 
       if (isChefePage && !__isCeo) {
-        window.location.href = "dashboard.html";
+        window.location.href = "/dashboard";
         resolve(null);
         return;
       }
 
       
       if (role === "Jogador") {
-        const isPlayerPage = path.endsWith("/jogador") || path.endsWith("/jogador.html") || path.includes("jogador.html");
+        const isPlayerPage = path.endsWith("/jogador") || path.endsWith("/jogador.html") || path.includes("/jogador");
         if (!isPlayerPage) {
-          window.location.href = "jogador.html";
+          window.location.href = "/jogador";
           resolve(null);
           return;
         }
@@ -2114,12 +2114,12 @@ try {
 
       if (role === "Admin") {
         if (isAdminPage) {
-          window.location.href = "dashboard.html";
+          window.location.href = "/dashboard";
           resolve(null);
           return;
         }
         if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage && !isRecruitmentPage && !isUpgradePage) {
-          window.location.href = "dashboard.html";
+          window.location.href = "/dashboard";
           resolve(null);
           return;
         }
@@ -2296,7 +2296,7 @@ export async function logout() {
         }
       }
     } catch (_) {}
-    window.location.href = "index.html";
+    window.location.href = "/";
   }
 }
 
