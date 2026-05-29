@@ -2,8 +2,8 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-    <script src="../theme.js"></script>
-    <script src="../app-loader.js"></script>
+    <script src="/theme.js"></script>
+    <script src="/app-loader.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Minhas estatísticas</title>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -39,9 +39,15 @@
   .dd-item[aria-selected="true"] { background: rgba(16,185,129,.16); color:#d1fae5; }
 
 </style>
-  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body class="min-h-screen bg-white text-slate-900">
+  <div id="app-boot-loader" class="app-boot-loader" role="status" aria-live="polite">
+    <div class="app-boot-loader__box">
+      <div class="app-boot-loader__mark"></div>
+      <div class="app-boot-loader__text">Carregando</div>
+    </div>
+  </div>
 
   
   <div id="sidebar-overlay" class="fixed inset-0 z-40 hidden bg-black/40"></div>
@@ -60,19 +66,19 @@
     </div>
 
     <nav class="p-3 space-y-1">
-      <a href="../index/index.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
+      <a href="/" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
         <i data-lucide="home" class="h-4 w-4"></i>
         <span class="font-semibold">Início</span>
       </a>
-      <a href="../eventos/eventos.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
+      <a href="/recrutamento" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
         <i data-lucide="users-round" class="h-4 w-4"></i>
         <span class="font-semibold">Recrutamentos</span>
       </a>
-      <a href="../stats/stats.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
+      <a href="/stats" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
         <i data-lucide="bar-chart-3" class="h-4 w-4"></i>
         <span class="font-semibold">Minhas estatísticas</span>
       </a>
-      <a href="../suporte/suporte.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
+      <a href="/suporte" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-700 hover:bg-slate-100">
         <i data-lucide="help-circle" class="h-4 w-4"></i>
         <span class="font-semibold">Suporte</span>
       </a>
@@ -94,7 +100,7 @@
           <div class="text-xs text-slate-500"> Estatísticas￼</div>
         </div>
       </div>
-      <a href="../index/index.html" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">Voltar</a>
+      <a href="/" class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">Voltar</a>
     </div>
   </header><main class="mx-auto w-full max-w-6xl px-4 py-6">
 <section class="space-y-4">
@@ -113,6 +119,6 @@
   <div id="result"></div>
 </section>
 </main>
-<script type="module" src="./stats.js"></script>
+<script type="module" src="/stats/stats.js"></script>
 </body>
 </html>

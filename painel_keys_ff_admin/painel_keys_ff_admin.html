@@ -2,12 +2,12 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-    <script src="../theme.js"></script>
-    <script src="../app-loader.js"></script>
+    <script src="/theme.js"></script>
+    <script src="/app-loader.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GuildaHub - Painel de Keys</title>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="../style.css" />
+  <link rel="stylesheet" href="/style.css" />
   <style>
     :root {
       --bg: #0f172a;
@@ -167,6 +167,12 @@
   </style>
 </head>
 <body>
+  <div id="app-boot-loader" class="app-boot-loader" role="status" aria-live="polite">
+    <div class="app-boot-loader__box">
+      <div class="app-boot-loader__mark"></div>
+      <div class="app-boot-loader__text">Carregando</div>
+    </div>
+  </div>
   <header class="topbar">
 <div class="topbar-inner">
       <div class="brand">
@@ -303,6 +309,6 @@
     </section>
   </main>
 
-  <script type="module" src="./painel_keys_ff_admin.js"></script>
+  <script type="module" src="/painel_keys_ff_admin/painel_keys_ff_admin.js"></script>
 </body>
 </html>

@@ -2,8 +2,8 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-      <script src="../theme.js"></script>
-    <script src="../app-loader.js"></script>
+      <script src="/theme.js"></script>
+    <script src="/app-loader.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Guilda HUB - O fim da bagunça na sua Guilda</title>
     
@@ -12,11 +12,17 @@
     
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="/style.css">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4180060434572846"
      crossorigin="anonymous"></script>
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900 font-sans">
+  <div id="app-boot-loader" class="app-boot-loader" role="status" aria-live="polite">
+    <div class="app-boot-loader__box">
+      <div class="app-boot-loader__mark"></div>
+      <div class="app-boot-loader__text">Carregando</div>
+    </div>
+  </div>
     
   <div id="sidebar-overlay" class="fixed inset-0 z-40 hidden bg-black/40"></div>
   <aside id="sidebar" class="fixed left-0 top-0 z-50 h-full w-[280px] -translate-x-full bg-white backdrop-blur border-r border-slate-200 transition-transform">
@@ -34,15 +40,15 @@
     </div>
 
     <nav class="p-3 flex flex-col gap-2">
-      <a href="../index/index.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
+      <a href="/" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
         <i data-lucide="home" class="h-4 w-4"></i>
         <span class="font-semibold">Início</span>
       </a>
-      <a href="../eventos/eventos.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
+      <a href="/recrutamento" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
         <i data-lucide="users-round" class="h-4 w-4"></i>
         <span class="font-semibold">Recrutamentos</span>
       </a>
-      <a href="../suporte/suporte.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
+      <a href="/suporte" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
         <i data-lucide="help-circle" class="h-4 w-4"></i>
         <span class="font-semibold">Suporte</span>
       </a>
@@ -66,8 +72,8 @@
 
     <div class="flex items-center gap-2">
       <nav class="hidden md:flex items-center gap-6">
-        <a href="../eventos/eventos.html" class="text-sm font-semibold text-slate-700 hover:text-slate-900">Recrutamento</a>
-        <a href="../suporte/suporte.html" class="text-sm font-semibold text-slate-700 hover:text-slate-900">Suporte</a>
+        <a href="/recrutamento" class="text-sm font-semibold text-slate-700 hover:text-slate-900">Recrutamento</a>
+        <a href="/suporte" class="text-sm font-semibold text-slate-700 hover:text-slate-900">Suporte</a>
       </nav>
 
       <button id="open-auth-top" type="button" class="bg-gradient-to-r from-emerald-500 to-green-500 text-white px-4 py-2 rounded-xl font-black text-sm hover:opacity-90 transition-opacity shadow-md shadow-emerald-500/20">
@@ -385,6 +391,6 @@
   <div id="toast-container" class="fixed top-5 right-5 z-[60] flex flex-col gap-2"></div>
 
 <!-- Scripts -->
-<script type="module" src="./index.js"></script>
+<script type="module" src="/index/index.js"></script>
 </body>
 </html>

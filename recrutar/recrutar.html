@@ -2,15 +2,21 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-    <script src="../theme.js"></script>
-    <script src="../app-loader.js"></script>
+    <script src="/theme.js"></script>
+    <script src="/app-loader.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Recrutamento - Guild Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-<link rel="stylesheet" href="../style.css" />
+<link rel="stylesheet" href="/style.css" />
 </head>
 <body class="bg-gray-50/80">
+  <div id="app-boot-loader" class="app-boot-loader" role="status" aria-live="polite">
+    <div class="app-boot-loader__box">
+      <div class="app-boot-loader__mark"></div>
+      <div class="app-boot-loader__text">Carregando</div>
+    </div>
+  </div>
   <div class="flex min-h-screen">
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
   <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
@@ -25,35 +31,35 @@
   </div>
 
   <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
-    <a href="../dashboard/dashboard.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+    <a href="/dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
       <i data-lucide="house" class="w-5 h-5"></i> Painel
     </a>
 
-    <a href="../perfil-guilda/perfil-guilda.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+    <a href="/perfil-guilda" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
       <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Estatísticas
     </a>
 
-    <a href="../membros/membros.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+    <a href="/membros" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
       <i data-lucide="users" class="w-5 h-5"></i> Membros
     </a>
 
-    <a href="../lines/lines.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+    <a href="/lines" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
       <i data-lucide="layers" class="w-5 h-5"></i> Lines / Equipe
     </a>
 
-    <a href="../ajustes/ajustes.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+    <a href="/ajustes" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
       <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
     </a>
 
-    <a href="../upgrade/upgrade.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+    <a href="/upgrade" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
       <i data-lucide="sparkles" class="w-5 h-5"></i> Assinatura
     </a>
 
-    <a href="../recrutar/recrutar.html" data-rec-admin-leader-only="true" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
+    <a href="/recrutar" data-rec-admin-leader-only="true" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
       <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
     </a>
 
-    <a href="../admin/admin.html" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+    <a href="/admin" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
       <i data-lucide="settings" class="w-5 h-5"></i> Admin
     </a>
 
@@ -61,13 +67,13 @@
       <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
     </a>
 
-    <a id="nav-chefe" href="../chefe/chefe.html" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+    <a id="nav-chefe" href="/chefe" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
       <i data-lucide="crown" class="w-5 h-5"></i> Chefe
     </a>
   </nav>
 
   <div class="shrink-0 p-4 border-t border-gray-100 bg-white">
-    <a href="../perfil/perfil.html" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50 hover:bg-emerald-100 transition-colors">
+    <a href="/perfil" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50 hover:bg-emerald-100 transition-colors">
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-full bg-emerald-200/50 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden border border-emerald-300">
           <img id="sidebar-avatar" src="" alt="" class="w-full h-full object-cover hidden">
@@ -491,6 +497,6 @@
     .rq-dd-item.is-selected { background:#ecfdf5; color:#047857; }
   </style>
 
-  <script type="module" src="./recrutar.js?v=admin-recrutamento-v3"></script>
+  <script type="module" src="/recrutar/recrutar.js?v=admin-recrutamento-v3"></script>
 </body>
 </html>

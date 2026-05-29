@@ -5,20 +5,31 @@
   const startedAt = Date.now();
   let hidden = false;
 
-  function ensureLoader() {
-    if (document.getElementById('app-boot-loader')) return;
-    const loader = document.createElement('div');
-    loader.id = 'app-boot-loader';
-    loader.className = 'app-boot-loader';
-    loader.setAttribute('role', 'status');
-    loader.setAttribute('aria-live', 'polite');
-    loader.innerHTML = [
+  function loaderTemplate() {
+    return [
       '<div class="app-boot-loader__box">',
       '  <div class="app-boot-loader__mark"></div>',
       '  <div class="app-boot-loader__text">Carregando</div>',
       '</div>'
     ].join('');
-    document.body.appendChild(loader);
+  }
+
+  function ensureLoader() {
+    let loader = document.getElementById('app-boot-loader');
+    if (loader) {
+      loader.classList.remove('app-boot-loader--hide');
+      return loader;
+    }
+    if (!document.body) return null;
+
+    loader = document.createElement('div');
+    loader.id = 'app-boot-loader';
+    loader.className = 'app-boot-loader';
+    loader.setAttribute('role', 'status');
+    loader.setAttribute('aria-live', 'polite');
+    loader.innerHTML = loaderTemplate();
+    document.body.insertBefore(loader, document.body.firstChild);
+    return loader;
   }
 
   function hide() {
@@ -35,7 +46,10 @@
 
   window.GuildaHubLoader = {
     done: hide,
-    show: ensureLoader
+    show() {
+      hidden = false;
+      ensureLoader();
+    }
   };
 
   if (document.body) ensureLoader();
