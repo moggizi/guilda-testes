@@ -286,39 +286,39 @@ border-top-color:rgba(255,255,255,0);display:inline-block;animation:spin .9s lin
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --theme-bg: #081713;
-  --theme-bg-soft: #0d211b;
-  --theme-surface: #10271f;
-  --theme-surface-2: #143127;
-  --theme-elevated: #183b31;
-  --theme-border: rgba(167, 243, 208, 0.16);
-  --theme-text: #e9fff6;
-  --theme-text-soft: #c9e7db;
-  --theme-muted: #9db8ad;
-  --theme-muted-2: #789188;
-  --theme-accent: #34d399;
-  --theme-accent-soft: rgba(16, 185, 129, 0.14);
+  --theme-bg: #121312;
+  --theme-bg-soft: #181918;
+  --theme-surface: #1b1c1b;
+  --theme-surface-2: #222322;
+  --theme-elevated: #292b29;
+  --theme-border: rgba(255, 255, 255, 0.10);
+  --theme-text: #f3f4f3;
+  --theme-text-soft: #d6d8d6;
+  --theme-muted: #a5aaa6;
+  --theme-muted-2: #757b76;
+  --theme-accent: #3ecf8e;
+  --theme-accent-soft: rgba(62, 207, 142, 0.12);
   --theme-danger-soft: rgba(248, 113, 113, 0.13);
   --theme-warning-soft: rgba(245, 158, 11, 0.14);
   --theme-info-soft: rgba(96, 165, 250, 0.14);
-  --theme-shadow: rgba(0, 0, 0, 0.28);
+  --theme-shadow: rgba(0, 0, 0, 0.34);
 }
 
 html[data-theme="dark"] body {
   background:
-    radial-gradient(900px 520px at 10% -10%, rgba(16, 185, 129, 0.14), transparent 58%),
-    radial-gradient(760px 460px at 95% 0%, rgba(20, 184, 166, 0.10), transparent 54%),
-    var(--theme-bg) !important;
+    radial-gradient(900px 520px at 12% -18%, rgba(62, 207, 142, 0.07), transparent 58%),
+    radial-gradient(780px 460px at 96% 0%, rgba(255, 255, 255, 0.035), transparent 54%),
+    linear-gradient(180deg, #151615 0%, var(--theme-bg) 48%, #101110 100%) !important;
   color: var(--theme-text) !important;
 }
 
 html[data-theme="dark"] ::selection {
-  background-color: rgba(52, 211, 153, 0.34);
+  background-color: rgba(62, 207, 142, 0.30);
   color: var(--theme-text);
 }
 
-html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #315b4d; }
-html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4a7a69; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #343634; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #464946; }
 
 .theme-toggle-wrap {
   margin: 0 0 8px;
@@ -435,7 +435,7 @@ html[data-theme="dark"] :where(.bg-blue-50, .bg-blue-100, .bg-indigo-50, .bg-ind
 }
 
 html[data-theme="dark"] :where(.bg-slate-800, .bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-black) {
-  background-color: #0a1b16 !important;
+  background-color: #101110 !important;
 }
 
 html[data-theme="dark"] :where(.text-gray-900, .text-gray-800, .text-slate-900, .text-slate-800, .text-slate-950) {
@@ -451,7 +451,7 @@ html[data-theme="dark"] :where(.text-gray-500, .text-gray-400, .text-gray-300, .
 }
 
 html[data-theme="dark"] :where(.text-emerald-700, .text-emerald-800, .text-green-700, .text-green-800) {
-  color: #7ee7bd !important;
+  color: #6ee7b7 !important;
 }
 
 html[data-theme="dark"] :where(.text-amber-700, .text-amber-800, .text-amber-900, .text-yellow-700, .text-yellow-800, .text-orange-700) {
@@ -525,8 +525,8 @@ html[data-theme="dark"] :where(.dd-item:hover, .rq-dd-item:hover, .warning-prese
 
 html[data-theme="dark"] :where(.dd-item[aria-selected="true"], .rq-dd-item.is-selected, .select-chip input:checked + span, .pm-option.pm-selected, .counter-option.counter-active) {
   background: var(--theme-accent-soft) !important;
-  color: #7ee7bd !important;
-  border-color: rgba(52, 211, 153, 0.34) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(62, 207, 142, 0.34) !important;
 }
 
 html[data-theme="dark"] :where(.counter-option-count, .warning-preset-option-icon) {
@@ -536,7 +536,7 @@ html[data-theme="dark"] :where(.counter-option-count, .warning-preset-option-ico
 }
 
 html[data-theme="dark"] :where(.member-warning-card, .warning-reason-box) {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(16, 39, 31, 0.96) 58%, rgba(248, 113, 113, 0.12)) !important;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(27, 28, 27, 0.96) 58%, rgba(248, 113, 113, 0.12)) !important;
   border-color: rgba(245, 158, 11, 0.38) !important;
 }
 
@@ -555,9 +555,9 @@ html[data-theme="dark"] .welcome-modal__content {
 }
 
 html[data-theme="dark"] .welcome-modal__badge {
-  color: #7ee7bd;
+  color: #6ee7b7;
   background: var(--theme-accent-soft);
-  border-color: rgba(52, 211, 153, 0.28);
+  border-color: rgba(62, 207, 142, 0.28);
 }
 
 /* Paginas publicas da API Free Fire */
