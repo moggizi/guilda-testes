@@ -1,0 +1,66 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/index", "destination": "/index.html" },
+    { "source": "/index.html", "destination": "/index.html" },
+    { "source": "/inicio", "destination": "/inicio.html" },
+    { "source": "/inicio.html", "destination": "/inicio.html" },
+
+    { "source": "/dashboard", "destination": "/dashboard.html" },
+    { "source": "/dashboard.html", "destination": "/dashboard.html" },
+
+    { "source": "/membros", "destination": "/membros.html" },
+    { "source": "/membros.html", "destination": "/membros.html" },
+    { "source": "/members", "destination": "/membros.html" },
+
+    { "source": "/lines", "destination": "/lines.html" },
+    { "source": "/lines.html", "destination": "/lines.html" },
+
+    { "source": "/ajustes", "destination": "/ajustes.html" },
+    { "source": "/ajustes.html", "destination": "/ajustes.html" },
+
+    { "source": "/upgrade", "destination": "/upgrade.html" },
+    { "source": "/upgrade.html", "destination": "/upgrade.html" },
+
+    { "source": "/chefe", "destination": "/chefe.html" },
+    { "source": "/chefe.html", "destination": "/chefe.html" },
+
+    { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/admin.html", "destination": "/admin.html" },
+
+    { "source": "/jogador", "destination": "/jogador.html" },
+    { "source": "/jogador.html", "destination": "/jogador.html" },
+
+    { "source": "/perfil", "destination": "/perfil.html" },
+    { "source": "/perfil.html", "destination": "/perfil.html" },
+
+    { "source": "/perfil-guilda", "destination": "/perfil-guilda.html" },
+    { "source": "/perfil-guilda.html", "destination": "/perfil-guilda.html" },
+
+    { "source": "/eventos", "destination": "/eventos.html" },
+    { "source": "/eventos.html", "destination": "/eventos.html" },
+    { "source": "/recrutamento", "destination": "/recrutamento.html" },
+    { "source": "/recrutamento.html", "destination": "/recrutamento.html" },
+    { "source": "/rec", "destination": "/rec.html" },
+    { "source": "/rec.html", "destination": "/rec.html" },
+
+    { "source": "/recrutar", "destination": "/recrutar.html" },
+    { "source": "/recrutar.html", "destination": "/recrutar.html" },
+
+    { "source": "/stats", "destination": "/stats.html" },
+    { "source": "/stats.html", "destination": "/stats.html" },
+
+    { "source": "/suporte", "destination": "/suporte.html" },
+    { "source": "/suporte.html", "destination": "/suporte.html" },
+
+    { "source": "/painel", "destination": "/painel.html" },
+    { "source": "/painel.html", "destination": "/painel.html" },
+    { "source": "/painel_keys_ff_admin", "destination": "/painel_keys_ff_admin.html" },
+    { "source": "/painel_keys_ff_admin.html", "destination": "/painel_keys_ff_admin.html" },
+
+    { "source": "/free_fire/api/info", "destination": "/api/free_fire/info" },
+    { "source": "/free_fire/api", "destination": "/free_fire/api.html" },
+    { "source": "/free_fire/api.html", "destination": "/free_fire/api.html" }
+  ]
+}

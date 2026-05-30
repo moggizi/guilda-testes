@@ -211,7 +211,7 @@ function waitForProfileAuth() {
       try { unsubscribe(); } catch (_) {}
 
       if (!user) {
-        window.location.href = '/';
+        window.location.href = '/inicio';
         resolve(null);
         return;
       }

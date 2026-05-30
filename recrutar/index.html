@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+    <script src="/theme.js"></script>
+    <script src="/app-loader.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recrutamento - Guild Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-50/80">
+  <div id="app-boot-loader" class="app-boot-loader" role="status" aria-live="polite">
+    <div class="app-boot-loader__box">
+      <div class="app-boot-loader__mark"></div>
+      <div class="app-boot-loader__text">Carregando</div>
+    </div>
+  </div>
+  <div class="flex min-h-screen">
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
+  <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
+  <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+    <div class="flex items-center gap-3">
+      <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav" onerror="this.src='https://via.placeholder.com/40'">
+      <div>
+        <h1 class="font-bold text-gray-900 text-lg">Guilda e eventos</h1>
+        <p class="text-xs text-gray-400">Menu</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
+    <a href="/dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="house" class="w-5 h-5"></i> Painel
+    </a>
+
+    <a href="/perfil-guilda" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Estatísticas
+    </a>
+
+    <a href="/membros" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="users" class="w-5 h-5"></i> Membros
+    </a>
+
+    <a href="/lines" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="layers" class="w-5 h-5"></i> Lines / Equipe
+    </a>
+
+    <a href="/ajustes" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
+    </a>
+
+    <a href="/upgrade" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="sparkles" class="w-5 h-5"></i> Assinatura
+    </a>
+
+    <a href="/recrutar" data-rec-admin-leader-only="true" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
+      <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
+    </a>
+
+    <a href="/admin" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="settings" class="w-5 h-5"></i> Admin
+    </a>
+
+     <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
+    </a>
+
+    <a id="nav-chefe" href="/chefe" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="crown" class="w-5 h-5"></i> Chefe
+    </a>
+  </nav>
+
+  <div class="shrink-0 p-4 border-t border-gray-100 bg-white">
+    <a href="/perfil" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50 hover:bg-emerald-100 transition-colors">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-emerald-200/50 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden border border-emerald-300">
+          <img id="sidebar-avatar" src="" alt="" class="w-full h-full object-cover hidden">
+          <i id="sidebar-avatar-icon" data-lucide="user" class="w-4 h-4"></i>
+        </div>
+
+        <div>
+          <p id="user-role" class="text-sm font-bold">Meu Perfil</p>
+          <p id="user-email" class="text-[10px] opacity-80 truncate w-28">Configurações</p>
+        </div>
+      </div>
+    </a>
+
+    <button id="btn-logout" class="w-full mt-2 flex items-center justify-center gap-2 py-2 text-sm font-semibold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+      <i data-lucide="log-out" class="w-4 h-4"></i> Sair
+    </button>
+  </div>
+</aside>
+
+<main class="flex-1 min-w-0 relative lg:ml-72">
+      <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
+<div class="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div class="flex items-center gap-3">
+            <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500"><i data-lucide="menu" class="w-5 h-5"></i></button>
+            <h1 class="text-lg font-semibold text-gray-900">Recrutamento <span class="ml-2 inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-0.5 text-[10px] font-extrabold">NOVO</span></h1>
+          </div>
+          <button id="btn-reload" class="p-2 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition"><i data-lucide="rotate-cw" class="w-5 h-5"></i></button>
+        </div>
+      </header>
+
+      <div class="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
+        <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-6">
+          <section class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-2xl font-bold text-gray-900">Painel de recrutamento</h2>
+                <p class="text-sm text-gray-500 mt-1">Abra a chave da sua guilda para ver ou publicar um recrutamento.</p>
+              </div>
+              <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><i data-lucide="users-round" class="w-6 h-6"></i></div>
+            </div>
+
+            <div class="mt-5 grid sm:grid-cols-[1fr_auto] gap-3">
+              <div>
+                <label for="guild-access-key-input" class="hidden block text-sm font-medium text-gray-700 mb-1.5">Chave da guilda *</label>
+                <input id="guild-access-key-input" type="text" placeholder="Ex: ghub-123456789" class="hidden w-full px-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+              </div>
+              <div class="sm:pt-7">
+                <button id="btn-load-recruitment" class="hidden w-full sm:w-auto px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95">
+                  Abrir recrutamento
+                </button>
+              </div>
+            </div>
+
+            <div id="key-status" class="mt-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 px-4 py-3 text-sm">Verificando chave de guilda...</div>
+
+            <div class="mt-5 grid sm:grid-cols-3 gap-3">
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p class="text-[11px] text-gray-500 font-semibold">UID da guilda</p>
+                <p id="current-uid" class="mt-1 text-sm font-bold text-gray-900 break-all">-</p>
+              </div>
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p class="text-[11px] text-gray-500 font-semibold">Sua guilda</p>
+                <p id="current-guild-name" class="mt-1 text-sm font-bold text-gray-900 break-words">-</p>
+              </div>
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p class="text-[11px] text-gray-500 font-semibold">Chave aberta</p>
+                <p id="opened-key" class="mt-1 text-sm font-bold text-gray-900 break-all">Nenhuma</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-gray-50 text-gray-700 flex items-center justify-center"><i data-lucide="info" class="w-5 h-5"></i></div>
+              <div>
+                <p class="text-sm font-semibold text-gray-900">Como usar</p>
+                <ul class="mt-2 text-xs text-gray-600 space-y-1 list-disc pl-4">
+                  <li>Digite a chave da sua guilda e toque em <b>Abrir recrutamento</b>.</li>
+                  <li>Se essa chave ainda não tiver sido usada aqui, ela será vinculada automaticamente à sua guilda.</li>
+                  <li>Depois disso, a tela procura se já existe um anúncio de recrutamento dessa guilda.</li>
+                  <li>Se ainda não existir, o botão para criar recrutamento aparece para você publicar.</li>
+                  <li>Para salvar, escolha pelo menos uma função e envie uma foto.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 class="text-xl font-bold text-gray-900">Seu recrutamento</h3>
+            <p class="text-sm text-gray-500 mt-1">Depois de abrir a chave, aqui aparece o anúncio de recrutamento vinculado a ela.</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button id="btn-copy-rec-link" class="hidden flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-all active:scale-95">
+              <i data-lucide="link-2" class="w-4 h-4"></i> Copiar meu link de recrutamento
+            </button>
+            <button id="btn-new-rec" class="hidden flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg hover:shadow-xl transition-all active:scale-95">
+              <i data-lucide="plus" class="w-4 h-4"></i> Criar recrutamento
+            </button>
+          </div>
+        </div>
+
+        <div id="recruitment-view" class="space-y-4">
+          <div class="bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center">
+            <p class="text-gray-500 font-medium">Abra uma chave da guilda para visualizar seu recrutamento.</p>
+          </div>
+        </div>
+
+        <section id="requests-section" class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hidden">
+          <div class="p-5 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div>
+              <h4 class="text-lg font-bold text-gray-900">Pedidos de recrutamento</h4>
+              <p class="text-sm text-gray-500 mt-1">Aqui você pode aceitar ou recusar os pedidos enviados para sua guilda.</p>
+            </div>
+            <span id="requests-badge" class="inline-flex items-center rounded-full bg-gray-100 text-gray-700 px-2.5 py-1 text-xs font-bold">0</span>
+          </div>
+          <div id="requests-view" class="p-5 space-y-4">
+            <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-500 text-center">Abra um recrutamento para visualizar os pedidos.</div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="rec-modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/40" data-close-rec></div>
+    <div class="relative bg-white w-full sm:max-w-xl sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto overscroll-contain animate-in" style="padding-bottom: env(safe-area-inset-bottom);">
+      <div class="flex items-center justify-between p-5 border-b border-gray-100 bg-white rounded-t-2xl sticky top-0">
+        <h3 id="rec-modal-title" class="text-lg font-bold text-gray-900">Novo recrutamento</h3>
+        <button type="button" data-close-rec class="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="rec-form" class="p-5 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Nome da guilda *</label>
+          <input id="rec-guild-name" type="text" maxlength="60" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500" required>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Funções do recrutamento *</label>
+          <div class="grid sm:grid-cols-2 gap-2" id="roles-group">
+            <label class="select-chip"><input type="checkbox" name="roles" value="Rush"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Rush</span></label>
+            <label class="select-chip"><input type="checkbox" name="roles" value="Fuzileiro"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Fuzileiro</span></label>
+            <label class="select-chip"><input type="checkbox" name="roles" value="Full Gás"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Full Gás</span></label>
+            <label class="select-chip"><input type="checkbox" name="roles" value="Curandeiro"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Curandeiro</span></label>
+            <label class="select-chip"><input type="checkbox" name="roles" value="Suporte"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Suporte</span></label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Mais opções</label>
+          <div class="space-y-4">
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">Contato</p>
+              <div class="grid sm:grid-cols-2 gap-2" id="contact-group">
+                <label class="select-chip"><input type="checkbox" name="contacts" value="Discord"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Discord</span></label>
+                <label class="select-chip"><input type="checkbox" name="contacts" value="WhatsApp (grupo)"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>WhatsApp (grupo)</span></label>
+              </div>
+            </div>
+
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">Tipo da guilda</p>
+              <div class="grid sm:grid-cols-3 gap-2" id="guild-type-group">
+                <label class="select-chip"><input type="checkbox" name="guildType" value="Masculina"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Masculina</span></label>
+                <label class="select-chip"><input type="checkbox" name="guildType" value="Feminina"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Feminina</span></label>
+                <label class="select-chip"><input type="checkbox" name="guildType" value="Mista"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Mista</span></label>
+              </div>
+            </div>
+
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">Foco</p>
+              <div class="grid sm:grid-cols-3 gap-2" id="focus-group">
+                <label class="select-chip"><input type="checkbox" name="focus" value="GG"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>GG</span></label>
+                <label class="select-chip"><input type="checkbox" name="focus" value="Honras"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Honras</span></label>
+                <label class="select-chip"><input type="checkbox" name="focus" value="Todos"><span><i data-lucide="check-circle-2" class="w-4 h-4"></i>Todos</span></label>
+              </div>
+            </div>
+
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">Requisitos do recrutamento</p>
+              <div class="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1.5">Plataforma</label>
+                  <div class="rq-select-wrap">
+                    <select id="rec-platform" class="rq-select" data-rec-custom-select="true">
+                      <option value="">Selecione</option>
+                      <option value="Mobile">Mobile</option>
+                      <option value="Emulador">Emulador</option>
+                      <option value="Mobilador">Mobilador</option>
+                      <option value="Mista">Mista</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1.5">Idade</label>
+                  <div class="rq-select-wrap">
+                    <select id="rec-age" class="rq-select" data-rec-custom-select="true">
+                      <option value="">Selecione</option>
+                      <option value="+10">+10</option>
+                      <option value="+11">+11</option>
+                      <option value="+12">+12</option>
+                      <option value="+13">+13</option>
+                      <option value="+14">+14</option>
+                      <option value="+15">+15</option>
+                      <option value="+16">+16</option>
+                      <option value="+17">+17</option>
+                      <option value="+18">+18</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1.5">Troca nick obrigatório</label>
+                  <div class="rq-select-wrap">
+                    <select id="rec-nick-required" class="rq-select" data-rec-custom-select="true">
+                      <option value="">Selecione</option>
+                      <option value="Sim">Sim</option>
+                      <option value="Não">Não</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1.5">Prazo para trocar nick</label>
+                  <div class="rq-select-wrap">
+                    <select id="rec-nick-deadline" class="rq-select" data-rec-custom-select="true">
+                      <option value="">Selecione</option>
+                      <option value="15 dias">15 dias</option>
+                      <option value="30 dias">30 dias</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1.5">Jogar em equipe</label>
+                  <div class="rq-select-wrap">
+                    <select id="rec-teamplay" class="rq-select" data-rec-custom-select="true">
+                      <option value="">Selecione</option>
+                      <option value="Sim">Sim</option>
+                      <option value="Não">Não</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1.5">Usar call</label>
+                  <div class="rq-select-wrap">
+                    <select id="rec-call" class="rq-select" data-rec-custom-select="true">
+                      <option value="">Selecione</option>
+                      <option value="Sim">Sim</option>
+                      <option value="Não">Não</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label for="rec-photo" class="block text-sm font-medium text-gray-700 mb-1.5">Foto do recrutamento *</label>
+          <input id="rec-photo" type="file" accept="image/*" class="sr-only" aria-describedby="rec-photo-help rec-photo-status">
+
+          <label for="rec-photo" id="rec-photo-picker" class="group flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/60 p-4 transition hover:border-emerald-400 hover:bg-emerald-50 active:scale-[0.99]">
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 ring-1 ring-emerald-200 shadow-sm">
+              <i data-lucide="image-plus" class="w-5 h-5"></i>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-bold text-gray-900">Escolher foto personalizada</span>
+              <span id="rec-photo-file-name" class="block truncate text-xs text-gray-500">Nenhuma imagem escolhida</span>
+            </span>
+            <span class="hidden shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 transition group-hover:bg-emerald-600 group-hover:text-white sm:inline-flex">Selecionar</span>
+          </label>
+
+          <p id="rec-photo-help" class="text-xs text-gray-400 mt-1">A imagem será comprimida automaticamente para ficar leve e salvar em base64.</p>
+          <div id="rec-photo-status" class="mt-2 text-xs text-gray-500"></div>
+          <div id="rec-photo-preview-wrap" class="mt-3 hidden">
+            <img id="rec-photo-preview" src="" alt="Prévia da foto" class="w-full max-h-64 object-cover rounded-2xl border border-gray-200 bg-gray-50">
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between gap-3 mb-1.5">
+            <label class="block text-sm font-medium text-gray-700">Descrição</label>
+            <span id="rec-desc-count" class="text-xs text-gray-400">0/100</span>
+          </div>
+          <textarea id="rec-description" rows="4" maxlength="100" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ex: Falar sobre regras ou metas etc..."></textarea>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <button type="button" data-close-rec class="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button type="submit" class="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg hover:shadow-xl">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <div id="request-detail-modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/40" data-close-request-detail></div>
+    <div class="relative bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto overscroll-contain animate-in" style="padding-bottom: env(safe-area-inset-bottom);">
+      <div class="flex items-center justify-between p-5 border-b border-gray-100 bg-white rounded-t-2xl sticky top-0">
+        <div>
+          <h3 id="request-detail-name" class="text-lg font-bold text-gray-900">Pedido</h3>
+          <p class="text-xs text-gray-500 mt-1">ID: <span id="request-detail-id">-</span></p>
+        </div>
+        <button type="button" data-close-request-detail class="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <p class="text-xs font-semibold text-gray-500 mb-1">Status</p>
+            <span id="request-detail-status" class="inline-flex items-center rounded-full ring-1 px-2.5 py-1 text-[11px] font-extrabold bg-amber-50 text-amber-700 ring-amber-200">PENDENTE</span>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-gray-500 mb-1">Data do pedido</p>
+            <p id="request-detail-date" class="text-sm font-semibold text-gray-900">-</p>
+          </div>
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-gray-500 mb-2">Modo de jogo</p>
+          <div id="request-detail-modes" class="flex flex-wrap gap-2"></div>
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-gray-500 mb-2">WhatsApp</p>
+          <div id="request-detail-whatsapp" class="text-sm text-gray-700 break-all">-</div>
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-gray-500 mb-2">Adicionar em qual guilda?</p>
+          <div class="rq-select-wrap">
+            <select id="request-target-slot" class="rq-select" data-rec-custom-select="true">
+              <option value="1">Guilda 1</option>
+            </select>
+            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3 pt-2">
+          <button id="btn-request-reject" type="button" class="py-2.5 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-600 hover:bg-red-100">Recusar</button>
+          <button id="btn-request-accept" type="button" class="py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-sm font-medium text-white shadow-lg hover:shadow-xl">Aceitar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="delete-rec-modal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/45 backdrop-blur-sm" data-close-delete-rec></div>
+    <div class="relative z-10 w-full max-w-sm rounded-3xl bg-white border border-gray-100 shadow-2xl overflow-hidden animate-in">
+      <div class="p-6 text-center">
+        <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+          <i data-lucide="triangle-alert" class="w-7 h-7"></i>
+        </div>
+        <h3 class="text-xl font-bold text-gray-900">Excluir recrutamento?</h3>
+        <p class="mt-2 text-sm leading-6 text-gray-500">Realmente quer excluir o recrutamento?<br>Essa ação não poderá ser desfeita.</p>
+      </div>
+      <div class="grid grid-cols-2 gap-3 border-t border-gray-100 p-4">
+        <button id="btn-cancel-delete-rec" type="button" class="py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+        <button id="btn-confirm-delete-rec" type="button" class="py-3 rounded-2xl bg-red-600 text-sm font-semibold text-white shadow-lg shadow-red-100 hover:bg-red-700">Sim, excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .select-chip input { display:none; }
+    .select-chip span {
+      display:flex; align-items:center; gap:.5rem; width:100%;
+      border:1px solid rgb(229 231 235); border-radius: .9rem; padding:.85rem 1rem;
+      font-size:.875rem; font-weight:600; color:rgb(75 85 99); background:#fff;
+      transition: all .18s ease;
+    }
+    .select-chip span i { color:rgb(209 213 219); }
+    .select-chip input:checked + span {
+      border-color: rgb(16 185 129); background: rgb(236 253 245); color: rgb(4 120 87);
+      box-shadow: 0 0 0 1px rgba(16,185,129,.08) inset;
+    }
+    .select-chip input:checked + span i { color: rgb(16 185 129); }
+    .rq-select-wrap { position:relative; }
+    .rq-select {
+      width:100%; appearance:none; -webkit-appearance:none; -moz-appearance:none;
+      border:1px solid rgb(229 231 235); background:#fff; color:#111827;
+      border-radius:1rem; padding:.82rem 2.9rem .82rem 1rem; font-size:.875rem; font-weight:700;
+      outline:none; box-shadow:0 1px 2px rgba(2,6,23,.04);
+    }
+    .rq-select:focus {
+      border-color: rgb(16 185 129);
+      box-shadow: 0 0 0 4px rgba(16,185,129,.12);
+    }
+    .rq-select-wrap > i {
+      position:absolute; right:1rem; top:50%; transform:translateY(-50%);
+      color:#6b7280; pointer-events:none;
+    }
+    .rq-dd { position:relative; }
+    .rq-dd-native { position:absolute !important; opacity:0 !important; pointer-events:none !important; width:0 !important; height:0 !important; }
+    .rq-dd-btn {
+      width:100%; display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+      border:1px solid rgb(229 231 235); background:#fff; color:#111827;
+      border-radius:1rem; padding:.82rem 1rem; font-size:.875rem; font-weight:700;
+      box-shadow:0 1px 2px rgba(2,6,23,.04); outline:none; transition:all .18s ease;
+    }
+    .rq-dd-btn:hover { border-color: rgb(209 213 219); background:#f9fafb; }
+    .rq-dd-btn.is-open, .rq-dd-btn:focus {
+      border-color: rgb(16 185 129);
+      box-shadow: 0 0 0 4px rgba(16,185,129,.12);
+      background:#fff;
+    }
+    .rq-dd-btn .rq-dd-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .rq-dd-btn .rq-dd-arrow { flex:0 0 auto; color:#6b7280; transition:transform .18s ease; }
+    .rq-dd-btn.is-open .rq-dd-arrow { transform:rotate(180deg); }
+    .rq-dd-menu {
+      position:absolute; left:0; right:0; top:calc(100% + .5rem); z-index:120;
+      background:#fff; border:1px solid rgba(17,24,39,.08); border-radius:1rem;
+      box-shadow:0 20px 60px rgba(2,6,23,.18); max-height:240px; overflow-y:auto; padding:.35rem;
+    }
+    .rq-dd-item {
+      width:100%; text-align:left; display:flex; align-items:center; gap:.6rem;
+      border-radius:.85rem; padding:.75rem .85rem; font-size:.875rem; font-weight:700; color:#374151;
+      transition:all .15s ease;
+    }
+    .rq-dd-item:hover { background:#f9fafb; }
+    .rq-dd-item.is-selected { background:#ecfdf5; color:#047857; }
+  </style>
+
+  <script type="module" src="/recrutar/recrutar.js?v=admin-recrutamento-v3"></script>
+</body>
+</html>

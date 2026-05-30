@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+    <script src="/theme.js"></script>
+    <script src="/app-loader.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GuildaHub - Painel de Keys</title>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --card-2: #111827;
+      --border: #334155;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --brand: #22c55e;
+      --brand-2: #16a34a;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --ok: #10b981;
+      --shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+
+    html[data-theme="light"] {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --card-2: #f1f5f9;
+      --border: #dbe5ef;
+      --text: #0f172a;
+      --muted: #64748b;
+      --shadow: 0 20px 50px rgba(15,23,42,.10);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: linear-gradient(180deg, #0b1120 0%, var(--bg) 100%); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    html[data-theme="light"], html[data-theme="light"] body { background: linear-gradient(180deg, #eefdf6 0%, var(--bg) 100%) !important; color: var(--text) !important; }
+    button, input { font: inherit; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 24px; }
+
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: blur(10px);
+      background: rgba(15, 23, 42, 0.78);
+      border-bottom: 1px solid rgba(51, 65, 85, 0.85);
+    }
+    html[data-theme="light"] .topbar { background: rgba(255,255,255,.86); border-bottom-color: rgba(15,23,42,.10); }
+    .topbar-inner {
+      max-width: 1180px; margin: 0 auto; padding: 16px 24px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .2px;
+      font-size: 24px;
+    }
+    .brand-badge {
+      width: 14px; height: 14px; border-radius: 999px; background: var(--brand);
+      box-shadow: 0 0 18px rgba(34,197,94,.7);
+    }
+    .brand span:last-child { color: var(--brand); }
+
+    .btn {
+      border: 0; border-radius: 12px; padding: 12px 16px; cursor: pointer; font-weight: 700;
+      transition: .18s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
+    .btn-brand { background: linear-gradient(180deg, var(--brand) 0%, var(--brand-2) 100%); color: white; }
+    .btn-ghost { background: rgba(30, 41, 59, .8); color: var(--text); border: 1px solid var(--border); }
+    .btn-danger { background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%); color: white; }
+
+    .grid { display: grid; gap: 20px; }
+    .grid-2 { grid-template-columns: 1.1fr .9fr; }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    .card {
+      background: linear-gradient(180deg, rgba(30,41,59,.95) 0%, rgba(17,24,39,.98) 100%);
+      border: 1px solid rgba(51,65,85,.9);
+      border-radius: 24px; padding: 22px; box-shadow: var(--shadow);
+    }
+    .card-title { font-size: 22px; font-weight: 800; margin: 0 0 6px; }
+    .card-subtitle { color: var(--muted); margin: 0; }
+
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px;
+    }
+
+    .field { display: grid; gap: 8px; margin-bottom: 14px; }
+    .label { color: var(--muted); font-size: 14px; font-weight: 700; }
+    .input {
+      width: 100%; background: rgba(15,23,42,.95); color: var(--text);
+      border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    .input:focus { border-color: rgba(34,197,94,.9); box-shadow: 0 0 0 4px rgba(34,197,94,.12); }
+
+    .inline { display: flex; gap: 12px; flex-wrap: wrap; }
+    .inline > * { flex: 1; min-width: 160px; }
+
+    .hero {
+      padding: 28px 0 18px;
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+    }
+    .hero h1 { margin: 0 0 10px; font-size: 40px; line-height: 1.02; }
+    .hero p { margin: 0; color: var(--muted); max-width: 760px; font-size: 17px; }
+
+    .stats { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0,1fr)); margin-top: 8px; }
+    .stat {
+      background: linear-gradient(180deg, rgba(30,41,59,.95) 0%, rgba(17,24,39,.98) 100%);
+      border: 1px solid rgba(51,65,85,.9);
+      border-radius: 22px; padding: 18px;
+    }
+    .stat-kicker { color: var(--muted); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+    .stat-value { font-size: 28px; font-weight: 900; margin-top: 8px; }
+
+    .login-shell {
+      min-height: calc(100vh - 82px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 28px 16px 40px;
+    }
+    .login-card { width: 100%; max-width: 470px; }
+
+    .keys-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+    .key-card {
+      background: rgba(15,23,42,.88); border: 1px solid rgba(51,65,85,.9); border-radius: 20px; padding: 18px;
+      display: grid; gap: 14px;
+    }
+    .key-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .key-name {
+      font-weight: 900; font-size: 16px; line-height: 1.3; word-break: break-all;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 800; white-space: nowrap;
+      border: 1px solid transparent;
+    }
+    .badge-ok { color: #d1fae5; background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); }
+    .badge-warning { color: #fef3c7; background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.35); }
+    .badge-danger { color: #fecaca; background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); }
+    .meta { display: grid; gap: 8px; color: var(--muted); font-size: 14px; }
+    .meta strong { color: var(--text); font-weight: 700; }
+    .empty {
+      border: 1px dashed rgba(51,65,85,.95); border-radius: 20px; padding: 26px; text-align: center; color: var(--muted);
+      background: rgba(15,23,42,.5);
+    }
+
+    .hint {
+      margin-top: 12px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(51,65,85,.85);
+      background: rgba(15,23,42,.7); color: var(--muted); font-size: 14px;
+    }
+    .message {
+      margin-top: 12px; padding: 12px 14px; border-radius: 14px; font-weight: 700; display: none;
+    }
+    .message.show { display: block; }
+    .message.error { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); color: #fecaca; }
+    .message.success { background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.35); color: #d1fae5; }
+
+    .muted { color: var(--muted); }
+    .hidden { display: none !important; }
+
+    @media (max-width: 980px) {
+      .grid-2, .keys-grid, .grid-3, .stats { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app-boot-loader" class="app-boot-loader" role="status" aria-live="polite">
+    <div class="app-boot-loader__box">
+      <div class="app-boot-loader__mark"></div>
+      <div class="app-boot-loader__text">Carregando</div>
+    </div>
+  </div>
+  <header class="topbar">
+<div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-badge"></div>
+        <div>Guilda<span>Hub</span> Keys</div>
+      </div>
+      <button id="logoutBtn" class="btn btn-ghost hidden">Sair</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="loginView" class="login-shell">
+      <div class="card login-card">
+        <div class="section-head">
+          <div>
+            <h2 class="card-title">Entrar no painel</h2>
+            <p class="card-subtitle">Sem cadastro. Apenas login administrativo.</p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="email">E-mail</label>
+          <input id="email" class="input" type="email" placeholder="seuemail@exemplo.com" autocomplete="username" />
+        </div>
+
+        <div class="field">
+          <label class="label" for="password">Senha</label>
+          <input id="password" class="input" type="password" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+
+        <button id="loginBtn" class="btn btn-brand" style="width:100%;">Entrar</button>
+
+        <div id="loginMessage" class="message"></div>
+        <div class="hint">Crie antes um usuário no Firebase Authentication com e-mail e senha. O painel só faz login.</div>
+      </div>
+    </section>
+
+    <section id="panelView" class="hidden">
+      <div class="wrap">
+        <div class="hero">
+          <div>
+            <h1>Painel de Keys da API</h1>
+            <p>Crie novas keys, veja o tempo restante de cada uma, identifique as expiradas e exclua o que não precisar mais. Tudo em uma única tela.</p>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-kicker">Total</div>
+            <div id="statTotal" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-kicker">Ativas</div>
+            <div id="statAtivas" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-kicker">Expiram em até 7 dias</div>
+            <div id="statUrgentes" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-kicker">Expiradas</div>
+            <div id="statExpiradas" class="stat-value">0</div>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top:20px; align-items:start;">
+          <div class="card">
+            <div class="section-head">
+              <div>
+                <h2 class="card-title">Criar nova key</h2>
+                <p class="card-subtitle">Você pode digitar manualmente ou gerar automaticamente.</p>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label" for="keyInput">Key</label>
+              <div class="inline">
+                <input id="keyInput" class="input" type="text" placeholder="HUB-XXXXXXXXX" />
+                <button id="generateKeyBtn" class="btn btn-ghost" type="button">Gerar key</button>
+              </div>
+            </div>
+
+            <div class="inline">
+              <div class="field">
+                <label class="label" for="daysInput">Dias para expirar</label>
+                <input id="daysInput" class="input" type="number" min="1" value="30" />
+              </div>
+              <div class="field">
+                <label class="label" for="customDateInput">Ou data e hora exata</label>
+                <input id="customDateInput" class="input" type="datetime-local" />
+              </div>
+            </div>
+
+            <div class="inline">
+              <button class="btn btn-ghost quick-days" data-days="7" type="button">+7 dias</button>
+              <button class="btn btn-ghost quick-days" data-days="30" type="button">+30 dias</button>
+              <button class="btn btn-ghost quick-days" data-days="90" type="button">+90 dias</button>
+            </div>
+
+            <button id="createKeyBtn" class="btn btn-brand" style="width:100%; margin-top:8px;">Salvar key</button>
+            <div id="panelMessage" class="message"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <div>
+                <h2 class="card-title">Resumo rápido</h2>
+                <p class="card-subtitle">Situação atual da coleção <strong>tempo</strong>.</p>
+              </div>
+            </div>
+            <div class="meta" id="summaryMeta">
+              <div><strong>Usuário logado:</strong> <span id="currentUserEmail">-</span></div>
+              <div><strong>Leitura em tempo real:</strong> Ativada</div>
+              <div><strong>Coleção:</strong> tempo</div>
+              <div><strong>Documento:</strong> a própria key</div>
+              <div><strong>Campos salvos:</strong> keypass, criacao, expira</div>
+            </div>
+            <div class="hint" style="margin-top:16px;">Dica: se você preencher a data exata, ela tem prioridade. Se deixar vazia, o painel usa a quantidade de dias.</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div class="section-head">
+            <div>
+              <h2 class="card-title">Keys cadastradas</h2>
+              <p class="card-subtitle">Mostra o que existe, quando foi criado e quanto falta para expirar.</p>
+            </div>
+          </div>
+
+          <div id="keysEmpty" class="empty">Nenhuma key encontrada.</div>
+          <div id="keysList" class="keys-grid hidden"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/painel_keys_ff_admin/painel_keys_ff_admin.js"></script>
+</body>
+</html>

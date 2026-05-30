@@ -223,7 +223,7 @@
             if (k.startsWith('securityConfig_') || k.startsWith('tagMembros_')) removeSharedCache(k);
           }
         } catch (_) {}
-        window.location.href = '/';
+        window.location.href = '/inicio';
       }
     }
 
@@ -479,9 +479,9 @@
     function checkAuth(redirectToLogin = true) {
       return new Promise((resolve) => {
         onAuthStateChanged(auth, async (user) => {
-          const isLoginPage = /(^\/$)|(^\/index\/?$)|(^\/index\/index\.html$)|index\.html$/i.test(window.location.pathname || '');
+          const isLoginPage = /^(?:\/|\/(?:index|inicio)(?:\.html)?\/?)$/i.test(window.location.pathname || '');
           if (!user) {
-            if (redirectToLogin && !isLoginPage) window.location.href = '/';
+            if (redirectToLogin && !isLoginPage) window.location.href = '/inicio';
             resolve(null);
             return;
           }
@@ -546,7 +546,7 @@
           }
           if (!guildId) {
             try { await signOut(auth); } catch (_) {}
-            if (!isLoginPage) window.location.href = '/';
+            if (!isLoginPage) window.location.href = '/inicio';
             resolve(null); return;
           }
 
@@ -608,7 +608,7 @@
               showToast('error', 'Conta expirada');
               try { await signOut(auth); } catch (_) {}
               clearSharedGuildContextCache();
-              window.location.href = '/';
+              window.location.href = '/inicio';
               resolve(null); return;
             }
           } catch (_) {}
@@ -649,7 +649,7 @@
             const hasUserLink = !!(userProfile && userProfile.guildId);
             if (!hasUserLink && (!hint || hint === 'Membro')) {
               try { await signOut(auth); } catch (_) {}
-              if (!isLoginPage) window.location.href = '/';
+              if (!isLoginPage) window.location.href = '/inicio';
               resolve(null); return;
             }
           }

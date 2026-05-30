@@ -151,7 +151,7 @@ function resolveRecruitmentRoleFromConfig(cfg = {}, emailLower = '', uid = '') {
 async function resolveRecruitmentAccessContext() {
   const user = await waitRecruitmentAuthUser();
   if (!user) {
-    window.location.href = '/';
+    window.location.href = '/inicio';
     return null;
   }
 
@@ -186,7 +186,7 @@ async function resolveRecruitmentAccessContext() {
 
   if (!guildId) {
     showToast('error', 'Essa conta não está vinculada a uma guilda.');
-    window.location.href = '/';
+    window.location.href = '/inicio';
     return null;
   }
 

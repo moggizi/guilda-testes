@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+    <script src="/theme.js"></script>
+    <script src="/app-loader.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel do Chefe - Guilda Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-50/80 font-sans antialiased">
+  <div id="app-boot-loader" class="app-boot-loader" role="status" aria-live="polite">
+    <div class="app-boot-loader__box">
+      <div class="app-boot-loader__mark"></div>
+      <div class="app-boot-loader__text">Carregando</div>
+    </div>
+  </div>
+
+  <div class="flex min-h-screen">
+    <!-- Overlay Mobile -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
+
+    <!-- Sidebar -->
+   <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
+  <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+    <div class="flex items-center gap-3">
+      <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav" onerror="this.src='https://via.placeholder.com/40'">
+      <div>
+        <h1 class="font-bold text-gray-900 text-lg leading-tight">Guilda e eventos</h1>
+        <p id="vip-label" class="text-xs text-gray-500">Guilda: <span class="font-bold text-gray-800 uppercase">free</span></p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
+    <a href="/dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="house" class="w-5 h-5"></i> Painel
+    </a>
+
+    <a href="/membros" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="users" class="w-5 h-5"></i> Membros
+    </a>
+
+    <a href="/lines" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="layers" class="w-5 h-5"></i> Lines / Equipe
+    </a>
+
+    <a href="/ajustes" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
+    </a>
+
+    <a href="/upgrade" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="sparkles" class="w-5 h-5"></i> Assinatura
+    </a>
+
+    <a href="/recrutar" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
+    </a>
+
+    <a href="/admin" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="settings" class="w-5 h-5"></i> Admin
+    </a>
+
+     <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
+    </a>
+
+    <a id="nav-chefe" href="/chefe" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
+      <i data-lucide="crown" class="w-5 h-5"></i> Chefe
+    </a>
+  </nav>
+
+  <div class="shrink-0 p-4 border-t border-gray-100 bg-white">
+    <a href="/perfil" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50 hover:bg-emerald-100 transition-colors">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-emerald-200/50 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden border border-emerald-300">
+          <img id="sidebar-avatar" src="" alt="" class="w-full h-full object-cover hidden">
+          <i id="sidebar-avatar-icon" data-lucide="user" class="w-4 h-4"></i>
+        </div>
+
+        <div>
+          <p id="user-role" class="text-sm font-bold">Chefe</p>
+          <p id="user-email" class="text-[10px] opacity-80 truncate w-28">...</p>
+        </div>
+      </div>
+    </a>
+
+    <button id="btn-logout" class="w-full mt-2 flex items-center justify-center gap-2 py-2 text-sm font-semibold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+      <i data-lucide="log-out" class="w-4 h-4"></i> Sair
+    </button>
+  </div>
+</aside>
+
+<!-- Conteúdo -->
+<main class="flex-1 min-w-0 bg-gray-50/50 lg:ml-72">
+      <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-gray-200">
+<div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-lg hover:bg-gray-100">
+              <i data-lucide="menu" class="w-5 h-5"></i>
+            </button>
+            <h2 class="text-xl font-black text-gray-900 tracking-tight">Painel de Controle Global</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btn-reload-guilds" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-100 text-xs font-black transition" title="Recarregar somente guildas">
+              <i data-lucide="shield" class="w-4 h-4"></i>
+              <span class="hidden sm:inline">Recarregar guildas</span>
+            </button>
+            <button id="btn-reload-partners" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-100 text-xs font-black transition" title="Recarregar somente parceiros">
+              <i data-lucide="hand-coins" class="w-4 h-4"></i>
+              <span class="hidden sm:inline">Recarregar parceiros</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        <!-- Dashboard Stats -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Total de Guildas</p>
+            <h3 id="stat-guilds" class="text-3xl font-black text-gray-900 mt-1">0</h3>
+          </div>
+          <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Solicitações Pendentes</p>
+            <h3 id="stat-solicita" class="text-3xl font-black text-emerald-600 mt-1">0</h3>
+          </div>
+          <div class="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Parceiros</p>
+            <h3 id="stat-partners" class="text-3xl font-black text-amber-600 mt-1">0</h3>
+          </div>
+          <button id="btn-open-solicita" class="flex items-center justify-center gap-3 bg-emerald-600 text-white rounded-2xl p-5 hover:bg-emerald-700 transition shadow-lg shadow-emerald-100">
+            <i data-lucide="bell" class="w-6 h-6"></i>
+            <span class="font-bold">Gerir Solicitações</span>
+          </button>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-2xl p-2 shadow-sm flex flex-col sm:flex-row gap-2">
+          <button id="view-guildas" type="button" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-black transition">
+            <i data-lucide="shield" class="w-4 h-4"></i> Guildas
+          </button>
+          <button id="view-partners" type="button" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-50 text-gray-600 text-sm font-black hover:bg-gray-100 transition">
+            <i data-lucide="hand-coins" class="w-4 h-4"></i> Parceiros
+          </button>
+        </div>
+
+        <!-- Filtro -->
+        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+          <div class="relative">
+            <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
+            <input id="guild-search" type="text" placeholder="Procurar por nome, ID ou e-mail de líder..." 
+                   class="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-100 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm" />
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <span class="text-[10px] font-black text-gray-400 uppercase tracking-wider">Filtro:</span>
+            <select id="vip-filter" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-[11px] font-black">
+              <option value="all">Todos</option>
+              <option value="free">Free</option>
+              <option value="plus">Plus</option>
+              <option value="pro">Pro</option>
+              <option value="business">Business</option>
+              <option value="vitalicio">Vitalício</option>
+            </select>
+            <select id="updated-filter" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-[11px] font-black">
+              <option value="all">Todas</option>
+              <option value="today">Hoje</option>
+              <option value="yesterday">Ontem</option>
+              <option value="d2">+2 dias</option>
+              <option value="d7">+7 dias</option>
+              <option value="d15">+15 dias</option>
+              <option value="d30">+30 dias</option>
+            </select>
+          </div>
+          </div>
+        </div>
+
+        <!-- Grid Guildas -->
+        <div id="guilds-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div class="col-span-full py-20 text-center space-y-3">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
+            <p class="text-gray-500 font-medium">A carregar dados...</p>
+          </div>
+        </div>
+
+        <!-- Grid Parceiros -->
+        <div id="partners-grid" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div class="col-span-full py-20 text-center space-y-3">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-amber-500 border-t-transparent"></div>
+            <p class="text-gray-500 font-medium">A carregar parceiros...</p>
+          </div>
+        </div>
+
+        <!-- Painel de Solicitações -->
+        <div id="solicita-panel" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" id="solicita-overlay"></div>
+          <div class="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+            <div class="p-6 border-b border-gray-100 flex items-center justify-between bg-emerald-50/50">
+              <div>
+                <h3 class="text-xl font-black text-gray-900">Solicitações (Upgrade)</h3>
+                <p class="text-xs text-gray-500 mt-1">Aprova ou rejeita pedidos de planos VIP.</p>
+              </div>
+              <button id="btn-close-solicita" class="p-2 hover:bg-white rounded-xl transition text-gray-400">
+                <i data-lucide="x" class="w-6 h-6"></i>
+              </button>
+            </div>
+            <div id="solicita-grid" class="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Cards de solicita -->
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Drawer Global -->
+  <div id="drawer" class="hidden fixed inset-0 z-[60]">
+    <div id="drawer-backdrop" class="absolute inset-0 bg-black/40"></div>
+    <div class="absolute right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-2xl flex flex-col transform transition-transform duration-300 translate-x-full" id="drawer-body">
+      <div class="p-6 border-b border-gray-100 flex items-center justify-between">
+        <h4 id="drawer-title" class="font-black text-gray-900 text-xl tracking-tight">Detalhes</h4>
+        <button id="drawer-close" class="p-2 rounded-xl hover:bg-gray-100 text-gray-400 transition"><i data-lucide="x" class="w-6 h-6"></i></button>
+      </div>
+      <div id="drawer-content" class="flex-1 overflow-y-auto p-6"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/chefe/chefe.js"></script>
+<script type="module" src="/chefe/suportechefe.js"></script>
+</body>
+</html>

@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+    <script src="/theme.js"></script>
+    <script src="/app-loader.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meu Perfil - Guild Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-50/80">
+  <div id="app-boot-loader" class="app-boot-loader" role="status" aria-live="polite">
+    <div class="app-boot-loader__box">
+      <div class="app-boot-loader__mark"></div>
+      <div class="app-boot-loader__text">Carregando</div>
+    </div>
+  </div>
+  <div class="flex min-h-screen">
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
+    
+   <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
+  <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+    <div class="flex items-center gap-3">
+      <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav" onerror="this.src='https://via.placeholder.com/40'">
+      <div>
+        <h1 class="font-bold text-gray-900 text-lg">Guilda e eventos</h1>
+        <p class="text-xs text-gray-400">Menu</p>
+      </div>
+    </div>
+  </div>
+  
+  <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
+    <a href="/dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="house" class="w-5 h-5"></i> Painel
+    </a>
+
+    <a href="/perfil-guilda" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Estatísticas
+    </a>
+
+    <a href="/membros" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="users" class="w-5 h-5"></i> Membros
+    </a>
+
+    <a href="/lines" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="layers" class="w-5 h-5"></i> Lines / Equipe
+    </a>
+
+    <a href="/ajustes" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
+    </a>
+
+    <a href="/upgrade" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="sparkles" class="w-5 h-5"></i> Assinatura
+    </a>
+
+    <a href="/recrutar" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
+    </a>
+
+    <a href="/admin" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="settings" class="w-5 h-5"></i> Admin
+    </a>
+
+     <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
+    </a>
+
+    <a id="nav-chefe" href="/chefe" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+      <i data-lucide="crown" class="w-5 h-5"></i> Chefe
+    </a>
+  </nav>
+
+  <div class="shrink-0 p-4 border-t border-gray-100 bg-white">
+    <a href="/perfil" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50 hover:bg-emerald-100 transition-colors">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-emerald-200/50 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden border border-emerald-300">
+          <img id="sidebar-avatar" src="" alt="" class="w-full h-full object-cover hidden">
+          <i id="sidebar-avatar-icon" data-lucide="user" class="w-4 h-4"></i>
+        </div>
+
+        <div>
+          <p id="user-role" class="text-sm font-bold">Meu Perfil</p>
+          <p id="user-email" class="text-[10px] opacity-80 truncate w-28">Configurações</p>
+        </div>
+      </div>
+    </a>
+
+    <button id="btn-logout" class="w-full mt-2 flex items-center justify-center gap-2 py-2 text-sm font-semibold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+      <i data-lucide="log-out" class="w-4 h-4"></i> Sair
+    </button>
+  </div>
+</aside>
+
+<main class="flex-1 min-w-0 relative flex flex-col lg:ml-72">
+      <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
+<div class="flex items-center gap-3 px-4 py-3 sm:px-6">
+          <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
+          <h1 class="text-lg font-bold text-gray-900">Meu Perfil</h1>
+        </div>
+      </header>
+
+      <div class="flex-1 p-4 sm:p-6 max-w-4xl mx-auto w-full">
+        <div id="loading-state" class="flex flex-col items-center justify-center py-20">
+          <i data-lucide="loader-2" class="w-8 h-8 text-emerald-500 animate-spin mb-4"></i>
+          <p class="text-sm text-gray-500 font-medium">Carregando seu perfil...</p>
+        </div>
+
+        <form id="profile-form" class="hidden space-y-6">
+          
+          <div class="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm grid grid-cols-[auto,1fr] gap-4 md:gap-6 md:items-start">
+            <div class="shrink-0 flex flex-col items-center row-start-1 col-start-1 md:row-span-2">
+              <div class="relative group cursor-pointer">
+                <div class="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-full border-4 border-emerald-50 bg-gray-100 overflow-hidden shadow-inner flex items-center justify-center relative">
+                  <img id="profile-preview" src="" alt="Foto" class="w-full h-full object-cover hidden">
+                  <i id="profile-placeholder" data-lucide="user" class="w-10 h-10 md:w-12 md:h-12 text-gray-300"></i>
+                  <div class="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <i data-lucide="camera" class="w-6 h-6 text-white mb-1"></i>
+                    <span class="text-[10px] text-white font-bold tracking-wider">ALTERAR</span>
+                  </div>
+                </div>
+                <input type="file" id="input-foto" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+              </div>
+              <p class="hidden md:block text-[10px] text-gray-400 mt-3 font-medium text-center w-32">Imagem será comprimida automaticamente.</p>
+            </div>
+
+            <div class="row-start-1 col-start-2 min-w-0">
+              <label class="block text-sm font-bold text-gray-700 mb-1.5">Nick</label>
+              <input type="text" id="input-nick" required maxlength="30" placeholder="Como você é chamado no jogo?" class="w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-2xl text-sm font-semibold text-gray-900 outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 transition-all">
+            </div>
+
+            <div class="col-span-2 md:col-start-2 md:col-span-1 row-start-2 w-full">
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-sm font-bold text-gray-700">Bio do Jogador</label>
+                <span id="bio-counter" class="text-xs font-semibold text-gray-400">0/100</span>
+              </div>
+              <textarea id="input-bio" rows="3" maxlength="100" placeholder="Escreva algo sobre você ou seu estilo de jogo..." class="w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-2xl text-sm text-gray-700 outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 transition-all resize-none"></textarea>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+            <h3 class="text-base font-black text-gray-900 mb-5 flex items-center gap-2">
+              <i data-lucide="shield-check" class="w-5 h-5 text-emerald-500"></i> Informações da Conta
+            </h3>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">ID no Jogo</label>
+                <input type="text" id="view-gameid" readonly class="w-full px-4 py-3 bg-gray-100/70 border border-transparent rounded-2xl text-sm font-bold text-gray-600 outline-none cursor-not-allowed">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">UID Plataforma</label>
+                <input type="text" id="view-uid" readonly class="w-full px-4 py-3 bg-gray-100/70 border border-transparent rounded-2xl text-sm font-bold text-gray-600 outline-none cursor-not-allowed">
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">E-mail Cadastrado</label>
+                <input type="email" id="view-email" readonly class="w-full px-4 py-3 bg-gray-100/70 border border-transparent rounded-2xl text-sm font-bold text-gray-600 outline-none cursor-not-allowed">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Guilda Atual</label>
+                <input type="text" id="view-guild" readonly class="w-full px-4 py-3 bg-gray-100/70 border border-transparent rounded-2xl text-sm font-bold text-emerald-700 outline-none cursor-not-allowed">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Cargo</label>
+                <div class="w-full px-4 py-3 bg-gray-100/70 border border-transparent rounded-2xl flex items-center h-[46px] cursor-not-allowed">
+                  <span id="view-role" class="inline-flex items-center rounded-full bg-slate-200 text-slate-800 px-2.5 py-0.5 text-xs font-black uppercase tracking-wide">Membro</span>
+                </div>
+              </div>
+              <div class="sm:col-span-2">
+                <p class="text-xs font-medium text-gray-400 mt-2"><i data-lucide="calendar" class="w-3.5 h-3.5 inline mr-1 -mt-0.5"></i> Perfil criado em: <span id="view-created" class="font-bold">--</span></p>
+              </div>
+            </div>
+          </div>
+
+
+          <section id="partner-entry-card" class="bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 rounded-3xl border border-emerald-900/40 p-6 shadow-sm text-white overflow-hidden relative">
+            <div class="absolute -right-12 -top-12 w-36 h-36 rounded-full bg-emerald-400/10 blur-2xl"></div>
+            <div class="relative flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+              <div>
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-300/20 px-3 py-1 text-[11px] font-black uppercase tracking-wider mb-3">
+                  <i data-lucide="hand-coins" class="w-3.5 h-3.5"></i> Monetização
+                </span>
+                <h3 class="text-xl font-black leading-tight">Seja um parceiro da Guilda HUB</h3>
+                <p class="mt-2 text-sm text-slate-300 leading-relaxed max-w-2xl">
+                  Indique novos usuários para a plataforma e receba comissão quando eles assinarem um plano pago.
+                </p>
+              </div>
+              <button type="button" id="btn-open-partner-modal" class="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-400 text-slate-950 text-sm font-black hover:bg-emerald-300 transition-all shadow-lg shadow-emerald-500/20 active:scale-[0.98]">
+                <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i> Seja um parceiro
+              </button>
+            </div>
+          </section>
+
+          <section id="partner-panel-card" class="hidden bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="p-6 border-b border-gray-100 bg-slate-950 text-white">
+              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div>
+                  <div class="flex flex-wrap items-center gap-2 mb-2">
+                    <h3 class="text-lg font-black flex items-center gap-2">
+                      <i data-lucide="hand-coins" class="w-5 h-5 text-emerald-300"></i> Painel de Parceiro
+                    </h3>
+                    <span id="partner-type-badge" class="inline-flex items-center rounded-full bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-300/20 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider">Normal</span>
+                  </div>
+                  <p id="partner-type-description" class="text-sm text-slate-300 leading-relaxed">Você ganha comissão por usuários indicados que assinarem um plano pago.</p>
+                </div>
+                <button type="button" id="btn-toggle-partner-panel" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 text-white text-xs font-black hover:bg-white/15 transition-colors">
+                  <i data-lucide="eye-off" class="w-4 h-4"></i> Ocultar painel
+                </button>
+              </div>
+            </div>
+
+            <div id="partner-panel-body" class="p-6 space-y-5">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="rounded-2xl bg-emerald-50 border border-emerald-100 p-4">
+                  <p class="text-[11px] font-black text-emerald-700 uppercase tracking-wider">Saldo atual</p>
+                  <p id="partner-current-balance" class="mt-1 text-2xl font-black text-emerald-900">R$ 0,00</p>
+                  <p class="mt-1 text-[11px] font-semibold text-emerald-700/70">Mínimo para saque: R$ 10,00</p>
+                </div>
+                <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+                  <p class="text-[11px] font-black text-slate-500 uppercase tracking-wider">Saldo sacado</p>
+                  <p id="partner-withdrawn-balance" class="mt-1 text-2xl font-black text-slate-900">R$ 0,00</p>
+                  <p class="mt-1 text-[11px] font-semibold text-slate-400">Total já enviado para você</p>
+                </div>
+                <div class="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm">
+                  <p class="text-[11px] font-black text-slate-500 uppercase tracking-wider">Convidados</p>
+                  <p id="partner-invited-count" class="mt-1 text-2xl font-black text-slate-900">0</p>
+                  <p class="mt-1 text-[11px] font-semibold text-slate-400"><span id="partner-paid-count">0</span> pagantes</p>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
+                <label class="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Seu link de indicação</label>
+                <div class="flex flex-col sm:flex-row gap-2">
+                  <input type="text" id="partner-ref-link" readonly class="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-bold text-gray-700 outline-none">
+                  <button type="button" id="btn-copy-partner-link" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 text-white text-sm font-black hover:bg-slate-800 transition-colors">
+                    <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                  </button>
+                </div>
+                <p class="mt-2 text-xs font-semibold text-gray-400">Comissão: 20% nos planos Plus e Pro • 10% no Business • R$ 40,00 fixo no Vitalício.</p>
+              </div>
+
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 items-end">
+                <div>
+                  <label class="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Chave Pix para receber</label>
+                  <input type="text" id="input-partner-pix" maxlength="120" placeholder="CPF, e-mail, telefone ou chave aleatória" class="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 transition-all">
+                </div>
+                <div>
+                  <label class="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Valor do saque</label>
+                  <input type="text" id="input-partner-withdraw-amount" inputmode="decimal" maxlength="20" placeholder="Ex: 10,00" class="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 transition-all">
+                  <p class="mt-1.5 text-[11px] font-semibold text-gray-400">Você só pode solicitar até o saldo disponível. Mínimo: R$ 10,00.</p>
+                </div>
+                <div class="lg:col-span-2 flex flex-col sm:flex-row sm:justify-end gap-2">
+                  <button type="button" id="btn-save-partner-pix" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm font-black hover:bg-gray-50 transition-colors">
+                    <i data-lucide="save" class="w-4 h-4"></i> Salvar Pix
+                  </button>
+                  <button type="button" id="btn-request-partner-withdraw" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-500 text-white text-sm font-black hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    <i data-lucide="wallet" class="w-4 h-4"></i> Solicitar saque
+                  </button>
+                </div>
+              </div>
+
+              <p id="partner-withdraw-status" class="hidden rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-xs font-bold text-amber-700"></p>
+            </div>
+          </section>
+
+          <div class="flex justify-end pt-2 pb-10">
+            <button type="submit" id="btn-save-profile" class="flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-slate-900 text-white text-sm font-extrabold shadow-xl shadow-slate-900/10 hover:bg-slate-800 transition-all hover:-translate-y-0.5 active:translate-y-0">
+              <i data-lucide="save" class="w-4 h-4"></i> Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <footer class="mt-8 border-t border-slate-200 bg-white">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 py-10">
+          <div class="flex flex-row justify-center items-start gap-4 sm:gap-12 md:gap-32 text-xs sm:text-sm mb-12">
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+              <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                <svg class="w-5 h-5 text-pink-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4s1.791-4 4-4 4 1.79 4 4-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                <span>Instagram</span>
+              </span>
+              <a href="https://instagram.com/guildahub" target="_blank" rel="noopener noreferrer" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
+              <a href="https://instagram.com/ottakubrasil" target="_blank" rel="noopener noreferrer" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
+            </div>
+
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+              <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                <svg class="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.23-1.15 4.41-2.91 5.74-1.71 1.32-3.95 1.77-6.09 1.47-2.07-.28-3.98-1.39-5.18-3.08-1.2-1.7-1.57-3.93-1.04-5.94.49-1.89 1.74-3.53 3.44-4.48 1.78-.99 3.94-1.12 5.84-.6v4.06c-1.27-.6-2.81-.5-3.96.26-1.13.73-1.76 2.05-1.63 3.4.14 1.28.98 2.45 2.16 2.96 1.14.51 2.5.42 3.56-.23 1.05-.63 1.71-1.76 1.75-2.98.05-3.53.02-7.07.02-10.61 0-2.31 0-4.63.02-6.94z"/></svg>
+                <span>TikTok</span>
+              </span>
+              <a href="https://tiktok.com/@guildahub" target="_blank" rel="noopener noreferrer" class="text-slate-500 hover:text-green-500 transition-colors">@guildahub</a>
+              <a href="https://tiktok.com/@ottakubrasil" target="_blank" rel="noopener noreferrer" class="text-slate-500 hover:text-green-500 transition-colors">@ottakubrasil</a>
+              <a href="https://tiktok.com/@kushinaff" target="_blank" rel="noopener noreferrer" class="text-slate-500 hover:text-green-500 transition-colors">@kushinaff <span class="text-slate-400 block sm:inline text-[10px] sm:text-xs leading-none mt-1 sm:mt-0">(Parceiro)</span></a>
+            </div>
+
+            <div class="flex flex-col items-center text-center gap-2 w-1/3 sm:w-auto">
+              <span class="font-bold text-slate-900 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                <span>WhatsApp</span>
+              </span>
+              <a href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="text-slate-500 hover:text-green-500 transition-colors">Grupo do WhatsApp</a>
+            </div>
+          </div>
+
+          <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-slate-200 text-sm text-slate-500">
+            <p class="text-center md:text-left">© 2026 Guilda HUB. Todos os direitos reservados.</p>
+            <div class="flex gap-4">
+              <a href="#" class="hover:text-green-500 transition-colors">Termos</a>
+              <a href="#" class="hover:text-green-500 transition-colors">Privacidade</a>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+
+  <div id="modal-partner-program" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 overflow-y-auto">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="relative z-10 w-full max-w-2xl max-h-[calc(100vh-2rem)] rounded-3xl bg-white border border-gray-100 shadow-2xl overflow-y-auto animate-in">
+      <div class="p-6 sm:p-7">
+        <div class="flex items-start justify-between gap-4 mb-5">
+          <div class="flex items-center gap-3">
+            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+              <i data-lucide="badge-dollar-sign" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h3 class="text-xl font-black text-gray-900">Programa de Parceiros</h3>
+              <p class="text-sm font-medium text-gray-500">Monetize indicando novos usuários para a Guilda HUB.</p>
+            </div>
+          </div>
+          <button type="button" id="btn-close-partner-modal" class="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+          <div class="rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
+            <span class="inline-flex items-center rounded-full bg-slate-900 text-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider mb-3">Parceiro normal</span>
+            <p class="text-sm text-gray-600 leading-relaxed">
+              Você recebe um link próprio. Cada novo usuário que entrar pelo seu link e pagar um plano gera comissão para você.
+            </p>
+          </div>
+          <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+            <span class="inline-flex items-center rounded-full bg-emerald-600 text-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider mb-3">Parceiro verificado</span>
+            <p class="text-sm text-emerald-900/80 leading-relaxed">
+              Além da comissão, fica com tudo liberado no site enquanto mantiver boa performance como parceiro.
+            </p>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-100 bg-white p-4 mb-5">
+          <h4 class="text-sm font-black text-gray-900 mb-3">Regras principais</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
+            <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> 20% de comissão nos planos Plus e Pro, 10% no Business.</p>
+            <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> R$ 40,00 fixo para venda do plano Vitalício.</p>
+            <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> Saque disponível a partir de R$ 10,00.</p>
+            <p class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"></i> A plataforma decide quem sobe ou desce de categoria.</p>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 mb-5">
+          <label for="input-partner-socials" class="block text-sm font-black text-gray-900 mb-2">Redes sociais e seguidores <span class="text-xs font-bold text-gray-400">(opcional)</span></label>
+          <textarea id="input-partner-socials" rows="4" maxlength="600" placeholder="Ex: Instagram @sua_conta - 20 mil seguidores&#10;TikTok @sua_conta - 45 mil seguidores&#10;YouTube Seu Canal - 5 mil inscritos" class="w-full px-4 py-3 bg-white border border-emerald-100 rounded-2xl text-sm font-semibold text-gray-800 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all resize-none"></textarea>
+          <p class="mt-2 text-xs font-semibold text-emerald-800/70 leading-relaxed">
+            Informar suas redes pode aumentar suas chances de virar parceiro verificado. Mesmo verificado, se a performance cair, a plataforma pode voltar sua conta para parceiro normal.
+          </p>
+        </div>
+
+        <p class="text-xs text-gray-400 font-semibold leading-relaxed mb-6">
+          Ao aceitar, seu perfil será marcado como parceiro e um registro será criado na coleção <b>monetize</b> com seus saldos, link de indicação, Pix, estatísticas e redes sociais informadas.
+        </p>
+
+        <div class="flex flex-col sm:flex-row justify-end gap-3">
+          <button type="button" id="btn-decline-partner" class="px-5 py-3 rounded-2xl bg-gray-100 text-gray-600 text-sm font-black hover:bg-gray-200 transition-colors">Agora não</button>
+          <button type="button" id="btn-accept-partner" class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-500 text-white text-sm font-black hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/20">
+            <i data-lucide="check-circle" class="w-4 h-4"></i> Aceitar e ativar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-create-profile" class="fixed inset-0 z-[60] hidden items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm"></div>
+    
+    <div class="relative z-10 w-full max-w-md rounded-3xl bg-white border border-gray-100 shadow-2xl overflow-hidden animate-in">
+      <div class="p-6">
+        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-500 border-4 border-emerald-100">
+          <i data-lucide="gamepad-2" class="w-8 h-8"></i>
+        </div>
+        <h3 class="text-xl font-black text-gray-900 text-center mb-2">Concluir Cadastro</h3>
+        <p class="text-sm text-gray-500 text-center mb-6 leading-relaxed">
+          Para acessar seu perfil, precisamos vincular o <b>ID do seu personagem</b> do jogo à sua conta na plataforma.
+        </p>
+
+        <form id="form-create-profile" class="space-y-4">
+          <div>
+            <label class="block text-sm font-bold text-gray-700 mb-1.5">Qual o ID do seu personagem?</label>
+            <input type="text" id="input-new-gameid" inputmode="numeric" required placeholder="Ex: 123456789" class="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl text-base font-bold text-gray-900 outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 transition-all text-center tracking-widest">
+            <p class="mt-2 text-xs font-semibold text-amber-600 flex items-start gap-1">
+              <i data-lucide="triangle-alert" class="w-4 h-4 shrink-0"></i>
+              Atenção: Insira seu ID de jogador. NÃO insira o ID da guilda. Essa informação não poderá ser alterada depois.
+            </p>
+          </div>
+
+          <button type="submit" id="btn-confirm-creation" class="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-emerald-500 text-white text-sm font-black shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all active:scale-[0.98]">
+            Criar meu Perfil
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/perfil/perfil.js?v=cache-mod-20260529"></script>
+</body>
+</html>
