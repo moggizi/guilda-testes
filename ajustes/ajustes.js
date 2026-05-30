@@ -20,6 +20,8 @@ import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConf
     const goalGgFuzileiroInput = document.getElementById('goal-gg-fuzileiro-input');
     const goalGgCoringaInput = document.getElementById('goal-gg-coringa-input');
     const goalHonraInput = document.getElementById('goal-honra-input');
+    const goalLineGgInput = document.getElementById('goal-line-gg-input');
+    const goalLineHonraInput = document.getElementById('goal-line-honra-input');
     const ggGoalInputs = {
       metaGGRush: goalGgRushInput,
       metaGGCurandeiro: goalGgCurandeiroInput,
@@ -108,7 +110,9 @@ import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConf
         metaGGSuporte: normalizeGoalValue(source.metaGGSuporte ?? legacy),
         metaGGFuzileiro: normalizeGoalValue(source.metaGGFuzileiro ?? legacy),
         metaGGCoringa: normalizeGoalValue(source.metaGGCoringa ?? legacy),
-        metaHonra: normalizeGoalValue(source.metaHonra)
+        metaHonra: normalizeGoalValue(source.metaHonra),
+        metaLineGG: normalizeGoalValue(source.metaLineGG ?? source.metaLinesGG ?? source.lineMetaGG),
+        metaLineHonra: normalizeGoalValue(source.metaLineHonra ?? source.metaLinesHonra ?? source.lineMetaHonra)
       };
       goals.metaGG = goals.metaGGRush ?? legacy;
       return goals;
@@ -121,6 +125,8 @@ import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConf
         input.value = normalized[field] != null ? String(normalized[field]) : '';
       });
       if (goalHonraInput) goalHonraInput.value = normalized.metaHonra != null ? String(normalized.metaHonra) : '';
+      if (goalLineGgInput) goalLineGgInput.value = normalized.metaLineGG != null ? String(normalized.metaLineGG) : '';
+      if (goalLineHonraInput) goalLineHonraInput.value = normalized.metaLineHonra != null ? String(normalized.metaLineHonra) : '';
     }
 
     function readGoalsFromInputs() {
@@ -131,20 +137,22 @@ import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConf
         metaGGSuporte: goalGgSuporteInput?.value,
         metaGGFuzileiro: goalGgFuzileiroInput?.value,
         metaGGCoringa: goalGgCoringaInput?.value,
-        metaHonra: goalHonraInput?.value
+        metaHonra: goalHonraInput?.value,
+        metaLineGG: goalLineGgInput?.value,
+        metaLineHonra: goalLineHonraInput?.value
       });
     }
 
     function hasAnyGoal(goals = {}) {
       const normalized = normalizeGoalsPayload(goals);
-      return ['metaGGRush', 'metaGGCurandeiro', 'metaGGFullGas', 'metaGGSuporte', 'metaGGFuzileiro', 'metaGGCoringa', 'metaHonra']
+      return ['metaGGRush', 'metaGGCurandeiro', 'metaGGFullGas', 'metaGGSuporte', 'metaGGFuzileiro', 'metaGGCoringa', 'metaHonra', 'metaLineGG', 'metaLineHonra']
         .some((field) => normalized[field] != null);
     }
 
     function getGoalsHintText(goals = {}) {
       const g = normalizeGoalsPayload(goals);
       if (!hasAnyGoal(g)) return 'Nenhuma meta configurada ainda.';
-      return `Metas atuais: Rush ${g.metaGGRush ?? 0} • Curandeiro ${g.metaGGCurandeiro ?? 0} • Full Gás ${g.metaGGFullGas ?? 0} • Suporte ${g.metaGGSuporte ?? 0} • Fuzileiro ${g.metaGGFuzileiro ?? 0} • Coringa 🃏 ${g.metaGGCoringa ?? 0} • Honra ${g.metaHonra ?? 0}`;
+      return `Metas atuais: Rush ${g.metaGGRush ?? 0} • Curandeiro ${g.metaGGCurandeiro ?? 0} • Full Gás ${g.metaGGFullGas ?? 0} • Suporte ${g.metaGGSuporte ?? 0} • Fuzileiro ${g.metaGGFuzileiro ?? 0} • Coringa 🃏 ${g.metaGGCoringa ?? 0} • Honra ${g.metaHonra ?? 0} • Lines GG ${g.metaLineGG ?? 0} • Lines Honra ${g.metaLineHonra ?? 0}`;
     }
 
     function writeCurrentSettingsCache(extra = {}) {
@@ -267,7 +275,7 @@ import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConf
     }
 
     function setGoalsReadonly(isReadonly) {
-      [...Object.values(ggGoalInputs), goalHonraInput].forEach((el) => {
+      [...Object.values(ggGoalInputs), goalHonraInput, goalLineGgInput, goalLineHonraInput].forEach((el) => {
         if (!el) return;
         el.disabled = isReadonly;
         if (isReadonly) el.classList.add('bg-gray-50');

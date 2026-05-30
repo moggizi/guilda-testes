@@ -1,4 +1,4 @@
-import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildContext } from '../logic.js';
+import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildContext, getGuildGoalsConfig } from '../logic.js';
     import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, addDoc, query, where, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     setupSidebar();
@@ -38,6 +38,7 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
     let editingLineId = null;
     let selectedMemberIds = []; // para modal
     let currentSortMode = 'all';
+    let lineGoals = { metaLineGG: null, metaLineHonra: null };
 
     // Cache keys (por guilda)
     const ctx = getGuildContext();
@@ -146,6 +147,107 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
 
     function formatPoints(v) {
       return Math.round(parseLooseNumber(v)).toLocaleString('pt-BR');
+    }
+
+    function normalizeGoalValue(value) {
+      if (value === '' || value == null) return null;
+      const n = parseLooseNumber(value);
+      return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : null;
+    }
+
+    function normalizeLineGoals(source = {}) {
+      return {
+        metaLineGG: normalizeGoalValue(source.metaLineGG ?? source.metaLinesGG ?? source.lineMetaGG),
+        metaLineHonra: normalizeGoalValue(source.metaLineHonra ?? source.metaLinesHonra ?? source.lineMetaHonra)
+      };
+    }
+
+    function hasLineGoal(goal) {
+      return goal != null && Number.isFinite(Number(goal));
+    }
+
+    function lineGoalStatus(value, goal) {
+      if (!hasLineGoal(goal)) return { configured: false, ok: true };
+      return { configured: true, ok: parseLooseNumber(value) >= Number(goal) };
+    }
+
+    function lineGoalClass(value, goal, fallback = 'text-emerald-700') {
+      const status = lineGoalStatus(value, goal);
+      if (!status.configured) return fallback;
+      return status.ok ? 'text-emerald-700' : 'text-red-600';
+    }
+
+    function lineGoalBgClass(value, goal) {
+      const status = lineGoalStatus(value, goal);
+      if (!status.configured) return 'border-gray-100 bg-white';
+      return status.ok ? 'border-emerald-100 bg-emerald-50/60' : 'border-red-100 bg-red-50/60';
+    }
+
+    function getActiveLineGoalStatus(pts, mode = currentSortMode) {
+      const ggStatus = lineGoalStatus(pts.gg, lineGoals.metaLineGG);
+      const honraStatus = lineGoalStatus(pts.honra, lineGoals.metaLineHonra);
+      if (mode === 'gg') return ggStatus;
+      if (mode === 'honra') return honraStatus;
+      const configured = ggStatus.configured || honraStatus.configured;
+      return { configured, ok: (!ggStatus.configured || ggStatus.ok) && (!honraStatus.configured || honraStatus.ok) };
+    }
+
+    function getActiveLineGoalClass(pts, mode = currentSortMode, fallback = 'text-emerald-700') {
+      const status = getActiveLineGoalStatus(pts, mode);
+      if (!status.configured) return fallback;
+      return status.ok ? 'text-emerald-700' : 'text-red-600';
+    }
+
+    function getLineGoalCaption(pts, mode = currentSortMode) {
+      if (mode === 'gg' && hasLineGoal(lineGoals.metaLineGG)) return `Meta ${formatPoints(lineGoals.metaLineGG)}`;
+      if (mode === 'honra' && hasLineGoal(lineGoals.metaLineHonra)) return `Meta ${formatPoints(lineGoals.metaLineHonra)}`;
+      if (mode === 'all') {
+        if (hasLineGoal(lineGoals.metaLineGG) || hasLineGoal(lineGoals.metaLineHonra)) return 'Metas lines';
+      }
+      return getSortModeLabel(mode);
+    }
+
+    function readLineGoalsFromCache() {
+      if (!guildId) return { metaLineGG: null, metaLineHonra: null };
+      const candidates = [];
+      try {
+        const rawSettings = localStorage.getItem(`ajustesTela_${guildId}`);
+        const settings = rawSettings ? JSON.parse(rawSettings) : null;
+        if (settings?.goals) candidates.push({ ...(settings.goals || {}), ts: settings.ts || 0 });
+      } catch (_) {}
+      try {
+        const rawGoals = localStorage.getItem(`guildGoals_${guildId}`);
+        const goals = rawGoals ? JSON.parse(rawGoals) : null;
+        if (goals) candidates.push(goals);
+      } catch (_) {}
+
+      const newest = candidates
+        .filter(Boolean)
+        .sort((a, b) => Number(b?.ts || 0) - Number(a?.ts || 0))[0] || {};
+      return normalizeLineGoals(newest);
+    }
+
+    async function loadLineGoals(force = false) {
+      lineGoals = readLineGoalsFromCache();
+      if (!force) return lineGoals;
+      try {
+        const fresh = await getGuildGoalsConfig({ forceRefresh: true });
+        lineGoals = normalizeLineGoals(fresh || {});
+      } catch (_) {
+        lineGoals = readLineGoalsFromCache();
+      }
+      return lineGoals;
+    }
+
+    function lineScoreBox(label, value, goal) {
+      const cls = lineGoalClass(value, goal, 'text-gray-800');
+      const bg = lineGoalBgClass(value, goal);
+      const meta = hasLineGoal(goal) ? `<p class="text-[10px] ${cls} font-semibold mt-1">Meta ${formatPoints(goal)}</p>` : '<p class="text-[10px] text-gray-400 font-semibold mt-1">Sem meta</p>';
+      return `<div class="rounded-xl p-3 border ${bg}">
+        <p class="text-xs text-gray-400 mb-1">${label}</p>
+        <p class="text-xs font-extrabold ${cls}">${formatPoints(value)}</p>
+        ${meta}
+      </div>`;
     }
 
     function resolveMemberObj(memberRef) {
@@ -343,6 +445,10 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
         return mapMemberSnap(getMemberById(id) || ref || { id });
       });
       const pts = getLinePointBreakdown(line, 'all');
+      const goalsText = [
+        hasLineGoal(lineGoals.metaLineGG) ? `Meta GG da line: ${formatPoints(pts.gg)}/${formatPoints(lineGoals.metaLineGG)} (${lineGoalStatus(pts.gg, lineGoals.metaLineGG).ok ? 'bateu' : 'nao bateu'})` : null,
+        hasLineGoal(lineGoals.metaLineHonra) ? `Meta Honra da line: ${formatPoints(pts.honra)}/${formatPoints(lineGoals.metaLineHonra)} (${lineGoalStatus(pts.honra, lineGoals.metaLineHonra).ok ? 'bateu' : 'nao bateu'})` : null
+      ].filter(Boolean);
       const memberLines = memberSnaps.length
         ? memberSnaps.map((m, index) => {
           const mp = getMemberPointBreakdown(m);
@@ -361,6 +467,7 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
         `Guilda: ${currentGuildLineDisplayName()}`,
         `Membros: ${memberSnaps.length}/10`,
         `Pontuacao: GG ${formatPoints(pts.gg)} | Honra ${formatPoints(pts.honra)} | Total ${formatPoints(pts.total)}`,
+        ...goalsText,
         ``,
         `Membros:`,
         ...memberLines
@@ -393,8 +500,11 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
         const count = memArr.length;
         const preview = memArr.slice(0, 10);
         const pts = getLinePointBreakdown(l, currentSortMode);
-        const pointsLabel = currentSortMode === 'gg' ? 'pts GG' : currentSortMode === 'honra' ? 'pts honra' : 'pts';
         const pointsTitle = currentSortMode === 'gg' ? `GG: ${formatPoints(pts.gg)}` : currentSortMode === 'honra' ? `Honra: ${formatPoints(pts.honra)}` : `GG + honra: ${formatPoints(pts.total)}`;
+        const activePointsClass = getActiveLineGoalClass(pts, currentSortMode);
+        const activeCaptionClass = getActiveLineGoalClass(pts, currentSortMode, 'text-gray-400');
+        const activeCaption = getLineGoalCaption(pts, currentSortMode);
+        const totalGoalClass = getActiveLineGoalClass(pts, 'all');
 
         return `
           <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden transition-all hover:shadow-md animate-in">
@@ -414,8 +524,8 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
               </div>
 
               <div class="text-right shrink-0">
-                <p class="text-sm font-extrabold text-emerald-700 leading-none">${formatPoints(pts.active)}</p>
-                <p class="text-[10px] text-gray-400 mt-1">${escapeHtml(getSortModeLabel(currentSortMode))}</p>
+                <p class="text-sm font-extrabold ${activePointsClass} leading-none">${formatPoints(pts.active)}</p>
+                <p class="text-[10px] ${activeCaptionClass} mt-1">${escapeHtml(activeCaption)}</p>
               </div>
 
               <div class="text-gray-300"><i data-lucide="chevron-down" class="w-5 h-5"></i></div>
@@ -433,8 +543,13 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
                 </div>
                 <div class="bg-white rounded-xl p-3 border border-emerald-100 bg-emerald-50/50">
                   <p class="text-xs text-emerald-700 mb-1">Pontuação total</p>
-                  <p class="text-xs font-extrabold text-emerald-700">${escapeHtml(pointsTitle)}</p>
+                  <p class="text-xs font-extrabold ${totalGoalClass}">${escapeHtml(pointsTitle)}</p>
                 </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                ${lineScoreBox('GG da line', pts.gg, lineGoals.metaLineGG)}
+                ${lineScoreBox('Honra da line', pts.honra, lineGoals.metaLineHonra)}
               </div>
 
               <div class="space-y-2">
@@ -512,6 +627,7 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
 
     // ---- Cache --------------------------------------------------------------
     function loadCached() {
+      lineGoals = readLineGoalsFromCache();
       try {
         const arr = readMembersCacheForCurrentGuild();
         if (Array.isArray(arr)) members = arr;
@@ -600,6 +716,7 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
           if (c?.guildId) guildId = c.guildId;
         }
         if (!guildId) return;
+        await loadLineGoals(force);
 
         const nextMembersCacheKey = keyMembers();
         const nextLinesCacheKey = keyLines();
@@ -1120,6 +1237,11 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
 
       if (ev.key === keyLines() || ev.key === keyLinesCount()) {
         loadCached();
+      }
+
+      if (ev.key === `guildGoals_${guildId}` || ev.key === `ajustesTela_${guildId}`) {
+        lineGoals = readLineGoalsFromCache();
+        updateLinesView(allLines);
       }
     });
 
