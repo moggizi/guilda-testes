@@ -177,12 +177,6 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
       return status.ok ? 'text-emerald-700' : 'text-red-600';
     }
 
-    function lineGoalBgClass(value, goal) {
-      const status = lineGoalStatus(value, goal);
-      if (!status.configured) return 'border-gray-100 bg-white';
-      return status.ok ? 'border-emerald-100 bg-emerald-50/60' : 'border-red-100 bg-red-50/60';
-    }
-
     function getActiveLineGoalStatus(pts, mode = currentSortMode) {
       const ggStatus = lineGoalStatus(pts.gg, lineGoals.metaLineGG);
       const honraStatus = lineGoalStatus(pts.honra, lineGoals.metaLineHonra);
@@ -240,13 +234,20 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
     }
 
     function lineScoreBox(label, value, goal) {
-      const cls = lineGoalClass(value, goal, 'text-gray-800');
-      const bg = lineGoalBgClass(value, goal);
-      const meta = hasLineGoal(goal) ? `<p class="text-[10px] ${cls} font-semibold mt-1">Meta ${formatPoints(goal)}</p>` : '<p class="text-[10px] text-gray-400 font-semibold mt-1">Sem meta</p>';
-      return `<div class="rounded-xl p-3 border ${bg}">
+      const status = lineGoalStatus(value, goal);
+      const configured = status.configured;
+      const icon = configured ? (status.ok ? 'check' : 'x') : 'minus';
+      const iconClass = configured ? (status.ok ? 'text-emerald-500' : 'text-red-400') : 'text-gray-300';
+      const statusText = configured ? (status.ok ? 'Batida' : 'Pendente') : 'Sem meta';
+      const metaText = configured ? `Meta: ${formatPoints(goal)}` : 'Sem meta configurada';
+      return `<div class="bg-white rounded-xl p-3 border border-gray-100">
         <p class="text-xs text-gray-400 mb-1">${label}</p>
-        <p class="text-xs font-extrabold ${cls}">${formatPoints(value)}</p>
-        ${meta}
+        <p class="text-xs font-bold text-gray-800 mb-1">${formatPoints(value)}</p>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <i data-lucide="${icon}" class="w-4 h-4 ${iconClass}"></i>
+          <span class="text-xs text-gray-500">${metaText}</span>
+          ${configured ? `<span class="text-xs ${status.ok ? 'text-emerald-500' : 'text-red-400'} font-bold">- ${statusText}</span>` : ''}
+        </div>
       </div>`;
     }
 
@@ -446,8 +447,8 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
       });
       const pts = getLinePointBreakdown(line, 'all');
       const goalsText = [
-        hasLineGoal(lineGoals.metaLineGG) ? `Meta GG da line: ${formatPoints(pts.gg)}/${formatPoints(lineGoals.metaLineGG)} (${lineGoalStatus(pts.gg, lineGoals.metaLineGG).ok ? 'bateu' : 'nao bateu'})` : null,
-        hasLineGoal(lineGoals.metaLineHonra) ? `Meta Honra da line: ${formatPoints(pts.honra)}/${formatPoints(lineGoals.metaLineHonra)} (${lineGoalStatus(pts.honra, lineGoals.metaLineHonra).ok ? 'bateu' : 'nao bateu'})` : null
+        hasLineGoal(lineGoals.metaLineGG) ? `Meta GG da line: ${formatPoints(pts.gg)}/${formatPoints(lineGoals.metaLineGG)} - ${lineGoalStatus(pts.gg, lineGoals.metaLineGG).ok ? 'Batida' : 'Pendente'}` : null,
+        hasLineGoal(lineGoals.metaLineHonra) ? `Meta Honra da line: ${formatPoints(pts.honra)}/${formatPoints(lineGoals.metaLineHonra)} - ${lineGoalStatus(pts.honra, lineGoals.metaLineHonra).ok ? 'Batida' : 'Pendente'}` : null
       ].filter(Boolean);
       const memberLines = memberSnaps.length
         ? memberSnaps.map((m, index) => {
@@ -541,8 +542,8 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
                   <p class="text-xs text-gray-400 mb-1">Participantes</p>
                   <p class="text-xs font-bold text-gray-800">${count}/10</p>
                 </div>
-                <div class="bg-white rounded-xl p-3 border border-emerald-100 bg-emerald-50/50">
-                  <p class="text-xs text-emerald-700 mb-1">Pontuação total</p>
+                <div class="bg-white rounded-xl p-3 border border-gray-100">
+                  <p class="text-xs text-gray-400 mb-1">Pontuação total</p>
                   <p class="text-xs font-extrabold ${totalGoalClass}">${escapeHtml(pointsTitle)}</p>
                 </div>
               </div>
