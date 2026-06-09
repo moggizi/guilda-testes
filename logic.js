@@ -55,7 +55,7 @@ export const functions = getFunctions(app);
 let __guildCtx = null;
 
 const __GUILDCTX_LS_KEY = 'guildCtx_cache_v1';
-const __GUILDCTX_CACHE_VERSION = 7;
+const __GUILDCTX_CACHE_VERSION = 8;
 try {
   const raw = localStorage.getItem(__GUILDCTX_LS_KEY);
   if (raw) {
@@ -435,57 +435,14 @@ async function __persistExpiredVipAsFree(guildId) {
     const gid = String(guildId || '').trim();
     if (!gid) return false;
 
-    await Promise.allSettled([
-      setDoc(doc(db, 'configGuilda', gid), {
-        vipTier: 'free',
-        vipExpiresAt: null,
-        permissoesAtivas: false,
-        updatedAt: serverTimestamp()
-      }, { merge: true }),
-      setDoc(doc(db, 'guildas', gid), {
-        vipTier: 'free',
-        vipExpiresAt: null,
-        updatedAt: serverTimestamp()
-      }, { merge: true })
-    ]);
-
-    return true;
+    return false;
   } catch (_) {
     return false;
   }
 }
 
 function __maybeDowngradeVipSync() {
-  try {
-    if (!__guildCtx) return;
-
-    const tier = String(__guildCtx.vipTier || 'free');
-    const exp = (__guildCtx.vipExpiresAtMs != null) ? Number(__guildCtx.vipExpiresAtMs) : null;
-
-    // Se chegou em 0 dias/expirou, rebaixa de verdade no cache e no Firebase.
-    // Vitalício nunca expira.
-    if (tier !== 'free' && tier !== 'vitalicio' && exp != null && isFinite(exp) && Date.now() >= exp) {
-      __guildCtx.vipTier = 'free';
-      __guildCtx.vipExpiresAtMs = null;
-      try {
-        localStorage.setItem(__GUILDCTX_LS_KEY, JSON.stringify({
-          guildId: __guildCtx.guildId,
-          guildName: __guildCtx.guildName,
-          role: __guildCtx.role,
-          vipTier: __guildCtx.vipTier,
-          vipExpiresAtMs: __guildCtx.vipExpiresAtMs,
-          email: __guildCtx.email,
-          uid: __guildCtx.uid,
-          isOwner: __guildCtx.isOwner === true || (String(__guildCtx.uid || '').trim() && String(__guildCtx.guildId || '').trim() && String(__guildCtx.uid || '').trim() === String(__guildCtx.guildId || '').trim()),
-          cacheVersion: __GUILDCTX_CACHE_VERSION,
-          ts: Date.now()
-        }));
-        try { __scheduleSecondaryVipLogoutFromCtx(__guildCtx); } catch (_) {}
-      } catch (_) {}
-
-      try { __persistExpiredVipAsFree(__guildCtx.guildId); } catch (_) {}
-    }
-  } catch (_) {}
+  return;
 }
 
 export function getVipRemainingDays() {
@@ -501,29 +458,29 @@ export function getVipRemainingDays() {
 function vipTierFromValue(v) {
   const s = (v || '').toString().toLowerCase().trim();
   if (!s || s === 'free') return 'free';
-  if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life')) return 'vitalicio';
+  if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life') || s.includes('parceiro') || s.includes('partner')) return 'parceiro';
+  if (s === 'ultra' || s.includes('ultra')) return 'ultra';
   if (s === 'business' || s === 'bussines' || s.includes('buss') || s.includes('business')) return 'business';
   if (s === 'pro' || s.includes('pro')) return 'pro';
-  return 'plus';
+  if (s === 'plus' || s.includes('plus')) return 'plus';
+  return s;
 }
 
 
 
 // --- VIP: permissões de Admin/Líder secundário (campo único) ---------------
 // Em /configGuilda/{guildId}:
-// - permissoesAtivas: true quando VIP ativo (plus/pro/business e não expirado)
-// - permissoesAtivas: false quando free/expirado
+// - permissoesAtivas: true quando VIP pago esta ativo no cadastro
+// - permissoesAtivas: false quando o plano esta free
 // Importante: só escreve se for necessário (quando muda)
 async function __syncPermissoesAtivasIfNeeded(guildId, cfgData, vipTier, vipExpiresAtMs) {
   try {
     if (!guildId) return null;
 
     const tier = (vipTier || cfgData?.vipTier || "free").toString().toLowerCase().trim();
-    const paid = (tier === "plus" || tier === "pro" || tier === "business" || tier === "vitalicio" || tier.includes("pro") || tier.includes("business") || tier.includes("buss") || tier.includes("vital"));
+    const paid = !!tier && tier !== "free";
 
-    const exp = (vipExpiresAtMs != null && isFinite(Number(vipExpiresAtMs))) ? Number(vipExpiresAtMs) : null;
-    // FIX 2: Garante que vitalicio ignore a data de expiração para não desativar permissões
-    const vipAtivo = paid && (tier.includes("vital") || exp == null || Date.now() < exp);
+    const vipAtivo = paid;
 
     const atual = (cfgData && cfgData.permissoesAtivas !== undefined) ? (cfgData.permissoesAtivas !== false) : null;
     const novo = !!vipAtivo;
@@ -1231,16 +1188,7 @@ export async function setGuildSlotConfig(slot, { name, tag } = {}) {
 }
 
 const GUILD_ACCESS_KEY_PREFIX = 'guildAccessKey_';
-const HUB_PERFIS_CACHE_PREFIX = 'guildProfileExists_';
-const hubPerfisFirebaseConfig = {
-  apiKey: "AIzaSyASInYDbSFxfgbF7yjXDM4THipLYdZwjXs",
-  authDomain: "hub-perfis.firebaseapp.com",
-  projectId: "hub-perfis",
-  storageBucket: "hub-perfis.firebasestorage.app",
-  messagingSenderId: "231971973267",
-  appId: "1:231971973267:web:8b67cca5cfbe7b3f934566",
-  measurementId: "G-0N7WY0984C"
-};
+const GUILD_STATS_EXISTS_CACHE_PREFIX = 'guildStatsExists_';
 
 function makeGuildAccessKey() {
   const random = Math.floor(100000000 + Math.random() * 900000000);
@@ -1248,7 +1196,7 @@ function makeGuildAccessKey() {
 }
 
 function getGuildProfileCacheKey(guildId) {
-  return `${HUB_PERFIS_CACHE_PREFIX}${(guildId || '').toString().trim()}`;
+  return `${GUILD_STATS_EXISTS_CACHE_PREFIX}${(guildId || '').toString().trim()}`;
 }
 
 function readGuildInfoFromLocalCache(guildId) {
@@ -1361,66 +1309,41 @@ export async function getGuildProfileExists(options = {}) {
     return !!cachedProfile.exists;
   }
 
-  const accessKey = await getGuildAccessKeyConfig(options);
-  if (!accessKey) {
-    writeCachedGuildProfileState(guildId, false);
-    return false;
-  }
-
-  const secondaryName = `hub_perfis_exists_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const secondaryApp = initializeApp(hubPerfisFirebaseConfig, secondaryName);
-  const secondaryDb = getFirestore(secondaryApp);
-
   try {
-    const snap = await getDoc(doc(secondaryDb, 'perfil', guildId));
+    const snap = await getDoc(doc(db, 'estatisticas', guildId));
     const exists = !!snap.exists();
     writeCachedGuildProfileState(guildId, exists);
     return exists;
   } catch (_) {
     const cached = getCachedGuildProfileState(guildId);
     return cached === true;
-  } finally {
-    try { await deleteApp(secondaryApp); } catch (_) {}
   }
 }
 
 export async function createGuildProfile() {
   const guildId = requireGuildId();
-  const accessKey = await getGuildAccessKeyConfig();
-  if (!accessKey) throw new Error('Gere a chave da guilda antes de criar o perfil.');
-
   const info = readGuildInfoFromLocalCache(guildId);
   const guildName = (info.name || getGuildContext()?.guildName || '').toString().trim();
-  if (!guildName) throw new Error('Nome da guilda não encontrado no cache.');
+  if (!guildName) throw new Error('Nome da guilda nao encontrado no cache.');
 
+  const profileRef = doc(db, 'estatisticas', guildId);
+  const existingProfile = await getDoc(profileRef);
+  const nowMs = Date.now();
   const payload = {
+    guildId,
     nomeGuilda: guildName,
     dataCriacao: (info.createdAtMs != null && isFinite(Number(info.createdAtMs))) ? Number(info.createdAtMs) : null,
-    tag: (info.tag || '').toString().trim()
+    tag: (info.tag || '').toString().trim(),
+    updatedAt: serverTimestamp(),
+    updatedAtMs: nowMs
   };
 
-  const secondaryName = `hub_perfis_create_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const secondaryApp = initializeApp(hubPerfisFirebaseConfig, secondaryName);
-  const secondaryDb = getFirestore(secondaryApp);
-
-  try {
-    const profileRef = doc(secondaryDb, 'perfil', guildId);
-    const existingProfile = await getDoc(profileRef);
-    if (existingProfile.exists()) {
-      writeCachedGuildProfileState(guildId, true);
-      return { alreadyExists: true };
-    }
-
-    await setDoc(doc(secondaryDb, 'chave', accessKey), { uid: guildId }, { merge: true });
-    await setDoc(profileRef, payload, { merge: true });
-    writeCachedGuildProfileState(guildId, true);
-    return { alreadyExists: false };
-  } finally {
-    try { await deleteApp(secondaryApp); } catch (_) {}
-  }
+  await setDoc(profileRef, payload, { merge: true });
+  writeCachedGuildProfileState(guildId, true);
+  return { alreadyExists: existingProfile.exists() };
 }
 
-export function showToast(type = "info", message = "") {
+export function showToast(type = "info", message = "", durationMs = 3000) {
   const containerId = "toast-container";
   let container = document.getElementById(containerId);
   if (!container) {
@@ -1442,13 +1365,16 @@ export function showToast(type = "info", message = "") {
   toast.innerHTML = `<div class="flex-1 leading-snug">${escapeHtml(message)}</div>`;
   container.appendChild(toast);
 
+  const safeDurationMs = Math.max(1200, Math.min(10000, Number(durationMs) || 3000));
+  const fadeDelayMs = Math.max(700, safeDurationMs - 400);
+
   setTimeout(() => {
     toast.style.opacity = "0";
     toast.style.transform = "translateY(-4px)";
     toast.style.transition = "all 180ms ease";
-  }, 2600);
+  }, fadeDelayMs);
 
-  setTimeout(() => toast.remove(), 3000);
+  setTimeout(() => toast.remove(), safeDurationMs);
 }
 
 function escapeHtml(str) {
@@ -1475,7 +1401,7 @@ export async function createUpgradeSolicitacao(planId, payerName) {
   if (!user) throw new Error("Você precisa estar logado para solicitar upgrade.");
 
   const plan = (planId || "").toString().toLowerCase().trim();
-  if (!plan || !["plus", "pro", "business", "vitalicio"].includes(plan)) {
+  if (!plan || plan === "free" || plan === "parceiro" || plan === "vitalicio" || plan.includes("/")) {
     throw new Error("Plano inválido.");
   }
 
@@ -1509,10 +1435,7 @@ function __isPrivilegedGuildRole(roleValue) {
 function __vipAllowsSecondaryAccess(tierValue, expiresAtMs) {
   const tier = vipTierFromValue(tierValue || 'free');
   if (!tier || tier === 'free') return false;
-  if (tier === 'vitalicio') return true;
-
-  const exp = (expiresAtMs != null && isFinite(Number(expiresAtMs))) ? Number(expiresAtMs) : null;
-  return exp == null || Date.now() < exp;
+  return true;
 }
 
 function __isCurrentUserGuildOwner(guildId, user, cfgData = {}, guildData = {}) {
@@ -1967,16 +1890,8 @@ export function checkAuth(redirectToLogin = true) {
         } catch (_) {}
       }
 
-      // ✅ Verificação automática de expiração (somente se vipExpiresAt existir)
-      // Se chegou em 0 dias/expirou, grava FREE de verdade em configGuilda e guildas.
-      // Vitalício JAMAIS é expirado/rebaixado.
-      if (vipTier && vipTier !== 'free' && vipTier !== 'vitalicio' && vipExpiresAtMs != null && isFinite(vipExpiresAtMs)) {
-        if (Date.now() >= vipExpiresAtMs) {
-          vipTier = 'free';
-          vipExpiresAtMs = null;
-          try { await __persistExpiredVipAsFree(guildId); } catch (_) {}
-        }
-      }
+      // O navegador nao grava downgrade de plano no Firebase.
+      // A expiracao deve ser aplicada por servidor/painel, evitando erro por relogio/cache local.
 
 
 
@@ -2142,11 +2057,12 @@ try {
 
 function normalizeVipTier(v) {
   const s = (v || '').toString().toLowerCase().trim();
-  if (s.includes('vital') || s.includes('life')) return 'vitalicio';
+  if (s.includes('vital') || s.includes('life') || s.includes('parceiro') || s.includes('partner')) return 'parceiro';
+  if (s.includes('ultra')) return 'ultra';
   if (s.includes('buss') || s.includes('business')) return 'business';
   if (s.includes('pro')) return 'pro';
   if (s.includes('plus')) return 'plus';
-  return 'free';
+  return s || 'free';
 }
 
 function __setDisabled(btn, disabled, reasonText) {
@@ -2199,13 +2115,13 @@ export function applyVipUiAndGates(tierRaw) {
   const vipLabel = document.getElementById("vip-label");
   if (vipLabel) {
     const days = getVipRemainingDays();
-    const daysTxt = (tier !== 'free' && tier !== 'vitalicio' && days != null) ? ` • ${days} dias` : '';
-    vipLabel.innerHTML = `Guilda: <span class="font-bold text-gray-800">${tier === 'vitalicio' ? 'VITALÍCIO' : tier.toUpperCase()}${daysTxt}</span>`;
+    const daysTxt = (tier !== 'free' && tier !== 'parceiro' && days != null) ? ` • ${days} dias` : '';
+    vipLabel.innerHTML = `Guilda: <span class="font-bold text-gray-800">${tier.toUpperCase()}${daysTxt}</span>`;
   }
 
   __ensureVipTagsIndex();
   const showPlusTags = tier === "free";
-  const showProTags = (tier !== "pro" && tier !== "business" && tier !== "vitalicio");
+  const showProTags = (tier !== "pro" && tier !== "business" && tier !== "ultra" && tier !== "parceiro");
   document.querySelectorAll("[data-vip-tag]").forEach((el) => {
     const tag = (el.dataset.vipTag || "").toLowerCase();
     if (tag === "plus") el.style.display = showPlusTags ? "" : "none";
@@ -2213,7 +2129,7 @@ export function applyVipUiAndGates(tierRaw) {
   });
 
   const isPlusOrPro = tier !== "free";
-  const isPro = (tier === "pro" || tier === "business" || tier === "vitalicio");
+  const isPro = (tier === "pro" || tier === "business" || tier === "ultra" || tier === "parceiro");
 
   __setDisabled(document.getElementById("btn-add-admin"), !isPlusOrPro, "Recurso PLUS");
   __setDisabled(document.getElementById("btn-add-leader"), !isPlusOrPro, "Recurso PLUS");
@@ -2245,12 +2161,36 @@ export function applyVipUiAndGates(tierRaw) {
   } catch (_) {}
 })();
 
+function __ensurePlayerAlertsNavLink() {
+  const sidebar = document.getElementById("sidebar");
+  const nav = sidebar?.querySelector("nav");
+  if (!nav || nav.querySelector('[data-player-alerts-nav="true"]')) return;
+
+  const path = String(window.location.pathname || "").toLowerCase();
+  const role = String(__guildCtx?.role || "").toLowerCase();
+  const playerArea = role === "jogador" || path.includes("/jogador") || path.includes("/alertajg");
+  const active = path.includes("/alertagd") || path.includes("/alertajg");
+  const link = document.createElement("a");
+
+  link.href = playerArea ? "/alertajg" : "/alertagd";
+  link.dataset.playerAlertsNav = "true";
+  link.className = active
+    ? "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-100"
+    : "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors";
+  link.innerHTML = '<i data-lucide="shield-alert" class="w-5 h-5"></i><span>Alertas de jogadores</span>';
+
+  const supportLink = nav.querySelector("#nav-support-link");
+  nav.insertBefore(link, supportLink || null);
+  try { initIcons(); } catch (_) {}
+}
+
 export function setupSidebar() {
   const sidebar = document.getElementById("sidebar");
   const overlay = document.getElementById("sidebar-overlay");
   const btn = document.getElementById("mobile-menu-btn");
 
   try { __applyCachedSidebarNow(); } catch (_) {}
+  try { __ensurePlayerAlertsNavLink(); } catch (_) {}
 
   if (!sidebar || !overlay || !btn) return;
 

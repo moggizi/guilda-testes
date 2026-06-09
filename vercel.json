@@ -32,6 +32,13 @@
     { "source": "/jogador", "destination": "/jogador.html" },
     { "source": "/jogador.html", "destination": "/jogador.html" },
 
+    { "source": "/alertagd", "destination": "/alertagd/index.html" },
+    { "source": "/alertagd.html", "destination": "/alertagd/index.html" },
+    { "source": "/alertajg", "destination": "/alertajg/index.html" },
+    { "source": "/alertajg.html", "destination": "/alertajg/index.html" },
+    { "source": "/alertasl", "destination": "/alertasl/index.html" },
+    { "source": "/alertasl.html", "destination": "/alertasl/index.html" },
+
     { "source": "/perfil", "destination": "/perfil.html" },
     { "source": "/perfil.html", "destination": "/perfil.html" },
 
@@ -62,5 +69,8 @@
     { "source": "/free_fire/api/info", "destination": "/api/free_fire/info" },
     { "source": "/free_fire/api", "destination": "/free_fire/api.html" },
     { "source": "/free_fire/api.html", "destination": "/free_fire/api.html" }
+  ],
+  "crons": [
+    { "path": "/api/expire_plans", "schedule": "0 8 * * *" }
   ]
 }

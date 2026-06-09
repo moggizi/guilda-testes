@@ -8,6 +8,7 @@
   <title>Membros - Guild Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="/style.css" />
 
   <style>
@@ -148,6 +149,65 @@
       border:1px solid #fde68a;
       flex:0 0 auto;
     }
+
+    .remove-history-note{transition:background-color .18s ease,border-color .18s ease,color .18s ease}
+    html[data-theme="dark"] .remove-history-note{
+      box-shadow:inset 0 0 0 1px rgba(15,23,42,.22);
+    }
+    html[data-theme="dark"] .remove-history-note--available{
+      background:rgba(6,78,59,.32)!important;
+      border-color:rgba(16,185,129,.42)!important;
+      color:#d1fae5!important;
+    }
+    html[data-theme="dark"] .remove-history-note--locked{
+      background:rgba(120,53,15,.36)!important;
+      border-color:rgba(245,158,11,.44)!important;
+      color:#fde68a!important;
+    }
+    html[data-theme="dark"] .remove-history-note b{color:#6ee7b7}
+
+    .contact-dd{position:relative}
+    .contact-dd-button{
+      width:100%;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+      padding:.75rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;color:#374151;
+      font-size:.875rem;font-weight:700;text-align:left;box-shadow:0 1px 2px rgba(15,23,42,.04);
+      transition:.15s;
+    }
+    .contact-dd-button:hover{background:#f9fafb}
+    .contact-dd-button:focus{outline:none;border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12)}
+    .contact-dd-menu{
+      position:absolute;left:0;right:0;top:calc(100% + .5rem);z-index:100;max-height:240px;
+      overflow-y:auto;padding:.35rem;border:1px solid rgba(15,23,42,.1);border-radius:14px;
+      background:#fff;box-shadow:0 18px 50px rgba(15,23,42,.18);
+    }
+    .contact-dd-option{
+      width:100%;display:flex;align-items:center;gap:.65rem;padding:.75rem .85rem;border-radius:11px;
+      color:#374151;font-size:.875rem;font-weight:700;text-align:left;transition:.15s;
+    }
+    .contact-dd-option:hover{background:#f9fafb}
+    .contact-dd-option.is-selected{background:#ecfdf5;color:#047857}
+    html[data-theme="dark"] .contact-dd-button,
+    html[data-theme="dark"] .contact-dd-menu{
+      background:var(--theme-surface-2)!important;
+      border-color:var(--theme-border)!important;
+      color:var(--theme-text-soft)!important;
+      box-shadow:0 18px 50px var(--theme-shadow)!important;
+    }
+    html[data-theme="dark"] .contact-dd-menu{
+      background:var(--theme-surface)!important;
+      color:var(--theme-text)!important;
+    }
+    html[data-theme="dark"] .contact-dd-button:hover,
+    html[data-theme="dark"] .contact-dd-option:hover{
+      background:var(--theme-elevated)!important;
+      color:var(--theme-text)!important;
+    }
+    html[data-theme="dark"] .contact-dd-option{color:var(--theme-text-soft)!important}
+    html[data-theme="dark"] .contact-dd-option.is-selected{
+      background:var(--theme-accent-soft)!important;
+      color:#6ee7b7!important;
+    }
+    .contact-brand-icon{width:1rem;text-align:center;font-size:1rem;line-height:1}
 
     /* Quick Edit specific fixes */
     .animate-in { animation: fadeIn 0.2s ease-out forwards; }
@@ -300,6 +360,10 @@
               <i data-lucide="scan-line" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Ler Prints</span>
             </button>
 
+            <button id="btn-open-history" onclick="openHistoryModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95" title="Historico de membros">
+              <i data-lucide="archive-restore" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Historico</span>
+            </button>
+
             <!-- Dropdown Filtro Avançado -->
             <div class="relative">
               <button id="btn-filter" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
@@ -428,8 +492,47 @@
         </div>
 
         <div>
-          <label class="text-sm font-medium text-gray-700 mb-1 block">WhatsApp</label>
-          <input id="whatsapp" type="text" placeholder="11999999999" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm">
+          <label class="text-sm font-medium text-gray-700 mb-1 block">Contato</label>
+          <input id="contact-type" type="hidden" value="whatsapp">
+          <input id="contact-country-code" type="hidden" value="55">
+          <input id="whatsapp" type="hidden" value="">
+
+          <div class="contact-dd">
+            <button id="contact-type-button" type="button" class="contact-dd-button" aria-expanded="false">
+              <span class="flex min-w-0 items-center gap-2">
+                <i id="contact-type-icon" class="fa-brands fa-whatsapp contact-brand-icon text-emerald-600" aria-hidden="true"></i>
+                <span id="contact-type-label" class="truncate">WhatsApp</span>
+              </span>
+              <i data-lucide="chevron-down" class="h-4 w-4 text-gray-400"></i>
+            </button>
+            <div id="contact-type-menu" class="contact-dd-menu hidden">
+              <button type="button" class="contact-dd-option is-selected" data-member-contact-type="whatsapp"><i class="fa-brands fa-whatsapp contact-brand-icon" aria-hidden="true"></i>WhatsApp</button>
+              <button type="button" class="contact-dd-option" data-member-contact-type="instagram"><i class="fa-brands fa-instagram contact-brand-icon" aria-hidden="true"></i>Instagram</button>
+              <button type="button" class="contact-dd-option" data-member-contact-type="discord"><i class="fa-brands fa-discord contact-brand-icon" aria-hidden="true"></i>Discord</button>
+            </div>
+          </div>
+
+          <div id="contact-value-wrap" class="mt-2 grid grid-cols-[118px_minmax(0,1fr)] gap-2">
+            <div id="contact-country-wrap" class="contact-dd">
+              <button id="contact-country-button" type="button" class="contact-dd-button" aria-expanded="false">
+                <span id="contact-country-label">🇧🇷 +55</span>
+                <i data-lucide="chevron-down" class="h-4 w-4 text-gray-400"></i>
+              </button>
+              <div id="contact-country-menu" class="contact-dd-menu hidden min-w-[210px]">
+                <button type="button" class="contact-dd-option is-selected" data-member-country-code="55">🇧🇷 Brasil +55</button>
+                <button type="button" class="contact-dd-option" data-member-country-code="1">🇺🇸 Estados Unidos +1</button>
+                <button type="button" class="contact-dd-option" data-member-country-code="54">🇦🇷 Argentina +54</button>
+                <button type="button" class="contact-dd-option" data-member-country-code="351">🇵🇹 Portugal +351</button>
+                <button type="button" class="contact-dd-option" data-member-country-code="52">🇲🇽 México +52</button>
+                <button type="button" class="contact-dd-option" data-member-country-code="595">🇵🇾 Paraguai +595</button>
+                <button type="button" class="contact-dd-option" data-member-country-code="56">🇨🇱 Chile +56</button>
+                <button type="button" class="contact-dd-option" data-member-country-code="57">🇨🇴 Colômbia +57</button>
+                <button type="button" class="contact-dd-option" data-member-country-code="51">🇵🇪 Peru +51</button>
+              </div>
+            </div>
+            <input id="contact-value" type="text" inputmode="numeric" autocomplete="off" placeholder="DDD + número (11 dígitos)" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm">
+          </div>
+          <p id="contact-help" class="mt-1.5 text-xs text-gray-400">Informe o DDD e o número do WhatsApp.</p>
         </div>
 
         <div class="mt-6">
@@ -641,18 +744,119 @@
     </div>
   </div>
 
-  <!-- MODAL DE CONFIRMAÇÃO (Para Excluir Membro) -->
-  <div id="delete-confirm-modal" class="fixed inset-0 z-[61] flex items-center justify-center hidden">
+  <!-- MODAL DE REMOVER MEMBRO -->
+  <div id="delete-confirm-modal" class="fixed inset-0 z-[61] flex items-end sm:items-center justify-center hidden">
     <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeleteConfirmModal()"></div>
-    <div class="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
-      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4 mx-auto">
-        <i data-lucide="trash-2" class="w-7 h-7 text-red-600"></i>
+    <div class="relative bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-2xl p-6 m-0 sm:m-4 zoom-in-95">
+      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 mb-4 mx-auto">
+        <i data-lucide="user-minus" class="w-7 h-7 text-amber-600"></i>
       </div>
-      <h3 class="text-xl font-bold text-center text-gray-900 mb-2">Excluir membro?</h3>
-      <p class="text-sm text-center text-gray-500 mb-6 leading-relaxed">Essa ação irá remover este membro da guilda.<br><br><span class="text-red-500 font-bold">Atenção: É irreversível.</span></p>
-      <div class="flex gap-3">
-        <button type="button" onclick="closeDeleteConfirmModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
-        <button type="button" onclick="executeDeleteMember()" class="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-lg shadow-red-200 transition-all active:scale-95">Sim, Excluir</button>
+      <h3 id="remove-member-title" class="text-xl font-bold text-center text-gray-900 mb-2">Remover membro?</h3>
+      <p id="remove-member-desc" class="text-sm text-center text-gray-500 mb-5 leading-relaxed">Escolha como deseja remover este membro da guilda.</p>
+      <div id="remove-member-history-note" class="remove-history-note remove-history-note--locked mb-5 rounded-2xl border border-amber-100 bg-amber-50/80 p-4 text-sm text-gray-700">
+        Guardar no historico fica disponivel apenas no plano ULTRA ou superior.
+      </div>
+      <div class="mb-4 rounded-2xl border border-red-100 bg-red-50/70 p-3">
+        <label class="flex cursor-pointer items-center gap-3">
+          <input id="remove-register-alert" type="checkbox" class="peer sr-only" onchange="toggleRemoveAlertFields()">
+          <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-red-600 ring-1 ring-red-100">
+            <i data-lucide="shield-alert" class="h-4 w-4"></i>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-bold text-gray-800">Registrar alerta junto</span>
+            <span class="block text-xs font-medium text-gray-500">O alerta não poderá ser excluído depois.</span>
+          </span>
+          <span class="relative h-6 w-11 shrink-0 rounded-full bg-gray-300 transition-colors peer-checked:bg-red-500">
+            <span id="remove-alert-toggle-dot" class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow transition-transform"></span>
+          </span>
+        </label>
+        <div id="remove-alert-fields" class="hidden mt-3 border-t border-red-100 pt-3">
+          <label for="remove-alert-reason" class="mb-1.5 block text-xs font-bold text-gray-600">Motivo do alerta</label>
+          <div class="relative">
+            <select id="remove-alert-reason" onchange="onRemoveAlertReasonChange()" class="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2.5 pr-9 text-sm font-semibold text-gray-700 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100">
+              <option value="">Selecione um motivo</option>
+              <option value="Não vale a pena recrutar">Não vale a pena recrutar</option>
+              <option value="Trapaceiro">Trapaceiro</option>
+              <option value="Precisa de xit para viver">Precisa de xit para viver</option>
+              <option value="Só faz ponto na guilda se ganhar premiação">Só faz ponto na guilda se ganhar premiação</option>
+              <option value="Não tem respeito nenhum">Não tem respeito nenhum</option>
+              <option value="Xinga muito">Xinga muito</option>
+              <option value="Outro motivo">Outro motivo</option>
+            </select>
+            <i data-lucide="chevron-down" class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"></i>
+          </div>
+          <div id="remove-alert-custom-wrap" class="hidden mt-2">
+            <div class="relative">
+              <input id="remove-alert-custom-reason" type="text" maxlength="50" placeholder="Escreva o motivo" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 pr-14 text-sm font-semibold text-gray-700 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100">
+              <span id="remove-alert-custom-count" class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">0/50</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="grid gap-2">
+        <button id="btn-delete-with-history" type="button" onclick="executeDeleteMember('history')" class="hidden w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-200 transition-all active:scale-95">
+          Remover e salvar no historico
+        </button>
+        <button id="btn-delete-no-history" type="button" onclick="executeDeleteMember('delete')" class="w-full py-3 rounded-xl border border-red-200 bg-red-50 text-red-600 font-bold text-sm hover:bg-red-100 transition-colors">
+          Deletar sem historico
+        </button>
+        <button type="button" onclick="closeDeleteConfirmModal()" class="w-full py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE HISTORICO -->
+  <div id="history-modal" class="fixed inset-0 z-[62] flex items-end sm:items-center justify-center hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeHistoryModal()"></div>
+    <div class="relative bg-white w-full sm:max-w-3xl sm:rounded-3xl rounded-t-3xl max-h-[92vh] overflow-hidden shadow-2xl m-0 sm:m-4 zoom-in-95">
+      <div class="sticky top-0 z-10 bg-white border-b border-gray-100 p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex items-start gap-3 min-w-0">
+            <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700">
+              <i data-lucide="archive-restore" class="w-5 h-5"></i>
+            </span>
+            <div class="min-w-0">
+              <h3 class="text-lg font-black text-gray-900">Historico de membros</h3>
+              <p id="history-helper-text" class="mt-1 text-xs font-semibold text-gray-500">Pesquise por nick, ID, numero ou data de saida.</p>
+            </div>
+          </div>
+          <button type="button" onclick="closeHistoryModal()" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Fechar historico">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="relative flex-1">
+            <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+            <input type="text" id="history-search-input" placeholder="Buscar no historico..." class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm transition-all bg-white">
+          </div>
+          <span id="history-count" class="inline-flex shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-black text-gray-600">0/500 no historico</span>
+        </div>
+      </div>
+
+      <div class="max-h-[62vh] overflow-y-auto p-5">
+        <div id="history-locked-box" class="hidden rounded-2xl border border-amber-100 bg-amber-50 p-5 text-center">
+          <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+            <i data-lucide="lock" class="w-6 h-6"></i>
+          </div>
+          <h4 class="text-sm font-black text-gray-900">Recurso bloqueado</h4>
+          <p id="history-locked-copy" class="mt-2 text-sm font-semibold leading-relaxed text-gray-600">O historico de membros fica disponivel apenas no plano ULTRA ou superior.</p>
+          <a href="/upgrade" class="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white hover:bg-emerald-700">
+            <i data-lucide="zap" class="w-4 h-4"></i>
+            Ver planos
+          </a>
+        </div>
+
+        <div id="history-body" class="space-y-4">
+          <div id="history-empty-state" class="hidden rounded-2xl border border-gray-100 bg-gray-50 p-8 text-center">
+            <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-gray-400 border border-gray-100">
+              <i data-lucide="archive" class="w-6 h-6"></i>
+            </div>
+            <p data-empty-history-text class="text-sm font-semibold text-gray-500">Nenhum membro foi guardado no historico ainda.</p>
+          </div>
+          <div id="history-list" class="grid grid-cols-1 gap-3"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -739,7 +943,7 @@
     </div>
   </div>
 
-  <script type="module" src="/membros/membros.js"></script>
+  <script type="module" src="/membros/membros.js?v=alertas-player-20260608"></script>
 
   <!-- OTK Footer -->
   <footer class="bg-white py-10 border-t border-slate-200">
