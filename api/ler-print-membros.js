@@ -1,23 +1,29 @@
 // api/ler-print-membros.js
 // Vercel Serverless Function para analisar prints do Free Fire com Gemini.
 // Configure na Vercel: GEMINI_API_KEY
-// Opcional: GEMINI_MODEL=gemini-2.5-flash-lite
-// Opcional: GEMINI_MODELS=gemini-2.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash
+// Opcional: GEMINI_MODEL ou GEMINI_MODELS adicionam modelos depois da ordem padrão.
 // Se existir GEMINI_MODEL=gemini-2.0-flash na Vercel, esta versão ignora automaticamente.
 
 const DEFAULT_MODELS = [
-  // Pelos limites do AI Studio, estes são os melhores para o nível gratuito.
-  'gemini-2.5-flash-lite',
+  // Ordem de prioridade para leitura dos prints.
   'gemini-3.1-flash-lite',
-  'gemini-2.5-flash'
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-3.5-flash'
 ];
 
 const BLOCKED_ZERO_QUOTA_MODELS = new Set([
-  // Em alguns projetos free tier esses modelos aparecem com limite 0.
-  // Se estiverem configurados por engano na Vercel, a rota ignora e usa os modelos acima.
+  // Estes modelos foram descontinuados em 1 de junho de 2026.
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite'
 ]);
+
+const MODEL_LABELS = {
+  'gemini-3.1-flash-lite': 'Gemini 3.1 Flash-Lite',
+  'gemini-2.5-flash-lite': 'Gemini 2.5 Flash-Lite',
+  'gemini-2.5-flash': 'Gemini 2.5 Flash',
+  'gemini-3.5-flash': 'Gemini 3.5 Flash'
+};
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -68,7 +74,7 @@ function getModelsToTry() {
   // Mesmo que a Vercel ainda esteja com GEMINI_MODEL=gemini-2.0-flash,
   // não vamos usar esse modelo porque ele costuma vir com limite 0 no free tier.
   const allowZeroQuotaModels = String(process.env.GEMINI_ALLOW_ZERO_QUOTA_MODELS || '').toLowerCase() === 'true';
-  const models = [...new Set([...envModels, ...DEFAULT_MODELS])]
+  const models = [...new Set([...DEFAULT_MODELS, ...envModels])]
     .filter((model) => allowZeroQuotaModels || !BLOCKED_ZERO_QUOTA_MODELS.has(model));
 
   return models.length ? models : DEFAULT_MODELS;
@@ -178,6 +184,25 @@ function normalizeRows(rows, members) {
     .filter(Boolean);
 }
 
+function estimateReadingEfficacy(rows) {
+  if (!Array.isArray(rows) || !rows.length) return 0;
+
+  const total = rows.length;
+  const averageConfidence = rows.reduce((sum, row) => sum + Number(row.confidence || 0), 0) / total;
+  const completeRows = rows.filter((row) => row.detectedNick && Number.isFinite(Number(row.value))).length / total;
+  const mappedRows = rows.filter((row) => row.memberId).length / total;
+  const estimate = (averageConfidence * 0.7) + (completeRows * 0.2) + (mappedRows * 0.1);
+
+  return Math.max(1, Math.min(99, Math.round(estimate * 100)));
+}
+
+function retryableGeminiFailure(status, geminiJson) {
+  const message = String(geminiJson?.error?.message || '').toLowerCase();
+  if ([408, 404, 429, 500, 502, 503, 504].includes(status)) return true;
+  if (status === 400 && /model|not found|invalid|unsupported/.test(message)) return true;
+  return /resource_exhausted|quota|rate limit|overloaded|unavailable|temporarily/.test(message);
+}
+
 function friendlyGeminiError(status, geminiJson, modelsTried) {
   const rawMessage = String(geminiJson?.error?.message || '');
   const modelList = modelsTried.join(', ');
@@ -187,7 +212,7 @@ function friendlyGeminiError(status, geminiJson, modelsTried) {
       status: 429,
       error:
         `A cota do Gemini estourou ou está zerada para este projeto/modelo. ` +
-        `Na Vercel, tente trocar/remover GEMINI_MODEL e usar GEMINI_MODEL=gemini-2.5-flash-lite. ` +
+        `Todos os modelos disponíveis atingiram o limite neste momento. ` +
         `No Google AI Studio, confira Projeto > Limite de taxa. Modelos testados: ${modelList}.`
     };
   }
@@ -196,8 +221,8 @@ function friendlyGeminiError(status, geminiJson, modelsTried) {
     return {
       status: 400,
       error:
-        `O modelo configurado no Gemini parece inválido ou indisponível neste projeto. ` +
-        `Use GEMINI_MODEL=gemini-2.5-flash-lite na Vercel e faça redeploy.`
+        `Os modelos configurados no Gemini parecem inválidos ou indisponíveis neste projeto. ` +
+        `Modelos testados: ${modelList}.`
     };
   }
 
@@ -290,22 +315,37 @@ module.exports = async function handler(req, res) {
 
     const models = getModelsToTry();
     const modelsTried = [];
+    const attempts = [];
     let lastFailure = null;
 
     for (const model of models) {
       modelsTried.push(model);
-      const { response, json } = await callGemini({ model, apiKey, parts });
+      let response;
+      let json;
+
+      try {
+        ({ response, json } = await callGemini({ model, apiKey, parts }));
+      } catch (requestError) {
+        lastFailure = { status: 503, json: { error: { message: requestError?.message || 'Falha de conexão.' } } };
+        attempts.push({ model, status: 503, reason: 'connection' });
+        continue;
+      }
 
       if (!response.ok) {
         lastFailure = { status: response.status, json };
+        attempts.push({
+          model,
+          status: response.status,
+          reason: String(json?.error?.status || json?.error?.message || 'gemini_error').slice(0, 120)
+        });
 
-        // Tenta o próximo modelo quando o problema pode ser só cota/modelo.
-        if ([400, 404, 429, 500, 503].includes(response.status)) {
+        // Troca de modelo somente quando o problema pode ser cota, modelo ou indisponibilidade.
+        if (retryableGeminiFailure(response.status, json)) {
           continue;
         }
 
         const friendly = friendlyGeminiError(response.status, json, modelsTried);
-        return res.status(friendly.status).json({ error: friendly.error, modelsTried });
+        return res.status(friendly.status).json({ error: friendly.error, modelsTried, attempts });
       }
 
       const text = json?.candidates?.[0]?.content?.parts
@@ -313,14 +353,30 @@ module.exports = async function handler(req, res) {
         .join('\n')
         .trim();
 
-      const parsed = extractJson(text);
-      const rows = normalizeRows(parsed.rows, members);
+      try {
+        const parsed = extractJson(text);
+        const rows = normalizeRows(parsed.rows, members);
+        const efficacyPercent = estimateReadingEfficacy(rows);
+        attempts.push({ model, status: 200, reason: 'success' });
 
-      return res.status(200).json({ rows, modelUsed: model });
+        return res.status(200).json({
+          rows,
+          modelUsed: model,
+          modelLabel: MODEL_LABELS[model] || model,
+          efficacyPercent,
+          efficacyKind: 'estimated-from-reading',
+          modelsTried,
+          attempts,
+          fallbackUsed: modelsTried.length > 1
+        });
+      } catch (parseError) {
+        lastFailure = { status: 502, json: { error: { message: parseError?.message || 'Resposta inválida.' } } };
+        attempts.push({ model, status: 502, reason: 'invalid_response' });
+      }
     }
 
     const friendly = friendlyGeminiError(lastFailure?.status || 500, lastFailure?.json, modelsTried);
-    return res.status(friendly.status).json({ error: friendly.error, modelsTried });
+    return res.status(friendly.status).json({ error: friendly.error, modelsTried, attempts });
   } catch (error) {
     console.error('Erro em /api/ler-print-membros:', error);
     return res.status(500).json({

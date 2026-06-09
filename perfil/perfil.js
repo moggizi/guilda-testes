@@ -6,16 +6,26 @@ import {
   query,
   where,
   getDocs,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { setupSidebar, initIcons, logout, getGuildContext, showToast, auth, db } from '../logic.js';
-import { readCachedSidebarProfile, cacheSidebarProfile, applyCachedSidebarProfile } from '../cache.js';
+import {
+  readCachedSidebarProfile,
+  cacheSidebarProfile,
+  applyCachedSidebarProfile,
+  cacheReadJson,
+  cacheWriteJsonStamped,
+  cacheIsFresh
+} from '../cache.js';
 
 const qs = (id) => document.getElementById(id);
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
 const normalizeEmail = (v) => String(v ?? '').trim().toLowerCase();
 const isNumericDocId = (id) => /^\d+$/.test(String(id || ''));
+const PROFILE_GUILD_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const PROFILE_GUILD_CACHE_PREFIX = 'profileGuildContext_v1_';
 
 const palavrasBloqueioDireto = [
   "arrombado",
@@ -124,10 +134,21 @@ function contemPalavraImpropria(texto) {
   });
 }
 
+function contemNomeReservadoDaPlataforma(texto) {
+  const normalizado = normalizarTextoImproprio(texto).replace(/\s+/g, '');
+  return normalizado.includes('guildahub') || normalizado.includes('guildmanager');
+}
+
 function validarTextoPermitido(valor, campo) {
-  if (!contemPalavraImpropria(valor)) return true;
-  showToast('error', `${campo} contém palavra imprópria.`);
-  return false;
+  if (contemPalavraImpropria(valor)) {
+    showToast('error', `${campo} contém palavra imprópria.`);
+    return false;
+  }
+  if (contemNomeReservadoDaPlataforma(valor)) {
+    showToast('error', `${campo} não pode usar o nome da plataforma.`);
+    return false;
+  }
+  return true;
 }
 
 
@@ -173,6 +194,83 @@ function applyProfileSidebarContext(ctx = {}, user = auth.currentUser) {
   });
 }
 
+function profileGuildCacheKey(uid, guildId) {
+  return `${PROFILE_GUILD_CACHE_PREFIX}${String(uid || '').trim()}_${String(guildId || '').trim()}`;
+}
+
+function emailInConfigList(email, value) {
+  const cleanEmailValue = normalizeEmail(email);
+  return !!cleanEmailValue && Array.isArray(value) && value.some((item) => normalizeEmail(item) === cleanEmailValue);
+}
+
+function roleFromGuildConfig(user, guildId, config = {}, guild = {}, fallbackRole = 'Membro') {
+  const uid = String(user?.uid || '').trim();
+  const email = normalizeEmail(user?.email || '');
+  const ownerUid = String(config.ownerUid || guild.ownerUid || '').trim();
+  const ownerEmail = normalizeEmail(config.ownerEmail || guild.ownerEmail || '');
+
+  if (uid && (uid === guildId || uid === ownerUid)) return 'Líder';
+  if (email && ownerEmail === email) return 'Líder';
+  if (emailInConfigList(email, config.leaders)) return 'Líder';
+  if (emailInConfigList(email, config.admins)) return 'Admin';
+  if (email && normalizeEmail(config.playerEmail) === email) return 'Jogador';
+  if (!Object.keys(config).length && !Object.keys(guild).length) return normalizeRoleLabel(fallbackRole);
+  return 'Membro';
+}
+
+async function refreshProfileGuildContext(user, baseContext) {
+  const guildId = String(baseContext?.guildId || '').trim();
+  if (!guildId) return baseContext;
+
+  const cacheKey = profileGuildCacheKey(user?.uid, guildId);
+  const cached = cacheReadJson(cacheKey, null);
+  if (
+    cached &&
+    cached.guildId === guildId &&
+    cached.uid === String(user?.uid || '') &&
+    cacheIsFresh(cached, PROFILE_GUILD_CACHE_TTL_MS)
+  ) {
+    return {
+      ...baseContext,
+      ...cached,
+      email: normalizeEmail(user?.email || cached.email || '')
+    };
+  }
+
+  try {
+    const [configSnap, guildSnap] = await Promise.all([
+      getDoc(doc(db, 'configGuilda', guildId)),
+      getDoc(doc(db, 'guildas', guildId))
+    ]);
+    const config = configSnap.exists() ? (configSnap.data() || {}) : {};
+    const guild = guildSnap.exists() ? (guildSnap.data() || {}) : {};
+    const guildName = String(
+      config.name ||
+      config.nome ||
+      config.guildName ||
+      config.guilda ||
+      guild.name ||
+      guild.nome ||
+      baseContext.guildName ||
+      ''
+    ).trim() || 'Sem guilda';
+    const role = normalizeRoleLabel(roleFromGuildConfig(user, guildId, config, guild, baseContext.role));
+    const refreshed = {
+      ...baseContext,
+      uid: String(user?.uid || ''),
+      email: normalizeEmail(user?.email || ''),
+      guildId,
+      guildName,
+      role
+    };
+    cacheWriteJsonStamped(cacheKey, refreshed);
+    return refreshed;
+  } catch (error) {
+    console.warn('Não foi possível renovar os dados da guilda do perfil:', error);
+    return cached ? { ...baseContext, ...cached } : baseContext;
+  }
+}
+
 async function resolveProfileAccessContext(user) {
   const uid = String(user?.uid || '').trim();
   const email = normalizeEmail(user?.email || '');
@@ -195,13 +293,13 @@ async function resolveProfileAccessContext(user) {
   ).trim();
   const role = normalizeRoleLabel(userProfile?.role || ctx.role || 'Membro');
 
-  return {
+  return refreshProfileGuildContext(user, {
     guildId,
     guildName: guildName || 'Sem guilda',
     role,
     email,
     uid
-  };
+  });
 }
 
 function waitForProfileAuth() {
@@ -374,6 +472,16 @@ const els = {
   viewRole: qs('view-role'),
   viewCreated: qs('view-created'),
   btnSave: qs('btn-save-profile'),
+  legacyPhotoAlert: qs('legacy-photo-alert'),
+  btnUpdateLegacyPhoto: qs('btn-update-legacy-photo'),
+  modalPhotoCrop: qs('modal-photo-crop'),
+  cropCanvas: qs('photo-crop-canvas'),
+  cropZoom: qs('photo-crop-zoom'),
+  cropFileName: qs('photo-crop-file-name'),
+  btnClosePhotoCrop: qs('btn-close-photo-crop'),
+  btnCancelPhotoCrop: qs('btn-cancel-photo-crop'),
+  btnConfirmPhotoCrop: qs('btn-confirm-photo-crop'),
+  btnResetPhotoCrop: qs('btn-reset-photo-crop'),
 
   partnerEntryCard: qs('partner-entry-card'),
   partnerPanelCard: qs('partner-panel-card'),
@@ -410,12 +518,16 @@ const els = {
 
 let currentUserProfileId = null; 
 let currentBase64Photo = '';
+let currentPersistedPhoto = '';
+let pendingProfilePhotoDataUrl = '';
 let currentProfileData = null;
 let currentMonetizeData = null;
 let isPartnerPanelCollapsed = false;
 let profileAccessContext = null;
+let cropState = null;
+let cropPointer = null;
 
-// --- Helpers de Imagem (Compressão < 1MB) ---
+// --- Foto de perfil: recorte local + upload para R2 ---
 function dataUrlSizeBytes(dataUrl = '') {
   if (!dataUrl || !dataUrl.includes(',')) return 0;
   const base64 = dataUrl.split(',')[1] || '';
@@ -437,49 +549,124 @@ function loadImageFromFile(file) {
   });
 }
 
-async function compressImageToBase64(file, maxBytes = 900 * 1024) {
-  const img = await loadImageFromFile(file);
-  let width = img.width || 0;
-  let height = img.height || 0;
-  const maxDim = 800;
-  
-  if (width > maxDim || height > maxDim) {
-    const scale = Math.min(maxDim / width, maxDim / height);
-    width = Math.max(1, Math.round(width * scale));
-    height = Math.max(1, Math.round(height * scale));
+function isLegacyBase64Photo(value = '') {
+  return /^data:image\//i.test(String(value || '').trim());
+}
+
+function updateLegacyPhotoNotice(photoValue = '') {
+  const show = isLegacyBase64Photo(photoValue) && !pendingProfilePhotoDataUrl;
+  els.legacyPhotoAlert?.classList.toggle('hidden', !show);
+  els.legacyPhotoAlert?.classList.toggle('flex', show);
+}
+
+function setPhotoCropVisible(isVisible) {
+  els.modalPhotoCrop?.classList.toggle('hidden', !isVisible);
+  els.modalPhotoCrop?.classList.toggle('flex', isVisible);
+  if (!isVisible) {
+    cropPointer = null;
+    if (els.inputFoto) els.inputFoto.value = '';
   }
-  
-  const canvas = document.createElement('canvas');
-  const size = Math.min(width, height);
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d', { alpha: false });
-  if (!ctx) throw new Error('Canvas indisponível.');
-  
+}
+
+function clampCropOffsets() {
+  if (!cropState || !els.cropCanvas) return;
+  const canvasSize = els.cropCanvas.width;
+  const imageWidth = cropState.image.naturalWidth || cropState.image.width || 1;
+  const imageHeight = cropState.image.naturalHeight || cropState.image.height || 1;
+  const coverScale = Math.max(canvasSize / imageWidth, canvasSize / imageHeight);
+  const scale = coverScale * cropState.zoom;
+  const maxX = Math.max(0, ((imageWidth * scale) - canvasSize) / 2);
+  const maxY = Math.max(0, ((imageHeight * scale) - canvasSize) / 2);
+  cropState.offsetX = Math.max(-maxX, Math.min(maxX, cropState.offsetX));
+  cropState.offsetY = Math.max(-maxY, Math.min(maxY, cropState.offsetY));
+}
+
+function renderPhotoCrop() {
+  if (!cropState || !els.cropCanvas) return;
+  clampCropOffsets();
+  const canvas = els.cropCanvas;
+  const context = canvas.getContext('2d', { alpha: false });
+  if (!context) return;
+  const imageWidth = cropState.image.naturalWidth || cropState.image.width || 1;
+  const imageHeight = cropState.image.naturalHeight || cropState.image.height || 1;
+  const coverScale = Math.max(canvas.width / imageWidth, canvas.height / imageHeight);
+  const scale = coverScale * cropState.zoom;
+  const drawWidth = imageWidth * scale;
+  const drawHeight = imageHeight * scale;
+  const drawX = ((canvas.width - drawWidth) / 2) + cropState.offsetX;
+  const drawY = ((canvas.height - drawHeight) / 2) + cropState.offsetY;
+
+  context.fillStyle = '#020617';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(cropState.image, drawX, drawY, drawWidth, drawHeight);
+}
+
+async function openPhotoCrop(file) {
+  if (!file?.type?.startsWith('image/')) throw new Error('Selecione uma imagem válida.');
+  if (file.size > 12 * 1024 * 1024) throw new Error('A imagem deve ter no máximo 12 MB.');
+  const image = await loadImageFromFile(file);
+  cropState = { image, zoom: 1, offsetX: 0, offsetY: 0 };
+  if (els.cropZoom) els.cropZoom.value = '1';
+  if (els.cropFileName) els.cropFileName.textContent = String(file.name || 'Foto selecionada');
+  setPhotoCropVisible(true);
+  renderPhotoCrop();
+  initIcons();
+}
+
+function cropCanvasToDataUrl(maxBytes = 900 * 1024) {
+  if (!els.cropCanvas || !cropState) throw new Error('Recorte não disponível.');
   let quality = 0.88;
   let output = '';
-  let attempts = 0;
-  
-  while (attempts < 12) {
-    ctx.clearRect(0, 0, size, size);
-    const offsetX = (width - size) / 2;
-    const offsetY = (height - size) / 2;
-    ctx.drawImage(img, offsetX, offsetY, size, size, 0, 0, size, size);
-    
-    output = canvas.toDataURL('image/jpeg', quality);
-    const byteSize = dataUrlSizeBytes(output);
-    if (byteSize <= maxBytes) return output;
-    
-    quality -= 0.1;
-    attempts += 1;
+  while (quality >= 0.45) {
+    output = els.cropCanvas.toDataURL('image/jpeg', quality);
+    if (dataUrlSizeBytes(output) <= maxBytes) return output;
+    quality -= 0.08;
   }
-
   return output;
 }
 
+async function requestProfileImage(action, payload = {}) {
+  const user = auth.currentUser;
+  if (!user || !currentUserProfileId) throw new Error('Perfil não encontrado.');
+  const idToken = await user.getIdToken();
+  const response = await fetch('/api/recruitment_image', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${idToken}`
+    },
+    body: JSON.stringify({
+      scope: 'profile',
+      action,
+      profileId: currentUserProfileId,
+      ...payload
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.ok === false) {
+    throw new Error(data?.error || 'Não foi possível processar a foto.');
+  }
+  return data;
+}
+
+async function uploadPendingProfilePhoto() {
+  if (!pendingProfilePhotoDataUrl) return currentPersistedPhoto || currentBase64Photo || '';
+  const result = await requestProfileImage('upload', { dataUrl: pendingProfilePhotoDataUrl });
+  if (!result?.url) throw new Error('O R2 não retornou o link da foto.');
+  return String(result.url);
+}
+
+async function deleteProfilePhoto(photoUrl) {
+  const clean = String(photoUrl || '').trim();
+  if (!/^https?:\/\//i.test(clean)) return;
+  await requestProfileImage('delete', { url: clean });
+}
+
 // --- Funções de UI ---
-function setPhotoUI(base64Str) {
-  currentBase64Photo = base64Str || '';
+function setPhotoUI(photoValue) {
+  currentBase64Photo = photoValue || '';
 
   if (currentBase64Photo) {
     els.preview.src = currentBase64Photo;
@@ -502,6 +689,7 @@ function setPhotoUI(base64Str) {
       els.sidebarIcon.classList.remove('hidden');
     }
   }
+  updateLegacyPhotoNotice(currentBase64Photo);
 }
 
 function dateFromFirestoreValue(val) {
@@ -593,7 +781,11 @@ function hydrateProfileFromCache(user = auth.currentUser) {
       if (els.bioCounter) els.bioCounter.textContent = `${els.inputBio.value.length}/100`;
     }
 
-    if (foto && !currentBase64Photo) setPhotoUI(foto);
+    if (foto && !currentBase64Photo) {
+      currentPersistedPhoto = foto;
+      pendingProfilePhotoDataUrl = '';
+      setPhotoUI(foto);
+    }
 
     if (els.viewGameId && (!els.viewGameId.value || els.viewGameId.value === '--') && profileId) els.viewGameId.value = profileId;
     if (els.viewUid && (!els.viewUid.value || els.viewUid.value === '--') && user?.uid) els.viewUid.value = user.uid;
@@ -631,6 +823,7 @@ function getOldDataFromModal() {
 function buildBridgePayload(gameProfileDoc, oldAuthDocData = {}) {
   const uid = auth.currentUser.uid;
   const email = auth.currentUser.email || '';
+  const accessContext = getProfileAccessContext();
 
   return {
     uid,
@@ -642,9 +835,9 @@ function buildBridgePayload(gameProfileDoc, oldAuthDocData = {}) {
     foto: gameProfileDoc.foto || oldAuthDocData.foto || '',
     cat: gameProfileDoc.cat || gameProfileDoc.bio || oldAuthDocData.cat || oldAuthDocData.bio || '',
 
-    guildId: gameProfileDoc.guildId || oldAuthDocData.guildId || '',
-    guilda: gameProfileDoc.guilda || oldAuthDocData.guilda || '',
-    role: gameProfileDoc.role || oldAuthDocData.role || 'Membro',
+    guildId: accessContext.guildId || gameProfileDoc.guildId || oldAuthDocData.guildId || '',
+    guilda: accessContext.guildName || gameProfileDoc.guilda || oldAuthDocData.guilda || '',
+    role: accessContext.role || gameProfileDoc.role || oldAuthDocData.role || 'Membro',
 
     parceiro: gameProfileDoc.parceiro === true || oldAuthDocData.parceiro === true,
     parceiroTipo: gameProfileDoc.parceiroTipo || oldAuthDocData.parceiroTipo || (gameProfileDoc.parceiroVerificado || oldAuthDocData.parceiroVerificado ? 'verificado' : 'normal'),
@@ -1133,17 +1326,24 @@ async function loadProfile() {
 }
 
 function fillProfileForm(data) {
-  currentProfileData = { ...(data || {}) };
   const ctx = getProfileAccessContext();
   
   const actualGuildName = ctx.guildName || data.guilda || 'Sem guilda';
   const actualRole = ctx.role || data.role || 'Membro';
+  currentProfileData = {
+    ...(data || {}),
+    guildId: ctx.guildId || data.guildId || '',
+    guilda: actualGuildName,
+    role: actualRole
+  };
 
   els.inputNick.value = data.nick || '';
   els.inputBio.value = data.cat || data.bio || '';
   els.bioCounter.textContent = `${els.inputBio.value.length}/100`;
   
-  setPhotoUI(data.foto || '');
+  currentPersistedPhoto = String(data.foto || '').trim();
+  pendingProfilePhotoDataUrl = '';
+  setPhotoUI(currentPersistedPhoto);
   try {
     cacheSidebarProfile({
       ...(data || {}),
@@ -1281,16 +1481,32 @@ async function handleSaveProfile(e) {
   els.btnSave.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Salvando...`;
   initIcons();
 
+  let uploadedPhotoUrl = '';
+  let profileCommitted = false;
+  const oldPhotoBeforeSave = currentPersistedPhoto;
+
   try {
+    const photoUrl = pendingProfilePhotoDataUrl
+      ? await uploadPendingProfilePhoto()
+      : (currentPersistedPhoto || currentBase64Photo || '');
+    if (pendingProfilePhotoDataUrl) uploadedPhotoUrl = photoUrl;
+
     const payload = {
       nick,
       cat: bio,
-      foto: currentBase64Photo,
       updatedAt: serverTimestamp()
     };
+    if (!isLegacyBase64Photo(photoUrl)) payload.foto = photoUrl;
 
-    await setDoc(doc(db, 'users', currentUserProfileId), payload, { merge: true });
-    await setDoc(doc(db, 'users', auth.currentUser.uid), payload, { merge: true });
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', currentUserProfileId), payload, { merge: true });
+    batch.set(doc(db, 'users', auth.currentUser.uid), payload, { merge: true });
+    await batch.commit();
+    profileCommitted = true;
+
+    currentPersistedPhoto = photoUrl;
+    pendingProfilePhotoDataUrl = '';
+    setPhotoUI(photoUrl);
 
     currentProfileData = {
       ...(currentProfileData || {}),
@@ -1303,26 +1519,68 @@ async function handleSaveProfile(e) {
       applyCachedSidebarProfile(auth.currentUser);
     } catch (_) {}
 
-    if (isAcceptedPartner(currentProfileData, currentMonetizeData)) {
-      await setDoc(doc(db, 'monetize', currentUserProfileId), {
-        nick,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+    if (uploadedPhotoUrl && oldPhotoBeforeSave && oldPhotoBeforeSave !== uploadedPhotoUrl) {
+      deleteProfilePhoto(oldPhotoBeforeSave).catch((error) => {
+        console.warn('A foto antiga não pôde ser removida do R2:', error);
+      });
+    }
 
-      currentMonetizeData = {
-        ...(currentMonetizeData || {}),
-        nick
-      };
+    if (isAcceptedPartner(currentProfileData, currentMonetizeData)) {
+      try {
+        await setDoc(doc(db, 'monetize', currentUserProfileId), {
+          nick,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        currentMonetizeData = {
+          ...(currentMonetizeData || {}),
+          nick
+        };
+      } catch (error) {
+        console.warn('O perfil foi salvo, mas o nome do parceiro não foi sincronizado:', error);
+      }
     }
 
     showToast('success', 'Perfil atualizado com sucesso!');
   } catch (error) {
     console.error(error);
+    if (uploadedPhotoUrl && !profileCommitted) {
+      deleteProfilePhoto(uploadedPhotoUrl).catch(() => {});
+    }
     showToast('error', 'Erro ao salvar alterações.');
   } finally {
     els.btnSave.disabled = false;
     els.btnSave.innerHTML = `<i data-lucide="save" class="w-4 h-4"></i> Salvar Alterações`;
     initIcons();
+  }
+}
+
+function cropPointerPosition(event) {
+  const rect = els.cropCanvas?.getBoundingClientRect();
+  if (!rect || !els.cropCanvas) return { x: 0, y: 0 };
+  return {
+    x: (event.clientX - rect.left) * (els.cropCanvas.width / Math.max(1, rect.width)),
+    y: (event.clientY - rect.top) * (els.cropCanvas.height / Math.max(1, rect.height))
+  };
+}
+
+function resetPhotoCrop() {
+  if (!cropState) return;
+  cropState.zoom = 1;
+  cropState.offsetX = 0;
+  cropState.offsetY = 0;
+  if (els.cropZoom) els.cropZoom.value = '1';
+  renderPhotoCrop();
+}
+
+function confirmPhotoCrop() {
+  try {
+    pendingProfilePhotoDataUrl = cropCanvasToDataUrl();
+    setPhotoUI(pendingProfilePhotoDataUrl);
+    setPhotoCropVisible(false);
+    showToast('success', 'Foto ajustada. Salve o perfil para concluir.');
+  } catch (error) {
+    console.error(error);
+    showToast('error', error?.message || 'Não foi possível ajustar a foto.');
   }
 }
 
@@ -1345,13 +1603,64 @@ function bindEvents() {
     if (!file) return;
 
     try {
-      showToast('info', 'Processando imagem...');
-      const base64 = await compressImageToBase64(file, 900 * 1024);
-      setPhotoUI(base64);
-      showToast('success', 'Foto pronta para salvar!');
+      await openPhotoCrop(file);
     } catch (err) {
       console.error(err);
-      showToast('error', 'Não foi possível processar a foto.');
+      if (els.inputFoto) els.inputFoto.value = '';
+      showToast('error', err?.message || 'Não foi possível processar a foto.');
+    }
+  });
+
+  els.btnUpdateLegacyPhoto?.addEventListener('click', () => els.inputFoto?.click());
+  els.btnClosePhotoCrop?.addEventListener('click', () => setPhotoCropVisible(false));
+  els.btnCancelPhotoCrop?.addEventListener('click', () => setPhotoCropVisible(false));
+  els.btnResetPhotoCrop?.addEventListener('click', resetPhotoCrop);
+  els.btnConfirmPhotoCrop?.addEventListener('click', confirmPhotoCrop);
+
+  els.cropZoom?.addEventListener('input', () => {
+    if (!cropState) return;
+    cropState.zoom = Math.max(1, Math.min(3, Number(els.cropZoom.value) || 1));
+    renderPhotoCrop();
+  });
+
+  els.cropCanvas?.addEventListener('pointerdown', (event) => {
+    if (!cropState) return;
+    const point = cropPointerPosition(event);
+    cropPointer = {
+      id: event.pointerId,
+      x: point.x,
+      y: point.y,
+      offsetX: cropState.offsetX,
+      offsetY: cropState.offsetY
+    };
+    els.cropCanvas.setPointerCapture?.(event.pointerId);
+  });
+
+  els.cropCanvas?.addEventListener('pointermove', (event) => {
+    if (!cropState || !cropPointer || cropPointer.id !== event.pointerId) return;
+    const point = cropPointerPosition(event);
+    cropState.offsetX = cropPointer.offsetX + (point.x - cropPointer.x);
+    cropState.offsetY = cropPointer.offsetY + (point.y - cropPointer.y);
+    renderPhotoCrop();
+  });
+
+  const endCropPointer = (event) => {
+    if (!cropPointer || cropPointer.id !== event.pointerId) return;
+    cropPointer = null;
+    try { els.cropCanvas?.releasePointerCapture?.(event.pointerId); } catch (_) {}
+  };
+  els.cropCanvas?.addEventListener('pointerup', endCropPointer);
+  els.cropCanvas?.addEventListener('pointercancel', endCropPointer);
+
+  els.modalPhotoCrop?.addEventListener('click', (event) => {
+    if (event.target === els.modalPhotoCrop || event.target === els.modalPhotoCrop.firstElementChild) {
+      setPhotoCropVisible(false);
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !els.modalPhotoCrop?.classList.contains('hidden')) {
+      setPhotoCropVisible(false);
     }
   });
 

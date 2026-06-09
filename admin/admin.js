@@ -15,8 +15,8 @@ try {
 
     function tierRank(t){
       const s = (t||'free').toString().toLowerCase().trim();
-      if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life')) return 2;
-      if (s === 'pro' || s === 'business' || s.includes('business') || s.includes('buss')) return 2;
+      if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life') || s.includes('parceiro') || s.includes('partner')) return 2;
+      if (s === 'pro' || s === 'business' || s === 'ultra' || s.includes('ultra') || s.includes('business') || s.includes('buss')) return 2;
       if (s === 'plus' || s.includes('plus')) return 1;
       return 0;
     }

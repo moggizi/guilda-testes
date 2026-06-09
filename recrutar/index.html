@@ -110,7 +110,7 @@
             <div class="flex items-start justify-between gap-3">
               <div>
                 <h2 class="text-2xl font-bold text-gray-900">Painel de recrutamento</h2>
-                <p class="text-sm text-gray-500 mt-1">Abra a chave da sua guilda para ver ou publicar um recrutamento.</p>
+                <p class="text-sm text-gray-500 mt-1">Gerencie o recrutamento da sua guilda direto pela conta atual.</p>
               </div>
               <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><i data-lucide="users-round" class="w-6 h-6"></i></div>
             </div>
@@ -127,7 +127,13 @@
               </div>
             </div>
 
-            <div id="key-status" class="mt-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 px-4 py-3 text-sm">Verificando chave de guilda...</div>
+            <div id="key-status" class="mt-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 px-4 py-3 text-sm">Carregando recrutamento...</div>
+            <div id="recruitment-plan-warning" class="mt-4 hidden rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
+              <div class="flex items-start gap-3">
+                <i data-lucide="zap" class="mt-0.5 h-4 w-4 shrink-0"></i>
+                <p>O recrutamento está disponível no plano Pro ou superior. Em contas Free ou Plus, anúncios existentes ficam inativos até a assinatura ser atualizada.</p>
+              </div>
+            </div>
 
             <div class="mt-5 grid sm:grid-cols-3 gap-3">
               <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
@@ -139,7 +145,7 @@
                 <p id="current-guild-name" class="mt-1 text-sm font-bold text-gray-900 break-words">-</p>
               </div>
               <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <p class="text-[11px] text-gray-500 font-semibold">Chave aberta</p>
+                <p class="text-[11px] text-gray-500 font-semibold">Recrutamento</p>
                 <p id="opened-key" class="mt-1 text-sm font-bold text-gray-900 break-all">Nenhuma</p>
               </div>
             </div>
@@ -151,9 +157,9 @@
               <div>
                 <p class="text-sm font-semibold text-gray-900">Como usar</p>
                 <ul class="mt-2 text-xs text-gray-600 space-y-1 list-disc pl-4">
-                  <li>Digite a chave da sua guilda e toque em <b>Abrir recrutamento</b>.</li>
-                  <li>Se essa chave ainda não tiver sido usada aqui, ela será vinculada automaticamente à sua guilda.</li>
-                  <li>Depois disso, a tela procura se já existe um anúncio de recrutamento dessa guilda.</li>
+                  <li>A tela identifica sua guilda automaticamente pela conta atual.</li>
+                  <li>O anúncio pode ficar ativo ou inativo quando seu plano permitir.</li>
+                  <li>Pedidos enviados pelo público aparecem nessa mesma tela.</li>
                   <li>Se ainda não existir, o botão para criar recrutamento aparece para você publicar.</li>
                   <li>Para salvar, escolha pelo menos uma função e envie uma foto.</li>
                 </ul>
@@ -165,7 +171,7 @@
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h3 class="text-xl font-bold text-gray-900">Seu recrutamento</h3>
-            <p class="text-sm text-gray-500 mt-1">Depois de abrir a chave, aqui aparece o anúncio de recrutamento vinculado a ela.</p>
+            <p class="text-sm text-gray-500 mt-1">Aqui aparece o anúncio de recrutamento vinculado à sua guilda.</p>
           </div>
           <div class="flex items-center gap-2 flex-wrap">
             <button id="btn-copy-rec-link" class="hidden flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-all active:scale-95">
@@ -179,7 +185,7 @@
 
         <div id="recruitment-view" class="space-y-4">
           <div class="bg-white rounded-2xl p-10 border border-gray-100 shadow-sm text-center">
-            <p class="text-gray-500 font-medium">Abra uma chave da guilda para visualizar seu recrutamento.</p>
+            <p class="text-gray-500 font-medium">Carregando seu recrutamento.</p>
           </div>
         </div>
 
@@ -350,7 +356,7 @@
             <span class="hidden shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 transition group-hover:bg-emerald-600 group-hover:text-white sm:inline-flex">Selecionar</span>
           </label>
 
-          <p id="rec-photo-help" class="text-xs text-gray-400 mt-1">A imagem será comprimida automaticamente para ficar leve e salvar em base64.</p>
+          <p id="rec-photo-help" class="text-xs text-gray-400 mt-1">A imagem será comprimida e enviada com segurança; o Firestore salva só o link.</p>
           <div id="rec-photo-status" class="mt-2 text-xs text-gray-500"></div>
           <div id="rec-photo-preview-wrap" class="mt-3 hidden">
             <img id="rec-photo-preview" src="" alt="Prévia da foto" class="w-full max-h-64 object-cover rounded-2xl border border-gray-200 bg-gray-50">
@@ -400,7 +406,7 @@
           <div id="request-detail-modes" class="flex flex-wrap gap-2"></div>
         </div>
         <div>
-          <p class="text-xs font-semibold text-gray-500 mb-2">WhatsApp</p>
+          <p class="text-xs font-semibold text-gray-500 mb-2">Contato</p>
           <div id="request-detail-whatsapp" class="text-sm text-gray-700 break-all">-</div>
         </div>
         <div>
@@ -497,6 +503,6 @@
     .rq-dd-item.is-selected { background:#ecfdf5; color:#047857; }
   </style>
 
-  <script type="module" src="/recrutar/recrutar.js?v=admin-recrutamento-v3"></script>
+  <script type="module" src="/recrutar/recrutar.js?v=contatos-pedidos-v1"></script>
 </body>
 </html>

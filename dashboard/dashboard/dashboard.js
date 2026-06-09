@@ -163,8 +163,7 @@
     function vipTierFromValue(v) {
       const s = (v || '').toString().toLowerCase().trim();
       if (!s || s === 'free') return 'free';
-      if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life') || s.includes('parceiro') || s.includes('partner')) return 'parceiro';
-      if (s === 'ultra' || s.includes('ultra')) return 'ultra';
+      if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life')) return 'vitalicio';
       if (s === 'business' || s === 'bussines' || s.includes('buss') || s.includes('business')) return 'business';
       if (s === 'pro' || s.includes('pro')) return 'pro';
       return 'plus';
@@ -198,142 +197,130 @@
       setTimeout(() => toast.remove(), 3000);
     }
 
-    const DASHBOARD_NOTICE_TTL_MS = 12 * 60 * 60 * 1000;
-    const DASHBOARD_NOTICE_CACHE_VERSION = 2;
-    const DASHBOARD_NOTICE_DOCS = [
-      { id: 'guilda', label: 'Guilda' },
-      { id: 'geral', label: 'Geral' }
-    ];
+    const NOTICE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+
+    function noticeText(value, max = 1200) {
+      return String(value ?? '').trim().slice(0, max);
+    }
+
+    function isNoticeCacheFresh(entry) {
+      const ts = Number(entry?.ts || 0);
+      return !!ts && Number.isFinite(ts) && (Date.now() - ts) < NOTICE_CACHE_TTL_MS;
+    }
 
     function dashboardNoticeCacheKey(ctx = getGuildContext()) {
       return `avisos_dashboard_${ctx?.guildId || 'sem-guilda'}`;
     }
 
     function readDashboardNoticeCache(ctx = getGuildContext()) {
-      try { return safeParseJSON(safeStorageGet(dashboardNoticeCacheKey(ctx)), null); }
-      catch (_) { return null; }
+      try {
+        const raw = safeStorageGet(dashboardNoticeCacheKey(ctx));
+        return raw ? (JSON.parse(raw) || null) : null;
+      } catch (_) {
+        return null;
+      }
     }
 
-    function writeDashboardNoticeCache(data, ctx = getGuildContext()) {
+    function writeDashboardNoticeCache(payload, ctx = getGuildContext()) {
       try {
-        safeStorageSet(dashboardNoticeCacheKey(ctx), JSON.stringify({
-          version: DASHBOARD_NOTICE_CACHE_VERSION,
-          ts: Date.now(),
-          ...data
-        }));
+        safeStorageSet(dashboardNoticeCacheKey(ctx), JSON.stringify({ ...(payload || {}), ts: Date.now() }));
       } catch (_) {}
     }
 
-    function isDashboardNoticeCacheFresh(cache) {
-      return !!cache
-        && cache.version === DASHBOARD_NOTICE_CACHE_VERSION
-        && Number.isFinite(cache.ts)
-        && (Date.now() - cache.ts) < DASHBOARD_NOTICE_TTL_MS;
-    }
-
-    async function fetchDashboardNotices() {
-      const notices = [];
-      for (const item of DASHBOARD_NOTICE_DOCS) {
-        const snap = await getDoc(doc(db, 'avisos', item.id));
-        if (!snap.exists()) continue;
-        const data = snap.data() || {};
-        const titulo = String(data.titulo || '').trim();
-        const aviso = String(data.aviso || '').trim();
-        if (titulo || aviso) notices.push({ ...item, titulo, aviso });
-      }
-      return notices;
-    }
-
-    function dashboardNoticeTone(notice = {}) {
-      const text = `${notice.titulo || ''} ${notice.aviso || ''}`
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '');
-      const isUpdate = /(atualiz|novidade|melhoria|novo recurso|versao|release|mudanca|mudancas)/.test(text);
-      if (isUpdate) {
-        return {
-          label: 'Atualizacao',
-          icon: 'sparkles',
-          accent: 'bg-emerald-500',
-          border: 'border-emerald-200 hover:border-emerald-300',
-          iconBox: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-          text: 'text-emerald-700',
-          badge: 'bg-emerald-50 text-emerald-700 border-emerald-100'
-        };
-      }
+    function normalizeNoticeDoc(id, data = {}) {
+      const titulo = noticeText(data?.titulo, 120);
+      const aviso = noticeText(data?.aviso, 2000);
+      if (!titulo && !aviso) return null;
       return {
-        label: 'Aviso importante',
-        icon: 'triangle-alert',
-        accent: 'bg-red-500',
-        border: 'border-red-200 hover:border-red-300',
-        iconBox: 'bg-red-50 text-red-700 border-red-100',
-        text: 'text-red-700',
-        badge: 'bg-red-50 text-red-700 border-red-100'
+        id,
+        tipo: id === 'geral' ? 'Geral' : 'Guilda',
+        titulo: titulo || 'Aviso',
+        aviso: aviso || titulo || ''
       };
     }
 
-    function openDashboardNoticeModal(notice) {
-      const tone = dashboardNoticeTone(notice);
-      const overlay = document.createElement('div');
-      overlay.className = 'fixed inset-0 z-[10000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4';
-      overlay.innerHTML = `
-        <div class="w-full max-w-lg rounded-3xl bg-white shadow-2xl border ${tone.border} overflow-hidden">
-          <div class="h-1.5 ${tone.accent}"></div>
-          <div class="flex items-start justify-between gap-4 p-5 border-b border-gray-100">
-            <div class="flex items-start gap-3 min-w-0">
-              <span class="mt-0.5 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${tone.iconBox}">
-                <i data-lucide="${tone.icon}" class="w-6 h-6"></i>
-              </span>
-              <div class="min-w-0">
-                <p class="notice-kicker inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${tone.badge}"></p>
-                <h3 class="notice-title mt-2 text-xl font-black text-gray-900 leading-tight"></h3>
-              </div>
+    function ensureNoticeModal() {
+      let modal = document.getElementById('notice-modal-dashboard');
+      if (modal) return modal;
+
+      modal = document.createElement('div');
+      modal.id = 'notice-modal-dashboard';
+      modal.className = 'fixed inset-0 z-[10000] hidden items-center justify-center bg-black/45 px-4 backdrop-blur-sm';
+      modal.innerHTML = `
+        <div class="w-full max-w-lg overflow-hidden rounded-3xl border border-white/70 bg-white shadow-2xl">
+          <div class="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
+            <div class="min-w-0">
+              <p id="notice-modal-kind-dashboard" class="text-[11px] font-extrabold uppercase tracking-wide text-emerald-600">Aviso</p>
+              <h3 id="notice-modal-title-dashboard" class="mt-1 text-lg font-extrabold text-gray-900 break-words">Aviso</h3>
             </div>
-            <button type="button" class="notice-close w-10 h-10 shrink-0 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center" aria-label="Fechar aviso">
-              <i data-lucide="x" class="w-5 h-5"></i>
+            <button type="button" data-close-dashboard-notice class="shrink-0 rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Fechar aviso">
+              <i data-lucide="x" class="h-5 w-5"></i>
             </button>
           </div>
-          <div class="p-5 bg-white">
-            <p class="notice-body whitespace-pre-line text-sm leading-6 text-gray-700"></p>
-          </div>
-        </div>`;
-      overlay.querySelector('.notice-kicker').textContent = tone.label;
-      overlay.querySelector('.notice-title').textContent = notice.titulo || 'Aviso';
-      overlay.querySelector('.notice-body').textContent = notice.aviso || 'Sem detalhes adicionais.';
-      const close = () => overlay.remove();
-      overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
-      overlay.querySelector('.notice-close')?.addEventListener('click', close);
-      document.body.appendChild(overlay);
+          <div id="notice-modal-body-dashboard" class="max-h-[65vh] overflow-y-auto whitespace-pre-wrap px-5 py-5 text-sm leading-relaxed text-gray-700"></div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      modal.querySelectorAll('[data-close-dashboard-notice]').forEach((btn) => {
+        btn.addEventListener('click', () => closeNoticeModal());
+      });
+      modal.addEventListener('click', (event) => {
+        if (event.target === modal) closeNoticeModal();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !modal.classList.contains('hidden')) closeNoticeModal();
+      });
+      initIcons();
+      return modal;
+    }
+
+    function openNoticeModal(notice) {
+      const modal = ensureNoticeModal();
+      const kind = document.getElementById('notice-modal-kind-dashboard');
+      const title = document.getElementById('notice-modal-title-dashboard');
+      const body = document.getElementById('notice-modal-body-dashboard');
+      if (kind) kind.textContent = notice?.tipo || 'Aviso';
+      if (title) title.textContent = notice?.titulo || 'Aviso';
+      if (body) body.textContent = notice?.aviso || notice?.titulo || '';
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
       initIcons();
     }
 
-    function showDashboardNoticeToast(notice) {
-      const tone = dashboardNoticeTone(notice);
-      let container = document.getElementById('site-notice-toast-container');
+    function closeNoticeModal() {
+      const modal = document.getElementById('notice-modal-dashboard');
+      if (!modal) return;
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function showNoticeToast(notice) {
+      let container = document.getElementById('notice-toast-container-dashboard');
       if (!container) {
         container = document.createElement('div');
-        container.id = 'site-notice-toast-container';
-        container.className = 'fixed top-4 right-4 z-[9998] flex flex-col gap-3 w-[calc(100vw-2rem)] max-w-md';
+        container.id = 'notice-toast-container-dashboard';
+        container.className = 'fixed top-4 right-4 z-[9999] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2';
         document.body.appendChild(container);
       }
+
       const toast = document.createElement('button');
       toast.type = 'button';
-      toast.className = `relative overflow-hidden text-left rounded-2xl border ${tone.border} bg-white shadow-2xl px-4 py-4 transition hover:-translate-y-0.5`;
+      toast.className = 'group w-full rounded-2xl border border-emerald-200 bg-white/95 p-4 text-left shadow-2xl shadow-emerald-950/10 ring-1 ring-white/70 backdrop-blur transition hover:-translate-y-0.5 hover:border-emerald-300';
       toast.innerHTML = `
-        <span class="absolute inset-x-0 top-0 h-1 ${tone.accent}"></span>
-        <div class="flex items-start gap-3">
-          <div class="mt-0.5 w-11 h-11 rounded-2xl border ${tone.iconBox} flex items-center justify-center shrink-0">
-            <i data-lucide="${tone.icon}" class="w-5 h-5"></i>
-          </div>
-          <div class="min-w-0">
-            <p class="text-[11px] font-black uppercase tracking-[0.16em] ${tone.text}">${toastEscapeHtml(tone.label)}</p>
-            <p class="mt-0.5 text-sm font-black text-gray-900 leading-snug">${toastEscapeHtml(notice.titulo || 'Novo aviso')}</p>
-            <p class="mt-1 text-xs font-bold text-gray-500">Clique para ver os detalhes</p>
-          </div>
-        </div>`;
+        <div class="flex gap-3">
+          <span class="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+            <i data-lucide="megaphone" class="h-5 w-5"></i>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-[11px] font-extrabold uppercase tracking-wide text-emerald-600">${toastEscapeHtml(notice.tipo || 'Aviso')}</span>
+            <span class="mt-0.5 block text-sm font-extrabold leading-snug text-gray-900">${toastEscapeHtml(notice.titulo || 'Aviso')}</span>
+            <span class="mt-1 block text-xs font-semibold text-gray-500">Toque para ler o aviso completo.</span>
+          </span>
+        </div>
+      `;
       toast.addEventListener('click', () => {
+        openNoticeModal(notice);
         toast.remove();
-        openDashboardNoticeModal(notice);
       });
       container.appendChild(toast);
       initIcons();
@@ -345,18 +332,34 @@
       setTimeout(() => toast.remove(), 4300);
     }
 
-    async function maybeShowDashboardNotices({ force = false } = {}) {
+    async function fetchDashboardNotices() {
+      const ids = ['guilda', 'geral'];
+      const out = [];
+      for (const id of ids) {
+        try {
+          const snap = await getDoc(doc(db, 'avisos', id));
+          if (!snap.exists()) continue;
+          const notice = normalizeNoticeDoc(id, snap.data() || {});
+          if (notice) out.push(notice);
+        } catch (error) {
+          console.warn('[avisos-dashboard]', error);
+        }
+      }
+      return out;
+    }
+
+    async function maybeShowDashboardNotices() {
       const ctx = getGuildContext();
       if (!ctx?.guildId) return;
+
       const cached = readDashboardNoticeCache(ctx);
-      if (!force && isDashboardNoticeCacheFresh(cached)) return;
-      try {
-        const notices = await fetchDashboardNotices();
-        writeDashboardNoticeCache({ notices }, ctx);
-        notices.forEach((notice, index) => setTimeout(() => showDashboardNoticeToast(notice), index * 350));
-      } catch (error) {
-        console.warn('[dashboard-avisos]', error);
-      }
+      if (isNoticeCacheFresh(cached)) return;
+
+      const notices = await fetchDashboardNotices();
+      writeDashboardNoticeCache({ notices, shownAt: notices.length ? Date.now() : 0 }, ctx);
+      notices.forEach((notice, index) => {
+        setTimeout(() => showNoticeToast(notice), index * 250);
+      });
     }
 
     function initIcons() {
@@ -425,8 +428,8 @@
       const vipLabel = document.getElementById('vip-label');
       if (vipLabel) {
         const days = getVipRemainingDays();
-        const daysTxt = (tier !== 'free' && tier !== 'parceiro' && days != null) ? ` • ${days} dias` : '';
-        vipLabel.innerHTML = `Guilda: <span class="font-bold text-gray-800">${tier.toUpperCase()}${daysTxt}</span>`;
+        const daysTxt = (tier !== 'free' && tier !== 'vitalicio' && days != null) ? ` • ${days} dias` : '';
+        vipLabel.innerHTML = `Guilda: <span class="font-bold text-gray-800">${tier === 'vitalicio' ? 'VITALÍCIO' : tier.toUpperCase()}${daysTxt}</span>`;
       }
       document.querySelectorAll('span').forEach((sp) => {
         if (sp.closest && sp.closest('#vip-label')) return;
@@ -436,7 +439,7 @@
         if (t === 'PRO') sp.dataset.vipTag = 'pro';
       });
       const showPlusTags = tier === 'free';
-      const showProTags = (tier !== 'pro' && tier !== 'business' && tier !== 'ultra' && tier !== 'parceiro');
+      const showProTags = (tier !== 'pro' && tier !== 'business' && tier !== 'vitalicio');
       document.querySelectorAll('[data-vip-tag]').forEach((el) => {
         const tag = (el.dataset.vipTag || '').toLowerCase();
         if (tag === 'plus') el.style.display = showPlusTags ? '' : 'none';
@@ -514,7 +517,7 @@
       try {
         if (!guildId) return null;
         const tier = (vipTier || cfgData?.vipTier || 'free').toString().toLowerCase().trim();
-        const paid = (tier === 'plus' || tier === 'pro' || tier === 'business' || tier === 'ultra' || tier === 'parceiro' || tier === 'vitalicio' || tier.includes('pro') || tier.includes('business') || tier.includes('buss') || tier.includes('ultra') || tier.includes('parceiro') || tier.includes('vital'));
+        const paid = (tier === 'plus' || tier === 'pro' || tier === 'business' || tier === 'vitalicio' || tier.includes('pro') || tier.includes('business') || tier.includes('buss') || tier.includes('vital'));
         const vipAtivo = paid;
         const atual = (cfgData && cfgData.permissoesAtivas !== undefined) ? (cfgData.permissoesAtivas !== false) : null;
         const novo = !!vipAtivo;
@@ -834,8 +837,7 @@
 
     function normalizeTier(raw){
       const s = (raw || 'free').toString().toLowerCase().trim();
-      if (s.includes('vital') || s.includes('life') || s.includes('parceiro') || s.includes('partner')) return 'parceiro';
-      if (s.includes('ultra')) return 'ultra';
+      if (s.includes('vital') || s.includes('life')) return 'vitalicio';
       if (s.includes('buss') || s.includes('business')) return 'business';
       if (s.includes('pro')) return 'pro';
       if (s.includes('plus')) return 'plus';
@@ -1336,7 +1338,7 @@
       else currentGuildSlotsMeta = [{ slot: 1, name: ctx.guildName || cached?.guildName || '', tag: '', exists: true }];
 
       const vipTier = normalizeTier(ctx?.vipTier || getVipTier());
-      canUseMultiGuildDashboard = ['pro', 'business', 'ultra', 'parceiro'].includes(vipTier);
+      canUseMultiGuildDashboard = ['pro', 'business', 'vitalicio'].includes(vipTier);
       currentGuildSlot = canUseMultiGuildDashboard ? readSelectedGuildSlot() : 1;
       if (!isGuildSlotAvailable(currentGuildSlot)) currentGuildSlot = 1;
       writeSelectedGuildSlot(currentGuildSlot);
@@ -1511,7 +1513,7 @@
           const current = getGuildContext() || getSharedGuildContextCache();
           const currentTier = normalizeTier(current?.vipTier || 'free');
           applyVipUiAndGates(currentTier);
-          canUseMultiGuildDashboard = ['pro', 'business', 'ultra', 'parceiro'].includes(currentTier);
+          canUseMultiGuildDashboard = ['pro', 'business', 'vitalicio'].includes(currentTier);
           syncGuildSlotButtonState();
           renderGuildSlotDropdown();
           return;
@@ -1528,7 +1530,7 @@
         const cached = updateGuildCtxCache(patch);
         const tier = normalizeTier(cached.vipTier);
         applyVipUiAndGates(tier);
-        canUseMultiGuildDashboard = ['pro', 'business', 'ultra', 'parceiro'].includes(tier);
+        canUseMultiGuildDashboard = ['pro', 'business', 'vitalicio'].includes(tier);
         syncGuildSlotButtonState();
         renderGuildSlotDropdown();
       }, () => {});
@@ -1556,7 +1558,7 @@
         try {
           const cached = safeParseJSON(e.newValue || '{}', {});
           applyVipUiAndGates(cached?.vipTier || getVipTier());
-          canUseMultiGuildDashboard = ['pro', 'business', 'ultra', 'parceiro'].includes(normalizeTier(cached?.vipTier || getVipTier()));
+          canUseMultiGuildDashboard = ['pro', 'business', 'vitalicio'].includes(normalizeTier(cached?.vipTier || getVipTier()));
           syncGuildSlotButtonState();
           renderGuildSlotDropdown();
         } catch {}
@@ -1602,6 +1604,7 @@
 
       const ctx = getGuildContext();
       if(!ctx?.guildId) return;
+      maybeShowDashboardNotices().catch((error) => console.warn('[avisos-dashboard]', error));
 
       // Não bloqueia o carregamento do painel por causa da sincronização de parceiro.
       // Essa rotina chama API externa do site e, no primeiro login, podia atrasar/travar
@@ -1609,9 +1612,6 @@
       ensurePartnerInviteCountedOnDashboard(user).catch((error) => {
         console.warn('[dashboard-referral-sync]', error);
       });
-      setTimeout(() => maybeShowDashboardNotices().catch((error) => {
-        console.warn('[dashboard-avisos]', error);
-      }), 700);
 
       try { applyVipUiAndGates(ctx?.vipTier || getVipTier()); } catch {}
       await hydrateSettings();

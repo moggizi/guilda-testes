@@ -193,8 +193,16 @@
             <input id="applicant-nick" type="text" maxlength="30" placeholder="Digite seu nick" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
           </div>
           <div>
-            <label class="text-xs font-semibold text-slate-500">WhatsApp</label>
-            <div class="mt-1 grid grid-cols-[132px_minmax(0,1fr)] gap-2">
+            <label class="text-xs font-semibold text-slate-500">Contato</label>
+            <div class="rq-select-wrap mt-1">
+              <select id="applicant-contact-type" class="rq-select" data-marketplace-custom-select="true">
+                <option value="whatsapp" selected>WhatsApp</option>
+                <option value="instagram">Instagram</option>
+                <option value="discord">Discord</option>
+              </select>
+              <i data-lucide="chevron-down"></i>
+            </div>
+            <div id="applicant-contact-value-wrap" class="mt-2 grid grid-cols-[132px_minmax(0,1fr)] gap-2">
               <select id="applicant-whatsapp-ddi" class="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100">
                 <option value="55" selected>🇧🇷 +55</option>
                 <option value="1">🇺🇸 +1</option>
@@ -208,6 +216,7 @@
               </select>
               <input id="applicant-whatsapp" type="text" inputmode="numeric" placeholder="DDD + número" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
             </div>
+            <p id="applicant-contact-help" class="mt-1.5 text-xs text-slate-400">Informe DDD e número.</p>
           </div>
           <div>
             <label class="text-xs font-semibold text-slate-500">Qual modo você joga?</label>
@@ -286,6 +295,6 @@
       </div>
     </div>
   </div>
-<script type="module" src="/eventos/eventos.js"></script>
+<script type="module" src="/eventos/eventos.js?v=busca-ref-v2"></script>
 </body>
 </html>

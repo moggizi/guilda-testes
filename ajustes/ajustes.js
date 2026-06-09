@@ -187,6 +187,204 @@ import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConf
       return Array.from(map.values()).sort((a, b) => a.slot - b.slot);
     }
 
+    const SETTINGS_JSON_IMPORT_MAX_BYTES = 1024 * 1024;
+
+    function downloadJsonFile(filename, payload) {
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function readJsonFile(file, maxBytes = SETTINGS_JSON_IMPORT_MAX_BYTES) {
+      return new Promise((resolve, reject) => {
+        if (!file) {
+          reject(new Error('Selecione um arquivo JSON.'));
+          return;
+        }
+        const isJson = file.type === 'application/json' || /\.json$/i.test(file.name || '');
+        if (!isJson) {
+          reject(new Error('O arquivo precisa estar no formato .json.'));
+          return;
+        }
+        if (file.size > maxBytes) {
+          reject(new Error('Esse JSON esta grande demais para ajustes.'));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          try { resolve(JSON.parse(String(reader.result || '{}'))); }
+          catch (_) { reject(new Error('Nao foi possivel ler o JSON. Verifique se o arquivo nao esta corrompido.')); }
+        };
+        reader.onerror = () => reject(new Error('Nao foi possivel abrir o arquivo.'));
+        reader.readAsText(file, 'utf-8');
+      });
+    }
+
+    function cleanSettingsString(value, max = 120) {
+      return String(value ?? '').trim().slice(0, max);
+    }
+
+    function sanitizeSettingsPayload(data = {}) {
+      const slots = normalizeMultiGuildSlots(data.multiGuildSlots || data.guilds || []);
+      const normalizedGoals = normalizeGoalsPayload(data.goals || data.metas || {});
+      const tag = cleanSettingsString(data.tag ?? data.tagMembros ?? slots.find(item => Number(item.slot) === 1)?.tag ?? '', 80);
+      const guildName = cleanSettingsString(data.guildName ?? data.name ?? slots.find(item => Number(item.slot) === 1)?.name ?? '', 120);
+      const cleanSlots = slots.map((slot) => ({
+        ...slot,
+        name: cleanSettingsString(slot.name || '', 120),
+        tag: cleanSettingsString(slot.tag || '', 80),
+        exists: slot.slot === 1 ? true : slot.exists !== false && !!cleanSettingsString(slot.name || '', 120)
+      }));
+      return { tag, guildName, goals: normalizedGoals, multiGuildSlots: cleanSlots };
+    }
+
+    function mountSettingsJsonBackupPanel() {
+      if (document.getElementById('settings-json-backup-panel')) return;
+      const container = document.querySelector('main .max-w-3xl');
+      if (!container) return;
+
+      const panel = document.createElement('section');
+      panel.id = 'settings-json-backup-panel';
+      panel.className = 'rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm';
+      panel.innerHTML = `
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                <i data-lucide="file-json" class="w-5 h-5"></i>
+              </span>
+              <div>
+                <h3 class="text-sm font-extrabold text-gray-900">Backup em JSON dos ajustes</h3>
+                <p class="text-xs text-gray-500 mt-0.5">Baixe ou restaure tag, nome da guilda, metas e guildas extras configuradas nesta tela.</p>
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-500 mt-3 leading-relaxed">
+              Use apenas JSON gerado por esta tela. Ao importar, os campos encontrados serao salvos na guilda atual; nada de membros ou lines e alterado aqui.
+            </p>
+          </div>
+          <div class="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+            <button id="btn-export-settings-json" type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50">
+              <i data-lucide="download" class="w-4 h-4"></i> Exportar JSON
+            </button>
+            <button id="btn-import-settings-json" type="button" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">
+              <i data-lucide="upload" class="w-4 h-4"></i> Importar JSON
+            </button>
+            <input id="input-import-settings-json" type="file" accept=".json,application/json" class="hidden" />
+          </div>
+        </div>
+      `;
+      const firstBlock = container.firstElementChild;
+      if (firstBlock?.nextSibling) container.insertBefore(panel, firstBlock.nextSibling);
+      else container.appendChild(panel);
+
+      document.getElementById('btn-export-settings-json')?.addEventListener('click', exportSettingsJson);
+      document.getElementById('btn-import-settings-json')?.addEventListener('click', () => {
+        document.getElementById('input-import-settings-json')?.click();
+      });
+      document.getElementById('input-import-settings-json')?.addEventListener('change', async (event) => {
+        const input = event.currentTarget;
+        try { await importSettingsJson(input.files?.[0]); }
+        finally { if (input) input.value = ''; }
+      });
+      initIcons();
+    }
+
+    function exportSettingsJson() {
+      const gid = (currentCtx?.guildId || getGuildContext()?.guildId || '').toString().trim();
+      if (!gid) {
+        showToast('error', 'A guilda ainda nao foi carregada.');
+        return;
+      }
+      const payload = {
+        app: 'guilda-hub',
+        screen: 'ajustes',
+        version: 1,
+        guildId: gid,
+        guildName: cleanSettingsString(guildNameInput?.value || currentCtx?.guildName || '', 120),
+        exportedAt: new Date().toISOString(),
+        data: sanitizeSettingsPayload({
+          tag: tagInput?.value || '',
+          guildName: guildNameInput?.value || '',
+          goals: readGoalsFromInputs(),
+          multiGuildSlots
+        })
+      };
+      downloadJsonFile(`guilda-ajustes-${gid}.json`, payload);
+      showToast('success', 'JSON dos ajustes baixado.');
+    }
+
+    async function importSettingsJson(file) {
+      const gid = (currentCtx?.guildId || getGuildContext()?.guildId || '').toString().trim();
+      if (!gid) {
+        showToast('error', 'A guilda ainda nao foi carregada.');
+        return;
+      }
+      if (!currentIsLeader) {
+        showToast('error', 'Apenas o Lider pode importar ajustes.');
+        return;
+      }
+      if (!freshSettingsLoaded) {
+        showToast('info', 'Aguarde o carregamento terminar antes de importar.');
+        return;
+      }
+      try {
+        const payload = await readJsonFile(file);
+        if (!payload || payload.screen !== 'ajustes' || !payload.data || typeof payload.data !== 'object') {
+          throw new Error('Esse arquivo nao parece ser um backup da tela de ajustes.');
+        }
+        if (payload.guildId && String(payload.guildId) !== String(gid)) {
+          throw new Error('Esse JSON foi gerado para outra guilda.');
+        }
+        const rawData = payload.data || {};
+        const hasGoalsInFile = Object.prototype.hasOwnProperty.call(rawData, 'goals') || Object.prototype.hasOwnProperty.call(rawData, 'metas');
+        const data = sanitizeSettingsPayload(rawData);
+        const hasSomething = !!data.tag || !!data.guildName || (hasGoalsInFile && hasAnyGoal(data.goals)) || data.multiGuildSlots.some(slot => slot.slot >= 2 && slot.exists);
+        if (!hasSomething) throw new Error('Nao encontrei ajustes validos dentro desse JSON.');
+
+        const ok = window.confirm('Importar estes ajustes para a guilda atual? Isso pode atualizar tag, nome, metas e guildas extras.');
+        if (!ok) return;
+
+        if (data.tag) await setMemberTagConfig(data.tag);
+        if (data.guildName) await setGuildNameConfig(data.guildName);
+        if (hasGoalsInFile) await setGuildGoalsConfig(data.goals);
+
+        multiGuildSlots = normalizeMultiGuildSlots(data.multiGuildSlots.length ? data.multiGuildSlots : multiGuildSlots);
+        if (data.guildName || data.tag) {
+          upsertMultiGuildSlot(1, { name: data.guildName || guildNameInput?.value || '', tag: data.tag || tagInput?.value || '' });
+        }
+        for (const slot of multiGuildSlots.filter(item => Number(item.slot) >= 2 && item.exists)) {
+          if (!slot.name && !slot.tag) continue;
+          await setGuildSlotConfig(slot.slot, { name: slot.name || '', tag: slot.tag || '' });
+        }
+
+        if (tagInput && data.tag) tagInput.value = data.tag;
+        if (guildNameInput && data.guildName) guildNameInput.value = data.guildName;
+        if (hasGoalsInFile) {
+          applyGoalsToInputs(data.goals);
+          goalsHint.textContent = getGoalsHintText(data.goals);
+        }
+        if (hint && data.tag) hint.textContent = `Tag configurada: "${data.tag}"`;
+        if (guildNameHint && data.guildName) guildNameHint.textContent = `Nome atual: ${data.guildName}`;
+        renderExtraGuildSlots();
+        setAddGuildSlotState();
+        const cacheExtra = { multiGuildSlots };
+        if (hasGoalsInFile) cacheExtra.goals = data.goals;
+        if (data.tag) cacheExtra.tag = data.tag;
+        if (data.guildName) cacheExtra.guildName = data.guildName;
+        writeCurrentSettingsCache(cacheExtra);
+        showToast('success', 'JSON importado nos ajustes.');
+      } catch (err) {
+        console.error(err);
+        showToast('error', err?.message || 'Nao foi possivel importar o JSON.');
+      }
+    }
+
 
     function fmtDate(ms) {
       try {
@@ -311,7 +509,8 @@ import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConf
 
     function normalizeVipTierClient(v) {
       const s = (v || '').toString().toLowerCase().trim();
-      if (s.includes('vital') || s.includes('life')) return 'vitalicio';
+      if (s.includes('vital') || s.includes('life') || s.includes('parceiro') || s.includes('partner')) return 'parceiro';
+      if (s.includes('ultra')) return 'ultra';
       if (s.includes('buss') || s.includes('business')) return 'business';
       if (s.includes('pro')) return 'pro';
       if (s.includes('plus')) return 'plus';
@@ -501,6 +700,8 @@ import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConf
       if (!value) return;
       try { await navigator.clipboard.writeText(value); showToast('success', 'Copiado!'); } catch (_) { showToast('info', value); }
     });
+
+    mountSettingsJsonBackupPanel();
 
     try {
       const ctx = getGuildContext();
@@ -698,7 +899,7 @@ import { checkAuth, setupSidebar, initIcons, logout, showToast, getMemberTagConf
       const isAdmin = ctx?.role === 'Admin';
       currentIsLeader = !!isLeader;
       currentIsAdmin = !!isAdmin;
-      currentCanAddGuildSlot = !!isLeader && ['pro', 'business', 'vitalicio'].includes(normalizeVipTierClient(ctx?.vipTier || getVipTier()));
+      currentCanAddGuildSlot = !!isLeader && ['pro', 'business', 'ultra', 'parceiro'].includes(normalizeVipTierClient(ctx?.vipTier || getVipTier()));
       freshSettingsLoaded = false;
       setReadonly(!isLeader, isAdmin);
       setGoalsReadonly(!isLeader);

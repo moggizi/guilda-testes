@@ -50,6 +50,21 @@ function sanitizeId(value) {
   return String(value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
 }
 
+function maxCleanupAgeMs() {
+  const raw = Number(getEnv('SIGNUP_CLEANUP_MAX_AGE_MS'));
+  return Number.isFinite(raw) && raw > 0 ? raw : 60 * 60 * 1000;
+}
+
+function authUserCreatedAtMs(userRecord) {
+  try {
+    const raw = userRecord?.metadata?.creationTime || '';
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function deleteCollection(db, path, batchSize = 100) {
   const colRef = db.collection(path);
   while (true) {
@@ -121,6 +136,31 @@ module.exports = async (req, res) => {
 
     if (!uid) return json(res, 401, { ok: false, error: 'auth-invalid' });
     if (guildId && guildId !== uid) return json(res, 403, { ok: false, error: 'only-self-cleanup' });
+    if (reason === 'incomplete-existing-session') {
+      return json(res, 409, { ok: false, skipped: true, error: 'existing-session-cleanup-blocked' });
+    }
+
+    let userRecord = null;
+    try {
+      userRecord = await app.auth().getUser(uid);
+    } catch (error) {
+      if (String(error?.code || '').includes('user-not-found')) {
+        return json(res, 200, { ok: true, skipped: true, error: 'auth-user-not-found' });
+      }
+      throw error;
+    }
+
+    const createdAtMs = authUserCreatedAtMs(userRecord);
+    const nowMs = Date.now();
+    const ageMs = createdAtMs == null ? null : nowMs - createdAtMs;
+    if (ageMs == null || ageMs < 0 || ageMs > maxCleanupAgeMs()) {
+      return json(res, 409, {
+        ok: false,
+        skipped: true,
+        error: 'cleanup-window-expired',
+        ageMs
+      });
+    }
 
     const cfgRef = db.collection('configGuilda').doc(uid);
     try {

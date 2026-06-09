@@ -2,6 +2,7 @@
 // Vercel Serverless Function (CommonJS) — Node 24+ (fetch nativo)
 
 const admin = require("firebase-admin");
+const { normalizePlan, loadPlan, roundMoney } = require("./_plan_utils");
 
 function parseExternalReference(refStr) {
   const out = { guildId: null, uid: null, plano: null };
@@ -107,60 +108,6 @@ function extractMercadoPagoError(data, fallbackStatus) {
   );
 }
 
-// Ajuste de preços
-const PLAN_PRICES = {
-  plus: 6.99,
-  pro: 9.99,
-  business: 99.90,
-  vitalicio: 599.99,
-};
-
-// Normaliza e mapeia variações que o front pode enviar
-function normalizePlan(input) {
-  let p = String(input || "").toLowerCase().trim();
-
-  // remove prefixos comuns
-  p = p
-    .replace(/^plano[_-]?/g, "")
-    .replace(/^vip[_-]?/g, "")
-    .replace(/^plan[_-]?/g, "")
-    .replace(/\s+/g, "");
-
-  // remove sufixos comuns
-  p = p
-    .replace(/[_-]?mensal$/g, "")
-    .replace(/[_-]?monthly$/g, "")
-    .replace(/[_-]?anual$/g, "")
-    .replace(/[_-]?yearly$/g, "")
-    .replace(/[_-]?ano$/g, "");
-
-  // aliases
-  const map = {
-    "+": "plus",
-    plus: "plus",
-    basic: "plus",
-    free: "plus",
-
-    pro: "pro",
-    premium: "pro",
-
-    business: "business",
-    empresa: "business",
-    anual: "business",
-    yearly: "business",
-    year: "business",
-    ano: "business",
-
-    vitalicio: "vitalicio",
-    vitalício: "vitalicio",
-    lifetime: "vitalicio",
-    life: "vitalicio",
-    permanente: "vitalicio",
-  };
-
-  return map[p] || p;
-}
-
 function makeIdempotencyKey() {
   // Node 24 tem crypto.randomUUID em globalThis.crypto
   const c = globalThis.crypto;
@@ -226,6 +173,39 @@ async function markCreated(db, uid) {
   await ref.set({ lastCreatedAt: now, updatedAtMs: now }, { merge: true });
 }
 
+function normalizeAddonIds(value) {
+  const raw = Array.isArray(value)
+    ? value
+    : (typeof value === "string" ? value.split(/[,\s;]+/g) : []);
+  return Array.from(new Set(raw.map((x) => String(x || "").trim()).filter(Boolean))).slice(0, 8);
+}
+
+function sameAddonSelection(a = [], b = []) {
+  const left = normalizeAddonIds(a).sort().join("|");
+  const right = normalizeAddonIds(b).sort().join("|");
+  return left === right;
+}
+
+function buildPaymentLine(paymentId, data = {}) {
+  return {
+    paymentId: String(paymentId || ""),
+    tipo: "mercadopago_pix",
+    mpStatus: data.status || "pending",
+    status: toLabel(data.status || "pending"),
+    plano: data.plano,
+    planoNome: data.planoNome,
+    adicionais: data.adicionais || [],
+    amount: data.amount,
+    baseAmount: data.baseAmount,
+    addonsAmount: data.addonsAmount,
+    transactionFee: data.transactionFee,
+    affiliateFee: 0,
+    netAmount: roundMoney(Number(data.amount || 0) - Number(data.transactionFee || 0)),
+    createdAtMs: Date.now(),
+    updatedAtMs: Date.now(),
+  };
+}
+
 module.exports = async (req, res) => {
   cors(res);
 
@@ -265,14 +245,17 @@ module.exports = async (req, res) => {
 
     const planoRaw = body.plano;
     const plano = normalizePlan(planoRaw);
-
     const uid = tokenUid || String(body.uid || "");
     const email = tokenEmail || String(body.email || "");
     const guildId = String(body.guildId || "");
     const cpf = String(body.cpf || "").replace(/\D/g, ""); // Pega o CPF limpo (só números)
 
-    if (!plano || !PLAN_PRICES[plano]) {
+    const planConfig = await loadPlan(db, plano);
+    if (!planConfig || !planConfig.id || planConfig.id === "free" || planConfig.id === "parceiro") {
       return json(res, 400, { ok: false, error: `Plano inválido: ${planoRaw}` });
+    }
+    if (!planConfig.active || !planConfig.purchasable) {
+      return json(res, 400, { ok: false, error: "Este plano nao esta disponivel para pagamento." });
     }
     if (!uid || !email || !guildId) {
       return json(res, 400, { ok: false, error: "Dados ausentes (uid/email/guildId)." });
@@ -292,7 +275,11 @@ module.exports = async (req, res) => {
       return json(res, 429, { ok: false, error: "Muitas tentativas. Aguarde um pouco e tente novamente." });
     }
 
-    const amount = Number(PLAN_PRICES[plano]);
+    const baseAmount = roundMoney(planConfig.price);
+    const addons = [];
+    const addonsAmount = 0;
+    const amount = baseAmount;
+    const transactionFee = 0.99;
     if (!Number.isFinite(amount) || amount <= 0) {
       return json(res, 400, { ok: false, error: "Valor inválido." });
     }
@@ -309,7 +296,7 @@ module.exports = async (req, res) => {
       const paymentIdOld = String(s.paymentId || "");
 
       if (labelOld === "pendente" && paymentIdOld) {
-        if (planOld && planOld !== plano) {
+        if (planOld && planOld !== planConfig.id) {
           return json(res, 409, {
             ok: false,
             error: "Você já tem uma solicitação pendente. Finalize ou aguarde antes de pedir outro plano.",
@@ -331,6 +318,7 @@ module.exports = async (req, res) => {
           qrBase64: s.qrBase64 || "",
           amount: Number(s.amount || amount),
           plano: planOld || plano,
+          adicionais: s.adicionais || [],
         });
       }
     }
@@ -359,7 +347,7 @@ module.exports = async (req, res) => {
     // Cria pagamento PIX (Mercado Pago)
     const payload = {
       transaction_amount: Number(amount.toFixed(2)),
-      description: `Guilda HUB - ${plano.toUpperCase()}`,
+      description: `Guilda HUB - ${planConfig.name}`,
       payment_method_id: "pix",
       payer: {
         email: email.toLowerCase().trim(),
@@ -371,11 +359,17 @@ module.exports = async (req, res) => {
         }
       },
       notification_url,
-      external_reference: `guilda:${guildId}|uid:${uid}|plano:${plano}`,
+      external_reference: `guilda:${guildId}|uid:${uid}|plano:${planConfig.id}`,
       metadata: {
         guild_id: guildId,
         uid,
-        plano,
+        plano: planConfig.id,
+        plano_nome: planConfig.name,
+        duration_days: planConfig.durationDays || null,
+        adicionais: addons.map((a) => a.id).join(","),
+        base_amount: baseAmount,
+        addons_amount: addonsAmount,
+        transaction_fee: transactionFee,
         source: "guildahub_upgrade",
       },
     };
@@ -437,11 +431,45 @@ module.exports = async (req, res) => {
         mpStatus: status,
         status: label,
         nomePagador: `pagamento > ${label}`,
-        plano,
+        plano: planConfig.id,
+        planoNome: planConfig.name,
         uid,
         email,
         guildId,
         amount,
+        baseAmount,
+        addonsAmount,
+        transactionFee,
+        netBeforeAffiliate: roundMoney(amount - transactionFee),
+        durationDays: planConfig.durationDays || null,
+        adicionais: addons.map((a) => ({
+          id: a.id,
+          nome: a.name,
+          valor: a.price,
+        })),
+        pagamentoAtual: buildPaymentLine(paymentId, {
+          status,
+          plano: planConfig.id,
+          planoNome: planConfig.name,
+          adicionais: addons.map((a) => ({ id: a.id, nome: a.name, valor: a.price })),
+          amount,
+          baseAmount,
+          addonsAmount,
+          transactionFee,
+        }),
+        pagamentos: {
+          [paymentId]: buildPaymentLine(paymentId, {
+            status,
+            plano: planConfig.id,
+            planoNome: planConfig.name,
+            adicionais: addons.map((a) => ({ id: a.id, nome: a.name, valor: a.price })),
+            amount,
+            baseAmount,
+            addonsAmount,
+            transactionFee,
+          }),
+        },
+        totalPixCriados: admin.firestore.FieldValue.increment(1),
         notification_url,
         idempotencyKey: idemKey,
         qrCode,
@@ -462,7 +490,12 @@ module.exports = async (req, res) => {
       qrCode,
       qrBase64,
       amount,
-      plano,
+      baseAmount,
+      addonsAmount,
+      transactionFee,
+      plano: planConfig.id,
+      planoNome: planConfig.name,
+      adicionais: addons.map((a) => ({ id: a.id, nome: a.name, valor: a.price })),
     });
   } catch (err) {
     return json(res, 500, { ok: false, error: String(err && err.message ? err.message : err) });

@@ -10,6 +10,45 @@ function cors(res) {
   res.setHeader('Access-Control-Max-Age', '86400');
 }
 
+function findNestedValue(source, wantedKeys, depth = 0) {
+  if (!source || typeof source !== 'object' || depth > 5) return undefined;
+  const entries = Object.entries(source);
+  const wanted = new Set(wantedKeys.map((key) => String(key).toLowerCase()));
+
+  for (const [key, value] of entries) {
+    if (wanted.has(String(key).toLowerCase()) && value != null && value !== '') return value;
+  }
+  for (const [, value] of entries) {
+    if (value && typeof value === 'object') {
+      const found = findNestedValue(value, wantedKeys, depth + 1);
+      if (found != null && found !== '') return found;
+    }
+  }
+  return undefined;
+}
+
+function normalizeFreeFireResponse(data) {
+  const nick = findNestedValue(data, [
+    'nick',
+    'nickname',
+    'name',
+    'accountname',
+    'account_name',
+    'playername',
+    'player_name'
+  ]);
+  const level = findNestedValue(data, ['level', 'accountlevel', 'account_level', 'lvl']);
+  const successValue = findNestedValue(data, ['success', 'ok', 'status']);
+  const explicitFailure = successValue === false || String(successValue || '').toLowerCase() === 'false';
+
+  return {
+    success: !explicitFailure && !!String(nick || '').trim(),
+    nick: String(nick || '').trim(),
+    level: level == null ? null : Number(level),
+    raw: data
+  };
+}
+
 module.exports = async (req, res) => {
   cors(res);
 
@@ -25,7 +64,7 @@ module.exports = async (req, res) => {
     if (!q) return res.status(400).json({ error: 'query ausente' });
     if (!/^[0-9]{5,20}$/.test(q)) return res.status(400).json({ error: 'ID inválido' });
 
-    const upstreamUrl = `https://axicld.duckdns.org:5006/api/v1/freefire/profile/:${encodeURIComponent(q)}?api_key=ilimitado`;
+    const upstreamUrl = `https://axicld.duckdns.org:5006/api/v1/custom/info-ff?prompt=${encodeURIComponent(q)}&api_key=ilimitado`;
 
     const upstreamResp = await fetch(upstreamUrl, {
       method: 'GET',
@@ -46,7 +85,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    return res.status(200).json(data);
+    return res.status(200).json(normalizeFreeFireResponse(data));
   } catch (e) {
     return res.status(500).json({ error: e?.message || 'Erro interno' });
   }

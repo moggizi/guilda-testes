@@ -137,6 +137,40 @@
           </button>
         </div>
 
+        <div id="avisos-admin-shell" class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                  <i data-lucide="megaphone" class="w-5 h-5"></i>
+                </span>
+                <div>
+                  <h3 class="font-black text-gray-900">Avisos do site</h3>
+                  <p class="text-xs text-gray-500 mt-0.5">Administre mensagens de manutenção, atualização e comunicados gerais.</p>
+                </div>
+              </div>
+              <p class="mt-3 text-[11px] text-gray-500 leading-relaxed">
+                O título aparece como aviso clicável. Ao clicar, o usuário vê o texto completo. Depois de aparecer, cada tela só busca/mostra novamente após 12h.
+              </p>
+            </div>
+            <button id="btn-toggle-avisos" type="button" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-100 text-xs font-black transition">
+              <i data-lucide="chevron-down" class="w-4 h-4"></i>
+              Abrir avisos
+            </button>
+          </div>
+
+          <div id="avisos-admin-content" class="hidden space-y-4">
+            <div class="flex justify-end">
+              <button id="btn-reload-avisos" type="button" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-100 text-xs font-black transition">
+                <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                Atualizar avisos
+              </button>
+            </div>
+            <div id="avisos-admin-grid" class="grid grid-cols-1 lg:grid-cols-3 gap-4"></div>
+            <div id="avisos-admin-status" class="hidden rounded-xl border px-4 py-3 text-xs font-bold"></div>
+          </div>
+        </div>
+
         <div class="bg-white border border-gray-200 rounded-2xl p-2 shadow-sm flex flex-col sm:flex-row gap-2">
           <button id="view-guildas" type="button" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-black transition">
             <i data-lucide="shield" class="w-4 h-4"></i> Guildas
@@ -144,39 +178,87 @@
           <button id="view-partners" type="button" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-50 text-gray-600 text-sm font-black hover:bg-gray-100 transition">
             <i data-lucide="hand-coins" class="w-4 h-4"></i> Parceiros
           </button>
+          <button id="view-plans" type="button" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-50 text-gray-600 text-sm font-black hover:bg-gray-100 transition">
+            <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i> Planos
+          </button>
         </div>
 
         <!-- Filtro -->
         <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
           <div class="relative">
-            <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
+            <i data-lucide="search" class="absolute left-4 top-4 w-5 h-5 text-gray-400"></i>
             <input id="guild-search" type="text" placeholder="Procurar por nome, ID ou e-mail de líder..." 
-                   class="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-100 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm" />
+                   class="w-full pl-12 pr-14 py-4 rounded-xl border border-gray-100 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm" />
+            <button id="btn-run-search" type="button" class="absolute right-2 top-2 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white transition hover:bg-emerald-700" title="Pesquisar">
+              <i data-lucide="search" class="h-4 w-4"></i>
+            </button>
           <div class="mt-3 flex flex-wrap items-center gap-2">
             <span class="text-[10px] font-black text-gray-400 uppercase tracking-wider">Filtro:</span>
-            <select id="vip-filter" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-[11px] font-black">
-              <option value="all">Todos</option>
-              <option value="free">Free</option>
-              <option value="plus">Plus</option>
-              <option value="pro">Pro</option>
-              <option value="business">Business</option>
-              <option value="vitalicio">Vitalício</option>
-            </select>
-            <select id="updated-filter" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-[11px] font-black">
-              <option value="all">Todas</option>
-              <option value="today">Hoje</option>
-              <option value="yesterday">Ontem</option>
-              <option value="d2">+2 dias</option>
-              <option value="d7">+7 dias</option>
-              <option value="d15">+15 dias</option>
-              <option value="d30">+30 dias</option>
-            </select>
+            <div class="relative">
+              <select id="vip-filter" class="appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2 pr-8 text-[11px] font-black text-gray-700 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+                <option value="all">Todos</option>
+                <option value="free">Free</option>
+                <option value="plus">Plus</option>
+                <option value="pro">Pro</option>
+                <option value="business">Business</option>
+                <option value="ultra">Ultra</option>
+                <option value="parceiro">Parceiro</option>
+              </select>
+              <i data-lucide="chevron-down" class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"></i>
+            </div>
+            <div class="relative">
+              <select id="updated-filter" class="appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2 pr-8 text-[11px] font-black text-gray-700 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+                <option value="all">Todas</option>
+                <option value="today">Hoje</option>
+                <option value="yesterday">Ontem</option>
+                <option value="d2">+2 dias</option>
+                <option value="d7">+7 dias</option>
+                <option value="d15">+15 dias</option>
+                <option value="d30">+30 dias</option>
+              </select>
+              <i data-lucide="chevron-down" class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"></i>
+            </div>
+            <div class="relative">
+              <select id="members-filter" class="appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2 pr-8 text-[11px] font-black text-gray-700 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+                <option value="all">Membros: todos</option>
+                <option value="+1">+1 membro</option>
+                <option value="+5">+5 membros</option>
+                <option value="+10">+10 membros</option>
+                <option value="+15">+15 membros</option>
+                <option value="+20">+20 membros</option>
+                <option value="+30">+30 membros</option>
+              </select>
+              <i data-lucide="chevron-down" class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"></i>
+            </div>
           </div>
           </div>
         </div>
 
+        <div id="user-growth-panel" class="hidden bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+          <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                  <i data-lucide="chart-no-axes-column-increasing" class="h-5 w-5"></i>
+                </span>
+                <div>
+                  <h3 class="font-black text-gray-900">Novos usuários</h3>
+                  <p class="text-xs text-gray-500">Crescimento calculado pela data de entrada das guildas.</p>
+                </div>
+              </div>
+              <div class="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+                <div><p class="text-[10px] font-black uppercase text-gray-400">Hoje</p><p id="growth-today" class="mt-1 text-xl font-black text-gray-900">0</p></div>
+                <div><p class="text-[10px] font-black uppercase text-gray-400">7 dias</p><p id="growth-week" class="mt-1 text-xl font-black text-gray-900">0</p></div>
+                <div><p class="text-[10px] font-black uppercase text-gray-400">Este mês</p><p id="growth-month" class="mt-1 text-xl font-black text-gray-900">0</p></div>
+                <div><p class="text-[10px] font-black uppercase text-gray-400">Total</p><p id="growth-total" class="mt-1 text-xl font-black text-gray-900">0</p></div>
+              </div>
+            </div>
+            <div id="growth-bars" class="grid h-28 w-full grid-cols-7 items-end gap-2 lg:max-w-md"></div>
+          </div>
+        </div>
+
         <!-- Grid Guildas -->
-        <div id="guilds-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div id="guilds-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" style="content-visibility:auto;contain-intrinsic-size:auto 1200px">
           <div class="col-span-full py-20 text-center space-y-3">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
             <p class="text-gray-500 font-medium">A carregar dados...</p>
@@ -184,11 +266,61 @@
         </div>
 
         <!-- Grid Parceiros -->
-        <div id="partners-grid" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div id="partners-grid" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" style="content-visibility:auto;contain-intrinsic-size:auto 1200px">
           <div class="col-span-full py-20 text-center space-y-3">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-amber-500 border-t-transparent"></div>
             <p class="text-gray-500 font-medium">A carregar parceiros...</p>
           </div>
+        </div>
+
+        <!-- Administração de Planos -->
+        <div id="plans-admin-panel" class="hidden space-y-4" style="content-visibility:auto;contain-intrinsic-size:auto 1200px">
+          <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 class="font-black text-gray-900">Financeiro</h3>
+                <p class="text-xs text-gray-500 mt-1">Acompanhe entradas, taxas e afiliados por mês ou por plano.</p>
+              </div>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <div class="relative">
+                  <select id="finance-month-filter" class="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2 pr-8 text-[11px] font-black text-gray-700 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+                    <option value="all">Todos os meses</option>
+                  </select>
+                  <i data-lucide="chevron-down" class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"></i>
+                </div>
+                <div class="relative">
+                  <select id="finance-plan-filter" class="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2 pr-8 text-[11px] font-black text-gray-700 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+                    <option value="all">Todos os planos</option>
+                  </select>
+                  <i data-lucide="chevron-down" class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"></i>
+                </div>
+                <button id="btn-delete-finance-month" type="button" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 border border-red-100 text-xs font-black transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  Excluir mês
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="finance-summary" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3"></div>
+          <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 class="font-black text-gray-900">Planos</h3>
+                <p class="text-xs text-gray-500 mt-1">Edite valores, benefícios, aviso, selo e disponibilidade. O Pix usa estes dados pelo servidor.</p>
+              </div>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <button id="btn-new-plan" type="button" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-black transition">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                  Novo plano
+                </button>
+                <button id="btn-reload-plans" type="button" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-100 text-xs font-black transition">
+                  <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                  Atualizar planos
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="plans-admin-grid" class="grid grid-cols-1 xl:grid-cols-2 gap-4"></div>
         </div>
 
         <!-- Painel de Solicitações -->

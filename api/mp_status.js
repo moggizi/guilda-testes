@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const planUtils = require('./_plan_utils');
 
 function getServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -25,7 +26,7 @@ function toLabel(mpStatus){
 }
 
 function parseExternalReference(refStr) {
-  const out = { uid: null };
+  const out = { guildId: null, uid: null, plan: null };
   const s = String(refStr || '').trim();
   if (!s) return out;
   const parts = s.split('|');
@@ -34,9 +35,25 @@ function parseExternalReference(refStr) {
     const k = String(kRaw || '').trim().toLowerCase();
     const v = rest.join(':').trim();
     if (!v) continue;
+    if (k === 'guilda' || k === 'guildid' || k === 'guild') out.guildId = v;
     if (k === 'uid' || k === 'user' || k === 'userid') out.uid = v;
+    if (k === 'plano' || k === 'plan' || k === 'tier') out.plan = v;
   }
   return out;
+}
+
+function normalizePlan(plan) {
+  return planUtils.normalizePlan(plan);
+}
+
+function getExpiresAtMsForPlan(plan, planConfig = null){
+  const p = normalizePlan(plan);
+  if (p === 'parceiro') return null;
+  const customDays = Number(planConfig?.durationDays || 0);
+  if (Number.isFinite(customDays) && customDays > 0) return Date.now() + (Math.floor(customDays) * 24 * 60 * 60 * 1000);
+  if (p === 'business') return Date.now() + (365 * 24 * 60 * 60 * 1000);
+  if (p === 'ultra') return Date.now() + (30 * 24 * 60 * 60 * 1000);
+  return Date.now() + (30 * 24 * 60 * 60 * 1000);
 }
 
 module.exports = async (req, res) => {
@@ -63,14 +80,71 @@ module.exports = async (req, res) => {
 
     // Atualiza solicita (redundância útil em teste mesmo sem webhook)
     const ref = parseExternalReference(mpData.external_reference);
+    const metadata = mpData.metadata || {};
+    const normalizedPlanForRecord = normalizePlan(ref.plan || metadata.plano || '');
+    const amount = planUtils.roundMoney(Number(mpData.transaction_amount || mpData.transaction_details?.total_paid_amount || 0));
+    const transactionFee = planUtils.roundMoney(Number(metadata.transaction_fee || metadata.taxa_transacao || 0.99));
     const docPath = ref.uid ? `solicita/${ref.uid}` : `solicita/mp_${paymentId}`;
     await admin.firestore().doc(docPath).set({
       paymentId,
       mpStatus: status,
       status: label,
       nomePagador: `pagamento > ${label}`,
+      plano: normalizedPlanForRecord || undefined,
+      amount,
+      transactionFee,
+      pagamentoAtual: {
+        paymentId,
+        mpStatus: status,
+        status: label,
+        plano: normalizedPlanForRecord || undefined,
+        amount,
+        transactionFee,
+        updatedAtMs: Date.now(),
+      },
+      pagamentos: {
+        [paymentId]: {
+          paymentId,
+          mpStatus: status,
+          status: label,
+          plano: normalizedPlanForRecord || undefined,
+          amount,
+          transactionFee,
+          updatedAtMs: Date.now(),
+        },
+      },
       updatedAtMs: Date.now(),
     }, { merge: true });
+
+    if (label === 'aprovado' && ref.guildId && ref.plan) {
+      const plan = normalizePlan(ref.plan);
+      let planConfig = null;
+      try { planConfig = await planUtils.loadPlan(admin.firestore(), plan); } catch (_) {}
+      const expiresAtMs = getExpiresAtMsForPlan(plan, planConfig);
+      const permissoesAtivas = plan !== 'free';
+
+      await admin.firestore().doc(`configGuilda/${ref.guildId}`).set({
+        vipTier: plan,
+        vipExpiresAt: expiresAtMs,
+        permissoesAtivas,
+        updatedAtMs: Date.now(),
+      }, { merge: true });
+
+      await admin.firestore().doc(`guildas/${ref.guildId}`).set({
+        vipTier: plan,
+        vipExpiresAt: expiresAtMs,
+        permissoesAtivas,
+        updatedAtMs: Date.now(),
+      }, { merge: true });
+
+      if (ref.uid) {
+        await admin.firestore().doc(`users/${ref.uid}`).set({
+          vipTier: plan,
+          vipExpiresAt: expiresAtMs,
+          updatedAtMs: Date.now(),
+        }, { merge: true });
+      }
+    }
 
     return res.status(200).json({ paymentId, status, label });
 
