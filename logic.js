@@ -2167,20 +2167,19 @@ function __ensurePlayerAlertsNavLink() {
   if (!nav || nav.querySelector('[data-player-alerts-nav="true"]')) return;
 
   const path = String(window.location.pathname || "").toLowerCase();
-  const role = String(__guildCtx?.role || "").toLowerCase();
-  const playerArea = role === "jogador" || path.includes("/jogador") || path.includes("/alertajg");
   const active = path.includes("/alertagd") || path.includes("/alertajg");
+  const linesLink = nav.querySelector('a[href="/lines"], a[href="/lines/"], a[href="/lines.html"]');
+  if (!linesLink) return;
   const link = document.createElement("a");
 
-  link.href = playerArea ? "/alertajg" : "/alertagd";
+  link.href = "/alertagd";
   link.dataset.playerAlertsNav = "true";
   link.className = active
     ? "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-100"
     : "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors";
   link.innerHTML = '<i data-lucide="shield-alert" class="w-5 h-5"></i><span>Alertas de jogadores</span>';
 
-  const supportLink = nav.querySelector("#nav-support-link");
-  nav.insertBefore(link, supportLink || null);
+  linesLink.insertAdjacentElement("afterend", link);
   try { initIcons(); } catch (_) {}
 }
 

@@ -1,9 +1,5 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {
-  getAuth,
-  onAuthStateChanged,
-  signOut
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   PLAYER_ALERT_CUSTOM_REASON,
@@ -35,6 +31,7 @@ const isPublic = mode === 'public';
 let reporter = null;
 let selectedReason = '';
 let submitBusy = false;
+let visibleRecords = [];
 
 const els = {
   sidebar: qs('sidebar'),
@@ -42,11 +39,13 @@ const els = {
   openMenu: qs('mobile-menu-btn') || qs('sidebar-open'),
   closeMenu: qs('mobile-close-btn') || qs('sidebar-close'),
   logout: qs('btn-logout'),
-  authState: qs('alert-auth-state'),
-  reporterCard: qs('reporter-card'),
-  reporterNick: qs('reporter-nick'),
-  reporterMeta: qs('reporter-meta'),
-  registerSection: qs('register-section'),
+  userEmail: qs('user-email'),
+  userRole: qs('user-role'),
+  openRegister: qs('btn-open-register'),
+  registerModal: qs('register-modal'),
+  registerBackdrop: qs('register-modal-backdrop'),
+  closeRegister: qs('btn-close-register'),
+  cancelRegister: qs('btn-cancel-register'),
   registerForm: qs('alert-register-form'),
   targetId: qs('alert-player-id'),
   targetNick: qs('alert-player-nick'),
@@ -67,6 +66,16 @@ const els = {
   resultTitle: qs('alerts-result-title'),
   resultCount: qs('alerts-result-count'),
   resultList: qs('alerts-result-list'),
+  detailModal: qs('alert-detail-modal'),
+  detailBackdrop: qs('alert-detail-backdrop'),
+  closeDetail: qs('btn-close-detail'),
+  detailPlayerTitle: qs('detail-player-title'),
+  detailPlayerId: qs('detail-player-id'),
+  detailReason: qs('detail-reason'),
+  detailReporter: qs('detail-reporter'),
+  detailReporterId: qs('detail-reporter-id'),
+  detailGuild: qs('detail-guild'),
+  detailDate: qs('detail-date'),
   toastRoot: qs('toast-root')
 };
 
@@ -83,7 +92,7 @@ function showToast(type, message) {
       : 'border-red-200 bg-red-50 text-red-900';
   const icon = type === 'success' ? 'check-circle-2' : type === 'info' ? 'info' : 'circle-alert';
   const item = document.createElement('div');
-  item.className = `flex max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 text-sm font-bold shadow-xl ${palette}`;
+  item.className = `flex max-w-sm items-start gap-3 rounded-xl border px-4 py-3 text-sm font-bold shadow-xl ${palette}`;
   item.innerHTML = `<i data-lucide="${icon}" class="mt-0.5 h-4 w-4 shrink-0"></i><span></span>`;
   item.querySelector('span').textContent = String(message || '');
   els.toastRoot.appendChild(item);
@@ -146,6 +155,36 @@ function setSearchState(name) {
   });
 }
 
+function setModalOpen(modal, open) {
+  if (!modal) return;
+  modal.classList.toggle('hidden', !open);
+  modal.classList.toggle('flex', open);
+  document.body.classList.toggle('overflow-hidden', open);
+  if (open) initIcons();
+}
+
+function resetRegisterForm() {
+  els.registerForm?.reset();
+  selectReason('');
+  if (els.customReasonCount) els.customReasonCount.textContent = '0/50';
+}
+
+function openRegisterModal() {
+  if (!reporter || isPublic) return;
+  setModalOpen(els.registerModal, true);
+  setTimeout(() => els.targetId?.focus(), 60);
+}
+
+function closeRegisterModal() {
+  if (submitBusy) return;
+  setModalOpen(els.registerModal, false);
+  resetRegisterForm();
+}
+
+function closeDetailModal() {
+  setModalOpen(els.detailModal, false);
+}
+
 function reasonValue() {
   if (selectedReason === PLAYER_ALERT_CUSTOM_REASON) {
     return String(els.customReason?.value || '').replace(/\s+/g, ' ').trim();
@@ -161,15 +200,14 @@ function selectReason(value) {
   els.reasonMenu?.classList.add('hidden');
   els.reasonTrigger?.setAttribute('aria-expanded', 'false');
   els.reasonMenu?.querySelectorAll('[data-reason]').forEach((button) => {
-    button.classList.toggle('bg-emerald-50', button.dataset.reason === selectedReason);
-    button.classList.toggle('text-emerald-700', button.dataset.reason === selectedReason);
+    button.classList.toggle('is-selected', button.dataset.reason === selectedReason);
   });
 }
 
 function renderReasonOptions() {
   if (!els.reasonMenu) return;
   els.reasonMenu.innerHTML = PLAYER_ALERT_REASONS.map((reason) => `
-    <button type="button" data-reason="${escapeHtml(reason)}" class="w-full px-4 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+    <button type="button" data-reason="${escapeHtml(reason)}" class="alert-reason-option w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold">
       ${escapeHtml(reason)}
     </button>
   `).join('');
@@ -178,52 +216,52 @@ function renderReasonOptions() {
   });
 }
 
-function renderReporter() {
-  if (!reporter || !els.reporterCard) return;
-  els.reporterCard.classList.remove('hidden');
-  if (els.reporterNick) els.reporterNick.textContent = reporter.nick || 'Usuário';
-  if (els.reporterMeta) {
-    els.reporterMeta.textContent = `ID ${reporter.playerId || '-'} • ${reporter.guildName || 'Sem guilda'}`;
-  }
+function openAlertDetail(index) {
+  const record = visibleRecords[Number(index)];
+  if (!record) return;
+  if (els.detailPlayerTitle) els.detailPlayerTitle.textContent = record.targetNick || 'Jogador';
+  if (els.detailPlayerId) els.detailPlayerId.textContent = `ID ${record.playerId || '-'}`;
+  if (els.detailReason) els.detailReason.textContent = record.reason || 'Motivo não informado';
+  if (els.detailReporter) els.detailReporter.textContent = record.reporterNick || 'Usuário';
+  if (els.detailReporterId) els.detailReporterId.textContent = record.reporterPlayerId || '-';
+  if (els.detailGuild) els.detailGuild.textContent = record.reporterGuildName || 'Sem guilda';
+  if (els.detailDate) els.detailDate.textContent = formatAlertDate(record.createdAt, record.createdAtMs);
+  setModalOpen(els.detailModal, true);
 }
 
 function renderResults(data) {
   if (!data?.exists || !Array.isArray(data.records) || !data.records.length) {
+    visibleRecords = [];
     setSearchState('empty');
     return;
   }
 
-  if (els.resultTitle) {
-    els.resultTitle.textContent = `${data.lastNick || 'Jogador'} • ID ${data.playerId}`;
-  }
-  if (els.resultCount) {
-    els.resultCount.textContent = `${data.total}/${PLAYER_ALERT_LIMIT} alertas`;
-  }
+  visibleRecords = data.records.map((record) => ({
+    ...record,
+    playerId: record.playerId || data.playerId,
+    targetNick: record.targetNick || data.lastNick || 'Jogador'
+  }));
+  if (els.resultTitle) els.resultTitle.textContent = `${data.lastNick || 'Jogador'} • ID ${data.playerId}`;
+  if (els.resultCount) els.resultCount.textContent = `${data.total}/${PLAYER_ALERT_LIMIT}`;
   if (els.resultList) {
-    els.resultList.innerHTML = data.records.map((record) => `
-      <article class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-black uppercase text-red-700 ring-1 ring-red-100">
-                <i data-lucide="triangle-alert" class="h-3.5 w-3.5"></i> Alerta registrado
-              </span>
-              <span class="text-xs font-bold text-slate-400">${escapeHtml(formatAlertDate(record.createdAt, record.createdAtMs))}</span>
-            </div>
-            <h3 class="mt-3 text-base font-black text-slate-900">${escapeHtml(record.reason || 'Motivo não informado')}</h3>
-            <p class="mt-1 text-sm font-semibold text-slate-500">Nick usado no registro: ${escapeHtml(record.targetNick || data.lastNick || '-')}</p>
+    els.resultList.innerHTML = visibleRecords.map((record, index) => {
+      const nick = String(record.targetNick || 'Jogador');
+      const initial = nick.trim().charAt(0).toUpperCase() || '?';
+      return `
+        <button type="button" data-alert-index="${index}" class="alert-result-card group flex min-h-[128px] w-full flex-col rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-red-200 hover:shadow-md">
+          <div class="flex items-start gap-3">
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-50 text-sm font-black text-red-600">${escapeHtml(initial)}</span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-bold text-gray-900">${escapeHtml(nick)}</span>
+              <span class="mt-0.5 block text-xs font-semibold text-gray-400">ID ${escapeHtml(record.playerId || data.playerId)}</span>
+            </span>
+            <i data-lucide="chevron-right" class="h-4 w-4 shrink-0 text-gray-300 transition group-hover:text-red-400"></i>
           </div>
-          <div class="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500 sm:text-right">
-            Registro ${escapeHtml(String(record.id || '').slice(0, 8))}
-          </div>
-        </div>
-        <div class="mt-4 grid grid-cols-1 gap-2 border-t border-slate-100 pt-4 text-xs sm:grid-cols-3">
-          <div><span class="block font-bold text-slate-400">Registrado por</span><strong class="mt-0.5 block text-slate-700">${escapeHtml(record.reporterNick || 'Usuário')}</strong></div>
-          <div><span class="block font-bold text-slate-400">ID do responsável</span><strong class="mt-0.5 block text-slate-700">${escapeHtml(record.reporterPlayerId || '-')}</strong></div>
-          <div><span class="block font-bold text-slate-400">Guilda</span><strong class="mt-0.5 block text-slate-700">${escapeHtml(record.reporterGuildName || 'Sem guilda')}</strong></div>
-        </div>
-      </article>
-    `).join('');
+          <span class="mt-4 block line-clamp-2 text-sm font-semibold leading-relaxed text-gray-600">${escapeHtml(record.reason || 'Motivo não informado')}</span>
+          <span class="mt-auto pt-3 text-[11px] font-bold text-gray-400">${escapeHtml(formatAlertDate(record.createdAt, record.createdAtMs))}</span>
+        </button>
+      `;
+    }).join('');
   }
   setSearchState('result');
   initIcons();
@@ -240,8 +278,7 @@ async function searchAlerts(playerId) {
   setSearchState('loading');
   if (els.searchButton) els.searchButton.disabled = true;
   try {
-    const data = await loadPlayerAlerts(db, cleanId);
-    renderResults(data);
+    renderResults(await loadPlayerAlerts(db, cleanId));
   } catch (error) {
     console.error(error);
     setSearchState('initial');
@@ -254,10 +291,6 @@ async function searchAlerts(playerId) {
 async function handleRegister(event) {
   event.preventDefault();
   if (submitBusy || !reporter) return;
-
-  const playerId = normalizePlayerId(els.targetId?.value || '');
-  const targetNick = String(els.targetNick?.value || '').trim();
-  const reason = reasonValue();
   if (!selectedReason) {
     showToast('error', 'Selecione um motivo para o alerta.');
     return;
@@ -271,19 +304,19 @@ async function handleRegister(event) {
   }
 
   try {
-    const result = await registerPlayerAlert(db, { playerId, targetNick, reason }, reporter);
-    showToast('success', `Alerta registrado. Este ID agora tem ${result.total}/${PLAYER_ALERT_LIMIT} alertas.`);
+    const result = await registerPlayerAlert(db, {
+      playerId: normalizePlayerId(els.targetId?.value || ''),
+      targetNick: String(els.targetNick?.value || '').trim(),
+      reason: reasonValue()
+    }, reporter);
+    setModalOpen(els.registerModal, false);
+    resetRegisterForm();
     if (els.searchId) els.searchId.value = result.playerId;
-    els.registerForm?.reset();
-    selectReason('');
-    if (els.customReasonCount) els.customReasonCount.textContent = '0/50';
+    showToast('success', 'Alerta registrado com sucesso.');
     await searchAlerts(result.playerId);
   } catch (error) {
     console.error(error);
-    const message = error instanceof PlayerAlertError
-      ? error.message
-      : 'Não foi possível registrar o alerta.';
-    showToast('error', message);
+    showToast('error', error instanceof PlayerAlertError ? error.message : 'Não foi possível registrar o alerta.');
   } finally {
     submitBusy = false;
     if (els.submitAlert) {
@@ -297,12 +330,16 @@ async function handleRegister(event) {
 function bindEvents() {
   setupSidebar();
   renderReasonOptions();
-
   els.logout?.addEventListener('click', async () => {
     try { await signOut(auth); } catch (_) {}
     window.location.href = '/';
   });
-
+  els.openRegister?.addEventListener('click', openRegisterModal);
+  els.closeRegister?.addEventListener('click', closeRegisterModal);
+  els.cancelRegister?.addEventListener('click', closeRegisterModal);
+  els.registerBackdrop?.addEventListener('click', closeRegisterModal);
+  els.closeDetail?.addEventListener('click', closeDetailModal);
+  els.detailBackdrop?.addEventListener('click', closeDetailModal);
   els.searchId?.addEventListener('input', () => {
     els.searchId.value = normalizePlayerId(els.searchId.value);
   });
@@ -313,11 +350,10 @@ function bindEvents() {
     els.customReason.value = String(els.customReason.value || '').slice(0, 50);
     if (els.customReasonCount) els.customReasonCount.textContent = `${els.customReason.value.length}/50`;
   });
-
   els.reasonTrigger?.addEventListener('click', () => {
-    const willOpen = els.reasonMenu?.classList.contains('hidden');
-    els.reasonMenu?.classList.toggle('hidden', !willOpen);
-    els.reasonTrigger?.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    const open = els.reasonMenu?.classList.contains('hidden');
+    els.reasonMenu?.classList.toggle('hidden', !open);
+    els.reasonTrigger?.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
   document.addEventListener('click', (event) => {
     if (!els.reasonTrigger?.contains(event.target) && !els.reasonMenu?.contains(event.target)) {
@@ -325,7 +361,15 @@ function bindEvents() {
       els.reasonTrigger?.setAttribute('aria-expanded', 'false');
     }
   });
-
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (!els.detailModal?.classList.contains('hidden')) closeDetailModal();
+    else if (!els.registerModal?.classList.contains('hidden')) closeRegisterModal();
+  });
+  els.resultList?.addEventListener('click', (event) => {
+    const card = event.target.closest('[data-alert-index]');
+    if (card) openAlertDetail(card.dataset.alertIndex);
+  });
   els.searchForm?.addEventListener('submit', (event) => {
     event.preventDefault();
     searchAlerts(els.searchId?.value || '');
@@ -333,31 +377,39 @@ function bindEvents() {
   els.registerForm?.addEventListener('submit', handleRegister);
 }
 
-function bootLoggedMode() {
+function destinationForReporter(profile) {
+  const role = String(profile?.role || '').toLowerCase();
+  const player = role === 'jogador' || role === 'player';
+  return player ? '/alertajg' : '/alertagd';
+}
+
+function bootAuth() {
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      window.location.href = '/';
+      if (!isPublic) window.location.href = '/';
       return;
     }
 
     try {
-      reporter = await resolveAlertReporter(db, user);
-      const roleKey = String(reporter.role || '').toLowerCase();
-      const isPlayer = roleKey === 'jogador' || roleKey === 'player';
-      if (mode === 'guild' && isPlayer && !reporter.guildId) {
-        window.location.replace('/alertajg');
+      const profile = await resolveAlertReporter(db, user);
+      if (isPublic) {
+        window.location.replace(destinationForReporter(profile));
         return;
       }
-      if (mode === 'player' && !isPlayer && reporter.guildId) {
-        window.location.replace('/alertagd');
+
+      reporter = profile;
+      const destination = destinationForReporter(profile);
+      if ((mode === 'guild' && destination === '/alertajg') || (mode === 'player' && destination === '/alertagd')) {
+        window.location.replace(destination);
         return;
       }
-      if (els.authState) els.authState.textContent = user.email || '';
-      els.registerSection?.classList.remove('hidden');
-      renderReporter();
+      if (els.userEmail) els.userEmail.textContent = user.email || '';
+      if (els.userRole) els.userRole.textContent = profile.role || (mode === 'player' ? 'Jogador' : 'Meu Perfil');
+      els.openRegister?.classList.remove('hidden');
+      els.openRegister?.classList.add('flex');
     } catch (error) {
       console.error(error);
-      showToast('error', 'Não foi possível carregar os dados da sua conta.');
+      if (!isPublic) showToast('error', 'Não foi possível carregar os dados da sua conta.');
     }
   });
 }
@@ -365,14 +417,9 @@ function bootLoggedMode() {
 bindEvents();
 initIcons();
 setSearchState('initial');
-
-if (isPublic) {
-  els.registerSection?.classList.add('hidden');
-} else {
-  bootLoggedMode();
-}
+bootAuth();
+window.dispatchEvent(new CustomEvent('guildahub:page-ready'));
 
 const params = new URLSearchParams(window.location.search || '');
 const initialId = normalizePlayerId(params.get('id') || '');
 if (initialId) searchAlerts(initialId);
-

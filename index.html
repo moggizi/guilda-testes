@@ -1,952 +1,206 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8" />
-    <script src="/theme.js"></script>
+<meta charset="UTF-8">
+      <script src="/theme.js"></script>
     <script src="/app-loader.js"></script>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Membros - Guild Manager</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="/style.css" />
-
-  <style>
-    /* switch */
-    .switch{position:relative;display:inline-block;width:46px;height:26px}
-    .switch input{opacity:0;width:0;height:0}
-    .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#e5e7eb;transition:.2s;border-radius:999px}
-    .slider:before{position:absolute;content:"";height:20px;width:20px;left:3px;bottom:3px;background:white;transition:.2s;border-radius:999px;box-shadow:0 1px 2px rgba(0,0,0,.15)}
-    .switch input:checked + .slider{background:#10b981}
-    .switch input:focus + .slider{box-shadow:0 0 0 4px rgba(16,185,129,.18)}
-    .switch input:checked + .slider:before{transform:translateX(20px)}
-  
-    /* playMode picker (check-circle, multi select) */
-    .pm-wrap{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
-    .pm-option{display:flex;align-items:center;gap:.55rem;padding:.75rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;transition:.15s;font-size:.875rem;color:#374151}
-    .pm-option:hover{background:#f9fafb}
-    .pm-circle{width:18px;height:18px;border-radius:999px;border:2px solid #d1d5db;display:inline-block;position:relative;flex:0 0 auto;transition:.2s;}
-    .pm-option.pm-selected{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12); background-color: #ecfdf5;}
-    .pm-option.pm-selected .pm-circle{border-color:#10b981;background:#10b981}
-    .pm-option.pm-selected .pm-circle:after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:2px solid #fff;border-top:0;border-left:0;transform:rotate(45deg)}
-
-    /* playMode counter dropdown */
-    .counter-option{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.85rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;transition:.15s;text-align:left}
-    .counter-option:hover{background:#f9fafb}
-    .counter-option.counter-active{border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12);background:#ecfdf5}
-    .counter-option-label{font-size:.875rem;font-weight:600;color:#374151}
-    .counter-option-count{min-width:2.2rem;padding:.25rem .55rem;border-radius:999px;background:#f3f4f6;color:#6b7280;font-size:.75rem;font-weight:700;text-align:center}
-    .counter-option.counter-active .counter-option-count{background:#10b981;color:#fff}
-
-    /* melhora toque dos botões de filtro no mobile */
-    #btn-guild-slot,
-    #btn-playmode-counter,
-    #btn-goal-met-filter,
-    #btn-filter{
-      min-height:48px;
-      touch-action:manipulation;
-      -webkit-tap-highlight-color:transparent;
-      position:relative;
-      z-index:1;
-    }
-    #btn-guild-slot *,
-    #btn-playmode-counter *,
-    #btn-goal-met-filter *,
-    #btn-filter *{
-      pointer-events:none;
-    }
-    @media (max-width: 640px){
-      #btn-guild-slot,
-      #btn-playmode-counter,
-      #btn-goal-met-filter,
-      #btn-filter{
-        flex:1 1 calc(50% - .25rem);
-        justify-content:center;
-        padding-left:.75rem;
-        padding-right:.75rem;
-      }
-      #guild-slot-label,
-      #playmode-filter-label,
-      #goal-met-filter-label,
-      #filter-label{
-        display:none !important;
-      }
-    }
-
-    /* advertência do membro */
-    .member-warning-card{
-      border-color:#f59e0b !important;
-      background:linear-gradient(135deg,#fff7ed 0%,#ffffff 55%,#fef2f2 100%);
-      box-shadow:0 8px 24px rgba(245,158,11,.10);
-    }
-    .member-warning-avatar{
-      background:linear-gradient(135deg,#f59e0b,#ef4444) !important;
-    }
-    .warning-reason-box{
-      background:linear-gradient(135deg,#fffbeb 0%,#fff7ed 100%);
-      border:1px solid #fcd34d;
-    }
-    .warning-preset-button{
-      width:100%;
-      min-height:48px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:.75rem;
-      padding:.75rem 1rem;
-      border-radius:14px;
-      border:1px solid #e5e7eb;
-      background:#fff;
-      color:#374151;
-      font-size:.875rem;
-      font-weight:600;
-      text-align:left;
-      transition:.15s;
-      box-shadow:0 1px 2px rgba(15,23,42,.04);
-      touch-action:manipulation;
-      -webkit-tap-highlight-color:transparent;
-    }
-    .warning-preset-button:hover{background:#fffbeb;border-color:#fcd34d}
-    .warning-preset-button:focus{outline:none;border-color:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.14)}
-    .warning-preset-button *{pointer-events:none}
-    .warning-preset-menu{
-      position:absolute;
-      left:0;
-      right:0;
-      top:calc(100% + .5rem);
-      z-index:80;
-      padding:.5rem;
-      border-radius:18px;
-      border:1px solid #fed7aa;
-      background:#fff;
-      box-shadow:0 18px 50px rgba(15,23,42,.16);
-      max-height:260px;
-      overflow-y:auto;
-    }
-    .warning-preset-option{
-      width:100%;
-      display:flex;
-      align-items:center;
-      gap:.65rem;
-      padding:.78rem .85rem;
-      border-radius:14px;
-      color:#374151;
-      font-size:.875rem;
-      font-weight:600;
-      text-align:left;
-      transition:.15s;
-    }
-    .warning-preset-option:hover{background:#fffbeb;color:#92400e}
-    .warning-preset-option.warning-preset-active{background:#fff7ed;color:#b45309;box-shadow:inset 0 0 0 1px #fed7aa}
-    .warning-preset-option-icon{
-      width:1.75rem;
-      height:1.75rem;
-      border-radius:999px;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      background:#fffbeb;
-      border:1px solid #fde68a;
-      flex:0 0 auto;
-    }
-
-    .remove-history-note{transition:background-color .18s ease,border-color .18s ease,color .18s ease}
-    html[data-theme="dark"] .remove-history-note{
-      box-shadow:inset 0 0 0 1px rgba(15,23,42,.22);
-    }
-    html[data-theme="dark"] .remove-history-note--available{
-      background:rgba(6,78,59,.32)!important;
-      border-color:rgba(16,185,129,.42)!important;
-      color:#d1fae5!important;
-    }
-    html[data-theme="dark"] .remove-history-note--locked{
-      background:rgba(120,53,15,.36)!important;
-      border-color:rgba(245,158,11,.44)!important;
-      color:#fde68a!important;
-    }
-    html[data-theme="dark"] .remove-history-note b{color:#6ee7b7}
-
-    .contact-dd{position:relative}
-    .contact-dd-button{
-      width:100%;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:.75rem;
-      padding:.75rem 1rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;color:#374151;
-      font-size:.875rem;font-weight:700;text-align:left;box-shadow:0 1px 2px rgba(15,23,42,.04);
-      transition:.15s;
-    }
-    .contact-dd-button:hover{background:#f9fafb}
-    .contact-dd-button:focus{outline:none;border-color:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.12)}
-    .contact-dd-menu{
-      position:absolute;left:0;right:0;top:calc(100% + .5rem);z-index:100;max-height:240px;
-      overflow-y:auto;padding:.35rem;border:1px solid rgba(15,23,42,.1);border-radius:14px;
-      background:#fff;box-shadow:0 18px 50px rgba(15,23,42,.18);
-    }
-    .contact-dd-option{
-      width:100%;display:flex;align-items:center;gap:.65rem;padding:.75rem .85rem;border-radius:11px;
-      color:#374151;font-size:.875rem;font-weight:700;text-align:left;transition:.15s;
-    }
-    .contact-dd-option:hover{background:#f9fafb}
-    .contact-dd-option.is-selected{background:#ecfdf5;color:#047857}
-    html[data-theme="dark"] .contact-dd-button,
-    html[data-theme="dark"] .contact-dd-menu{
-      background:var(--theme-surface-2)!important;
-      border-color:var(--theme-border)!important;
-      color:var(--theme-text-soft)!important;
-      box-shadow:0 18px 50px var(--theme-shadow)!important;
-    }
-    html[data-theme="dark"] .contact-dd-menu{
-      background:var(--theme-surface)!important;
-      color:var(--theme-text)!important;
-    }
-    html[data-theme="dark"] .contact-dd-button:hover,
-    html[data-theme="dark"] .contact-dd-option:hover{
-      background:var(--theme-elevated)!important;
-      color:var(--theme-text)!important;
-    }
-    html[data-theme="dark"] .contact-dd-option{color:var(--theme-text-soft)!important}
-    html[data-theme="dark"] .contact-dd-option.is-selected{
-      background:var(--theme-accent-soft)!important;
-      color:#6ee7b7!important;
-    }
-    .contact-brand-icon{width:1rem;text-align:center;font-size:1rem;line-height:1}
-
-    /* Quick Edit specific fixes */
-    .animate-in { animation: fadeIn 0.2s ease-out forwards; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .zoom-in-95 { animation: zoomIn 0.2s ease-out forwards; }
-    @keyframes zoomIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-  </style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guilda HUB - O fim da bagunça na sua Guilda</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/style.css">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4180060434572846"
+     crossorigin="anonymous"></script>
 </head>
-<body class="bg-gray-50/80">
+<body class="min-h-screen bg-slate-50 text-slate-900 font-sans">
   <div id="app-boot-loader" class="app-boot-loader" role="status" aria-live="polite">
     <div class="app-boot-loader__box">
       <div class="app-boot-loader__mark"></div>
       <div class="app-boot-loader__text">Carregando</div>
     </div>
   </div>
+    
+  <div id="sidebar-overlay" class="fixed inset-0 z-40 hidden bg-black/40"></div>
+  <aside id="sidebar" class="fixed left-0 top-0 z-50 h-full w-[280px] -translate-x-full bg-white backdrop-blur border-r border-slate-200 transition-transform">
+    <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
+        <div class="leading-tight">
+          <div class="text-slate-900 font-black">Guilda • HUB</div>
+          <div class="text-xs text-slate-500">Início</div>
+        </div>
+      </div>
+      <button id="sidebar-close" class="h-10 w-10 grid place-items-center rounded-xl hover:bg-slate-100">
+        <i data-lucide="x" class="h-5 w-5 text-slate-700"></i>
+      </button>
+    </div>
 
-  <div class="flex min-h-screen">
-    <!-- Menu Mobile Overlay -->
-    <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
+    <nav class="p-3 flex flex-col gap-2">
+      <a href="/" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
+        <i data-lucide="home" class="h-4 w-4"></i>
+        <span class="font-semibold">Início</span>
+      </a>
+      <a href="/recrutamento" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
+        <i data-lucide="users-round" class="h-4 w-4"></i>
+        <span class="font-semibold">Recrutamentos</span>
+      </a>
+      <a href="/alertasl" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
+        <i data-lucide="shield-alert" class="h-4 w-4"></i>
+        <span class="font-semibold">Alertas de jogadores</span>
+      </a>
+      <a href="/suporte" class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-900 hover:bg-slate-100">
+        <i data-lucide="help-circle" class="h-4 w-4"></i>
+        <span class="font-semibold">Suporte</span>
+      </a>
+    </nav>
+  </aside>
 
-    <!-- Sidebar -->
-  <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
-  <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+
+
+    <!-- Navbar -->
+    <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
+<div class="mx-auto w-full max-w-6xl px-4 py-3 flex items-center justify-between">
     <div class="flex items-center gap-3">
-      <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
-      <div>
-        <h1 class="font-bold text-gray-900 text-lg">Guilda e eventos</h1>
-        <p class="text-xs text-gray-400">Menu</p>
+      <button id="sidebar-open" class="h-10 w-10 grid place-items-center rounded-xl bg-white ring-1 ring-slate-200 text-slate-900 shadow-sm hover:bg-slate-50">
+        <i data-lucide="menu" class="h-5 w-5 text-slate-900"></i>
+      </button>
+      <div class="leading-tight">
+        <div class="font-black text-slate-900">Guilda • HUB</div>
+        <div class="text-xs text-slate-500">Início</div>
       </div>
     </div>
+
+    <div class="flex items-center gap-2">
+      <nav class="hidden md:flex items-center gap-6">
+        <a href="/recrutamento" class="text-sm font-semibold text-slate-700 hover:text-slate-900">Recrutamento</a>
+        <a href="/alertasl" class="text-sm font-semibold text-slate-700 hover:text-slate-900">Alertas</a>
+        <a href="/suporte" class="text-sm font-semibold text-slate-700 hover:text-slate-900">Suporte</a>
+      </nav>
+
+      <button id="open-auth-top" type="button" class="bg-gradient-to-r from-emerald-500 to-green-500 text-white px-4 py-2 rounded-xl font-black text-sm hover:opacity-90 transition-opacity shadow-md shadow-emerald-500/20">
+        Entrar
+      </button>
+    </div>
   </div>
+    </header>
 
-  <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
-    <a href="/dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-      <i data-lucide="house" class="w-5 h-5"></i> Painel
-    </a>
-
-    <a href="/perfil-guilda" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-      <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Estatísticas
-    </a>
-
-    <a href="/membros" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm">
-      <i data-lucide="users" class="w-5 h-5"></i> Membros
-    </a>
-
-    <a href="/lines" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-      <i data-lucide="layers" class="w-5 h-5"></i> Lines /Equipe
-    </a>
-
-    <a href="/ajustes" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-      <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
-    </a>
-
-    <a href="/upgrade" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-      <i data-lucide="sparkles" class="w-5 h-5"></i> Assinatura
-    </a>
-
-    <a href="/recrutar" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-      <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
-    </a>
-
-    <a href="/admin" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-      <i data-lucide="settings" class="w-5 h-5"></i> Admin
-    </a>
-
-     <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-      <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
-    </a>
-
-    <a id="nav-chefe" href="/chefe" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
-      <i data-lucide="crown" class="w-5 h-5"></i> Chefe
-    </a>
-  </nav>
-
-  <div class="shrink-0 p-4 border-t border-gray-100 bg-white">
-    <a href="/perfil" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50 hover:bg-emerald-100 transition-colors">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-full bg-emerald-200/50 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden border border-emerald-300">
-          <img id="sidebar-avatar" src="" alt="" class="w-full h-full object-cover hidden">
-          <i id="sidebar-avatar-icon" data-lucide="user" class="w-4 h-4"></i>
-        </div>
-
-        <div>
-          <p id="user-role" class="text-sm font-bold">Meu Perfil</p>
-          <p id="user-email" class="text-[10px] opacity-80 truncate w-28">Configurações</p>
-        </div>
-      </div>
-    </a>
-
-    <button id="btn-logout" class="w-full mt-2 flex items-center justify-center gap-2 py-2 text-sm font-semibold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-      <i data-lucide="log-out" class="w-4 h-4"></i> Sair
-    </button>
-  </div>
-</aside>
-
-<!-- Conteúdo -->
-<main class="flex-1 min-w-0 relative lg:ml-72">
-      <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
-<div class="flex items-center gap-3 px-4 py-3 sm:px-6">
-          <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500"><i data-lucide="menu" class="w-5 h-5"></i></button>
-          <h1 class="text-lg font-semibold text-gray-900">Membros</h1>
-        </div>
-      </header>
-
-      <div class="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
+    <!-- Hero Section -->
+    <section class="pt-6 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative overflow-hidden md:overflow-visible">
+        <!-- Decorative background element -->
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[500px] md:h-[500px] bg-green-400/10 blur-[100px] rounded-full pointer-events-none"></div>
         
-        <!-- Cabeçalho com Filtros e Botão Adicionar -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div><h2 class="text-2xl font-bold text-gray-900">Membros</h2><p class="text-gray-500 text-sm mt-1" id="member-count">Carregando...</p></div>
-          
-          <div class="flex flex-wrap items-center justify-end gap-2 relative w-full sm:w-auto">
+       <div class="text-center relative z-10 max-w-3xl mx-auto">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold uppercase tracking-[0.18em] mb-6 border border-green-200">
+        <i data-lucide="crosshair" class="w-3 h-3"></i>
+        Feito para guildas de Free Fire
+    </div>
             
-            <!-- Seletor de Guilda -->
-            <div class="relative">
-              <button id="btn-guild-slot" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
-                <i data-lucide="users" class="w-4 h-4 text-emerald-500"></i>
-                <span id="guild-slot-label" class="hidden sm:inline">Guilda 1</span>
-                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
-              </button>
-              <div id="guild-slot-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
-            </div>
-
-            <!-- Contador/Filtro por Função -->
-            <div class="relative">
-              <button id="btn-playmode-counter" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
-                <i data-lucide="shield" class="w-4 h-4 text-emerald-500"></i>
-                <span id="playmode-filter-label" class="hidden sm:inline">Função</span>
-                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
-              </button>
-              <div id="playmode-counter-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
-            </div>
-
-            <!-- Filtro por meta cumprida na modalidade -->
-            <div class="relative">
-              <button id="btn-goal-met-filter" type="button" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
-                <i data-lucide="check-check" class="w-4 h-4 text-emerald-500"></i>
-                <span id="goal-met-filter-label" class="hidden sm:inline">Meta cumprida</span>
-                <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
-              </button>
-              <div id="goal-met-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-3 space-y-2"></div>
-            </div>
-
-            <!-- Botão Edição Rápida Novo -->
-            <button onclick="openQuickEditModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
-              <i data-lucide="zap" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Edição Rápida</span>
-            </button>
-
-            <!-- Botão Ler Prints -->
-            <button id="btn-print-scanner" onclick="openPrintModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95">
-              <i data-lucide="scan-line" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Ler Prints</span>
-            </button>
-
-            <button id="btn-open-history" onclick="openHistoryModal()" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95" title="Historico de membros">
-              <i data-lucide="archive-restore" class="w-4 h-4 text-emerald-500"></i> <span class="hidden sm:inline">Historico</span>
-            </button>
-
-            <!-- Dropdown Filtro Avançado -->
-            <div class="relative">
-              <button id="btn-filter" class="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium shadow-sm hover:bg-gray-50 transition-all active:scale-95">
-                <i data-lucide="filter" class="w-4 h-4"></i> <span class="hidden sm:inline" id="filter-label">Todos</span>
-              </button>
-              
-              <!-- Menu de Opções (Painel Completo) -->
-              <div id="filter-dropdown" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-gray-100 z-50 p-4 transform origin-top-right transition-all">
-                
-                <button onclick="applyFilter('all', 'Todos')" class="w-full text-left px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 rounded-xl transition-colors mb-3">
-                  Exibir Todos
+            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 text-slate-900">
+                O fim da bagunça na sua <span class="text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-emerald-500">Guilda.</span>
+            </h1>
+            
+            <p class="text-lg md:text-xl text-slate-600 mb-10 max-w-2xl mx-auto leading-relaxed">
+                Abandone grupos confusos e planilhas improvisadas. Um painel centralizado para organizar membros, lines, eventos e hierarquia num só lugar.
+            </p>
+            
+            <div class="flex justify-center items-center">
+                <button id="open-auth-3" type="button" class="w-full sm:w-auto bg-gradient-to-r from-green-500 to-emerald-500 text-white px-8 py-4 rounded-md font-bold text-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg shadow-green-500/30">
+                    Começar Agora <i data-lucide="chevron-right" class="w-5 h-5"></i>
                 </button>
+            </div>
+        </div>
+    </section>
 
-                <!-- Filtro Tag -->
-                <div class="mb-3">
-                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Tag</p>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button onclick="applyFilter('with-tag', 'Com Tag')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-tag">
-                      <span class="pm-circle scale-[0.85]"></span> Com Tag
-                    </button>
-                    <button onclick="applyFilter('no-tag', 'Sem Tag')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-tag">
-                      <span class="pm-circle scale-[0.85]"></span> Sem Tag
-                    </button>
-                  </div>
+    <!-- Features Grid -->
+    <section class="py-20 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center max-w-3xl mx-auto mb-14">
+            <h2 class="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+                Controle total nas suas mãos
+            </h2>
+            <p class="text-slate-600 text-lg">
+                Tudo o que a liderança precisa para uma gestão profissional.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-stretch">
+
+            <!-- Card 1 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="users" class="w-6 h-6"></i>
                 </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Gestão de Membros</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Organize os jogadores da sua guilda, monte lines e acompanhe a situação de cada membro em um só lugar.</p>
+            </div>
 
-                <!-- Filtro GG -->
-                <div class="mb-3">
-                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Guerra (GG)</p>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button onclick="applyFilter('with-gg', 'GG Batida')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-gg">
-                      <span class="pm-circle scale-[0.85]"></span> Bateu
-                    </button>
-                    <button onclick="applyFilter('no-gg', 'Faltou GG')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-gg">
-                      <span class="pm-circle scale-[0.85]"></span> Faltou
-                    </button>
-                  </div>
+            <!-- Card 2 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="target" class="w-6 h-6"></i>
                 </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Controle de Pontos</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Acompanhe os pontos dos membros com mais clareza, sem depender de prints, planilhas soltas ou anotações confusas.</p>
+            </div>
 
-                <!-- Filtro Semanal -->
-                <div class="mb-3">
-                  <p class="text-[11px] uppercase tracking-wider text-gray-400 font-bold mb-1.5 px-1">Semanal (honra)</p>
-                  <div class="grid grid-cols-2 gap-2">
-                    <button onclick="applyFilter('with-weekly', 'Semanal Batida')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="with-weekly">
-                      <span class="pm-circle scale-[0.85]"></span> Bateu
-                    </button>
-                    <button onclick="applyFilter('no-weekly', 'Faltou Semanal')" class="pm-option !p-2 !gap-1.5 !text-[13px] !rounded-xl flex justify-center" data-filter-btn="no-weekly">
-                      <span class="pm-circle scale-[0.85]"></span> Faltou
-                    </button>
-                  </div>
+            <!-- Card 3 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="shield-check" class="w-6 h-6"></i>
                 </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Cargos e Permissões</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Defina líderes, admins e outras funções com permissões específicas para cada nível da guilda.</p>
+            </div>
 
-                <!-- Filtro Todas as Metas -->
-                <div class="pt-2 border-t border-gray-100">
-                  <button onclick="applyFilter('all-met', 'Metas Batidas')" class="w-full px-3 py-2.5 text-sm font-bold text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors flex items-center justify-center gap-2">
-                    <i data-lucide="check-check" class="w-4 h-4"></i> Todas as Metas
-                  </button>
+            <!-- Card 4 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="user-plus" class="w-6 h-6"></i>
                 </div>
-
-              </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Recrutamento</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Organize o recrutamento da guilda, encontre novos membros e deixe as entradas muito mais práticas.</p>
             </div>
 
-            <!-- Botão Adicionar Original -->
-            <button onclick="openModal()" class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95">
-              <i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Adicionar</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="flex gap-3">
-          <div class="flex-1 relative">
-            <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
-            <input type="text" id="search-input" placeholder="Buscar por nick ou ID..." class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm transition-all bg-white">
-          </div>
-          <button onclick="loadMembers(true)" class="flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm text-gray-600 hover:bg-gray-50 transition-colors" title="Atualizar">↻</button>
-        </div>
-
-        <div id="members-list" class="space-y-3">
-          <!-- Placeholder de carregamento -->
-           <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
-              <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
-              <div class="flex-1 space-y-2">
-                 <div class="h-4 bg-gray-200 rounded w-1/3"></div>
-                 <div class="h-3 bg-gray-100 rounded w-1/4"></div>
-              </div>
-           </div>
-           <div class="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse flex items-center gap-3">
-              <div class="w-11 h-11 bg-gray-200 rounded-full"></div>
-              <div class="flex-1 space-y-2">
-                 <div class="h-4 bg-gray-200 rounded w-1/3"></div>
-                 <div class="h-3 bg-gray-100 rounded w-1/4"></div>
-              </div>
-           </div>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <!-- MODAL (Adicionar/Editar Original) -->
-  <div id="modal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center hidden">
-    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closeModal()"></div>
-    <div class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in">
-      <div class="sticky top-0 bg-white border-b border-gray-100 p-4 flex items-center justify-between rounded-t-2xl z-10">
-        <h3 id="modal-title" class="text-lg font-bold text-gray-900">Novo Membro</h3>
-        <button onclick="closeModal()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
-      </div>
-
-    <form id="member-form" class="p-5 space-y-5">
-        <input type="hidden" id="member-id">
-        <input type="hidden" id="join-date">
-        
-        <div>
-          <label class="text-sm font-medium text-gray-700 mb-1 block">ID do Jogador *</label>
-          <div class="flex gap-2">
-            <input id="visible-id" type="text" placeholder="Ex: 123456789" class="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" required>
-            <button type="button" onclick="fetchNick()" class="flex items-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all">
-              <i data-lucide="search" class="w-4 h-4"></i> Buscar
-            </button>
-          </div>
-          <div id="api-feedback" class="mt-2 text-xs"></div>
-        </div>
-
-        <div>
-          <label class="text-sm font-medium text-gray-700 mb-1 block">Nick *</label>
-          <input id="nick" type="text" placeholder="Nome do jogador" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm" required>
-        </div>
-
-        <div>
-          <label class="text-sm font-medium text-gray-700 mb-1 block">Contato</label>
-          <input id="contact-type" type="hidden" value="whatsapp">
-          <input id="contact-country-code" type="hidden" value="55">
-          <input id="whatsapp" type="hidden" value="">
-
-          <div class="contact-dd">
-            <button id="contact-type-button" type="button" class="contact-dd-button" aria-expanded="false">
-              <span class="flex min-w-0 items-center gap-2">
-                <i id="contact-type-icon" class="fa-brands fa-whatsapp contact-brand-icon text-emerald-600" aria-hidden="true"></i>
-                <span id="contact-type-label" class="truncate">WhatsApp</span>
-              </span>
-              <i data-lucide="chevron-down" class="h-4 w-4 text-gray-400"></i>
-            </button>
-            <div id="contact-type-menu" class="contact-dd-menu hidden">
-              <button type="button" class="contact-dd-option is-selected" data-member-contact-type="whatsapp"><i class="fa-brands fa-whatsapp contact-brand-icon" aria-hidden="true"></i>WhatsApp</button>
-              <button type="button" class="contact-dd-option" data-member-contact-type="instagram"><i class="fa-brands fa-instagram contact-brand-icon" aria-hidden="true"></i>Instagram</button>
-              <button type="button" class="contact-dd-option" data-member-contact-type="discord"><i class="fa-brands fa-discord contact-brand-icon" aria-hidden="true"></i>Discord</button>
+            <!-- Card 5 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="layers-3" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Multi-Guilda</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Gerencie várias guildas em uma única conta, com mais praticidade e sem precisar ficar trocando de painel.</p>
             </div>
-          </div>
 
-          <div id="contact-value-wrap" class="mt-2 grid grid-cols-[118px_minmax(0,1fr)] gap-2">
-            <div id="contact-country-wrap" class="contact-dd">
-              <button id="contact-country-button" type="button" class="contact-dd-button" aria-expanded="false">
-                <span id="contact-country-label">🇧🇷 +55</span>
-                <i data-lucide="chevron-down" class="h-4 w-4 text-gray-400"></i>
-              </button>
-              <div id="contact-country-menu" class="contact-dd-menu hidden min-w-[210px]">
-                <button type="button" class="contact-dd-option is-selected" data-member-country-code="55">🇧🇷 Brasil +55</button>
-                <button type="button" class="contact-dd-option" data-member-country-code="1">🇺🇸 Estados Unidos +1</button>
-                <button type="button" class="contact-dd-option" data-member-country-code="54">🇦🇷 Argentina +54</button>
-                <button type="button" class="contact-dd-option" data-member-country-code="351">🇵🇹 Portugal +351</button>
-                <button type="button" class="contact-dd-option" data-member-country-code="52">🇲🇽 México +52</button>
-                <button type="button" class="contact-dd-option" data-member-country-code="595">🇵🇾 Paraguai +595</button>
-                <button type="button" class="contact-dd-option" data-member-country-code="56">🇨🇱 Chile +56</button>
-                <button type="button" class="contact-dd-option" data-member-country-code="57">🇨🇴 Colômbia +57</button>
-                <button type="button" class="contact-dd-option" data-member-country-code="51">🇵🇪 Peru +51</button>
-              </div>
+            <!-- Card 6 -->
+            <div class="bg-slate-50 border border-slate-200 p-6 rounded-xl hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-300 group h-full min-h-[260px]">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 group-hover:bg-green-500 group-hover:text-white transition-all">
+                    <i data-lucide="bar-chart-3" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-slate-900">Estatísticas e Rankings</h3>
+                <p class="text-slate-600 text-sm leading-relaxed">Acompanhe gráficos semanais, compare o desempenho da semana atual com a passada e veja o ranking geral de pontos da guilda.</p>
             </div>
-            <input id="contact-value" type="text" inputmode="numeric" autocomplete="off" placeholder="DDD + número (11 dígitos)" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm">
-          </div>
-          <p id="contact-help" class="mt-1.5 text-xs text-gray-400">Informe o DDD e o número do WhatsApp.</p>
+
         </div>
-
-        <div class="mt-6">
-          <p class="text-sm font-semibold text-gray-900">Modo de jogo</p>
-          <input type="hidden" id="play-mode" value="" />
-
-          <div id="playmode-wrap" class="pm-wrap mt-3">
-            <button type="button" class="pm-option" data-value="Rush">
-              <span class="pm-circle" aria-hidden="true"></span>
-              <span>Rush</span>
-            </button>
-            <button type="button" class="pm-option" data-value="Full Gás">
-              <span class="pm-circle" aria-hidden="true"></span>
-              <span>Full Gás</span>
-            </button>
-            <button type="button" class="pm-option" data-value="Curandeiro">
-              <span class="pm-circle" aria-hidden="true"></span>
-              <span>Curandeiro</span>
-            </button>
-            <button type="button" class="pm-option" data-value="Fuzileiro">
-              <span class="pm-circle" aria-hidden="true"></span>
-              <span>Fuzileiro</span>
-            </button>
-            <button type="button" class="pm-option" data-value="Suporte">
-              <span class="pm-circle" aria-hidden="true"></span>
-              <span>Suporte</span>
-            </button>
-          </div>
-        </div>
-
-        <hr class="border-gray-100">
-
-        <!-- Toggles -->
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <label class="text-sm font-medium text-gray-700">Guerra de Guilda</label>
-            <label class="switch"><input type="checkbox" id="guild-war"><span class="slider"></span></label>
-          </div>
-          <div>
-            <label class="text-xs text-gray-500 mb-1 block">Meta da Guerra</label>
-            <input id="guild-war-meta" type="number" value="0" class="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none text-sm">
-          </div>
-        </div>
-
-        <hr class="border-gray-100">
-
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <label class="text-sm font-medium text-gray-700">Meta Semanal</label>
-            <label class="switch"><input type="checkbox" id="weekly-meta"><span class="slider"></span></label>
-          </div>
-          <div>
-            <label class="text-xs text-gray-500 mb-1 block">Valor da Meta</label>
-            <input id="weekly-meta-value" type="number" value="0" class="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none text-sm">
-          </div>
-        </div>
-
-        <hr class="border-gray-100">
-
-        <div class="flex items-center justify-between">
-          <label class="text-sm font-medium text-gray-700">Tem Tag</label>
-          <label class="switch">
-            <input type="checkbox" id="has-tag">
-            <span class="slider"></span>
-          </label>
-        </div>
-
-        <div class="sticky bottom-0 bg-white border-t border-gray-100 pt-4 flex gap-3">
-          <button type="button" onclick="closeModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm hover:bg-gray-50">Cancelar</button>
-          <button type="submit" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-medium text-sm shadow-lg hover:shadow-xl">Salvar</button>
-        </div>
-      </form>
     </div>
-  </div>
-
-  <!-- MODAL DE EDIÇÃO RÁPIDA -->
-  <div id="quick-edit-modal" class="fixed inset-0 z-[55] flex items-end sm:items-center justify-center hidden">
-    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closeQuickEditModal()"></div>
-    <div class="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl animate-in">
-      
-      <!-- Header -->
-      <div class="bg-white border-b border-gray-100 p-4 flex flex-col gap-4 rounded-t-2xl z-10 shrink-0">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-              <i data-lucide="zap" class="w-4 h-4 text-emerald-600"></i>
-            </div>
-            <h3 class="text-lg font-bold text-gray-900">Edição Rápida</h3>
-          </div>
-          <button onclick="closeQuickEditModal()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
-        </div>
-        
-        <!-- Botões de Zerar Tudo -->
-        <div class="flex gap-2">
-          <button onclick="promptZero('gg')" class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-xs transition-colors">
-            <i data-lucide="swords" class="w-3.5 h-3.5"></i> Zerar GG
-          </button>
-          <button onclick="promptZero('semanal')" class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-xs transition-colors">
-            <i data-lucide="target" class="w-3.5 h-3.5"></i> Zerar Semanal
-          </button>
-        </div>
-      </div>
-
-      <!-- Lista de Membros para Edição Rápida -->
-      <div class="p-4 overflow-y-auto flex-1 bg-gray-50/50">
-        <div id="qe-members-list" class="space-y-2">
-          <!-- Gerado via JS -->
-        </div>
-      </div>
-
-      <!-- Footer / Botão Salvar (Oculto inicialmente) -->
-      <div class="bg-white border-t border-gray-100 p-4 shrink-0 rounded-b-2xl">
-        <button id="qe-save-btn" onclick="saveQuickEdits()" class="hidden w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold text-sm shadow-lg hover:shadow-xl transition-all">
-          Salvar Alterações
-        </button>
-        <p id="qe-info-text" class="text-center text-xs text-gray-400 font-medium">Selecione as opções acima para habilitar o salvamento.</p>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- MODAL DE LEITURA DE PRINTS -->
-  <div id="print-modal" class="fixed inset-0 z-[55] flex items-end sm:items-center justify-center hidden">
-    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closePrintModal()"></div>
-    <div class="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl max-h-[90vh] flex flex-col shadow-2xl animate-in">
-
-      <div class="bg-white border-b border-gray-100 p-4 flex flex-col gap-4 rounded-t-2xl z-10 shrink-0">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-              <i data-lucide="scan-line" class="w-4 h-4 text-emerald-600"></i>
-            </div>
-            <h3 class="text-lg font-bold text-gray-900">Sincronizar por Print</h3>
-          </div>
-          <button onclick="closePrintModal()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
-        </div>
-
-        <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-emerald-200 rounded-2xl bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer transition-colors">
-          <div class="flex flex-col items-center justify-center pt-5 pb-6">
-            <i data-lucide="upload-cloud" class="w-8 h-8 mb-2 text-emerald-500"></i>
-            <p class="mb-1 text-sm text-gray-700"><span class="font-semibold">Clique para enviar</span> os prints</p>
-            <p class="text-xs text-gray-400">PNG, JPG ou WEBP • máximo 6 por vez</p>
-          </div>
-          <input id="upload-prints" type="file" class="hidden" accept="image/*" multiple>
-        </label>
-        <p id="print-status" class="text-xs text-center text-gray-500">Selecione os prints para começar a leitura.</p>
-      </div>
-
-      <div class="p-4 overflow-y-auto flex-1 bg-gray-50/50">
-        <div id="print-results" class="space-y-2"></div>
-      </div>
-
-      <div class="bg-white border-t border-gray-100 p-4 rounded-b-2xl">
-        <button id="btn-save-prints" class="hidden w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold text-sm shadow-lg shadow-emerald-200 hover:shadow-xl transition-all active:scale-95">
-          Confirmar e Salvar Pontuações
-        </button>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- MODAL DE AVISO DO PLANO PARA LEITURA DE PRINTS -->
-  <div id="print-upgrade-modal" class="fixed inset-0 z-[56] flex items-end sm:items-center justify-center hidden">
-    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" onclick="closePrintUpgradeModal()"></div>
-    <div class="relative bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-2xl p-6 m-0 sm:m-4 zoom-in-95">
-      <button type="button" onclick="closePrintUpgradeModal()" class="absolute right-4 top-4 p-2 rounded-xl hover:bg-gray-100 text-gray-400">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
-
-      <div class="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
-        <i data-lucide="scan-line" class="w-7 h-7 text-emerald-600"></i>
-      </div>
-
-      <h3 class="text-xl font-bold text-gray-900 pr-8">Leitura de prints disponível no PRO</h3>
-      <p class="mt-2 text-sm text-gray-500 leading-relaxed">
-        O recurso de sincronizar membros por print está disponível apenas para o plano
-        <span class="font-bold text-gray-700">PRO ou superior</span>.
-      </p>
-
-      <div class="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
-        <p class="text-sm text-gray-700 leading-relaxed">
-          Para liberar a leitura automática por Gemini, assine um plano.
-        </p>
-        <a href="https://guildahub.online/upgrade" class="mt-3 inline-flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black shadow-lg shadow-emerald-200 transition-all active:scale-95">
-          CLIQUE AQUI
-          <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
-        </a>
-      </div>
-
-      <button type="button" onclick="closePrintUpgradeModal()" class="mt-4 w-full py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">
-        Agora não
-      </button>
-    </div>
-  </div>
-
-  <!-- MODAL DE CONFIRMAÇÃO (Para Zerar) -->
-  <div id="confirm-modal" class="fixed inset-0 z-[60] flex items-center justify-center hidden">
-    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeConfirmModal()"></div>
-    <div class="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
-      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4 mx-auto">
-        <i data-lucide="alert-triangle" class="w-7 h-7 text-red-600"></i>
-      </div>
-      <h3 id="confirm-title" class="text-xl font-bold text-center text-gray-900 mb-2">Zerar Metas?</h3>
-      <p id="confirm-desc" class="text-sm text-center text-gray-500 mb-6 leading-relaxed">Isso irá redefinir todos os pontos para 0 e marcar como incompleto para TODOS os membros.</p>
-      <div class="flex gap-3">
-        <button onclick="closeConfirmModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
-        <button onclick="executeZero()" class="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-lg shadow-red-200 transition-all active:scale-95">Sim, Zerar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL DE REMOVER MEMBRO -->
-  <div id="delete-confirm-modal" class="fixed inset-0 z-[61] flex items-end sm:items-center justify-center hidden">
-    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeleteConfirmModal()"></div>
-    <div class="relative bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-2xl p-6 m-0 sm:m-4 zoom-in-95">
-      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 mb-4 mx-auto">
-        <i data-lucide="user-minus" class="w-7 h-7 text-amber-600"></i>
-      </div>
-      <h3 id="remove-member-title" class="text-xl font-bold text-center text-gray-900 mb-2">Remover membro?</h3>
-      <p id="remove-member-desc" class="text-sm text-center text-gray-500 mb-5 leading-relaxed">Escolha como deseja remover este membro da guilda.</p>
-      <div id="remove-member-history-note" class="remove-history-note remove-history-note--locked mb-5 rounded-2xl border border-amber-100 bg-amber-50/80 p-4 text-sm text-gray-700">
-        Guardar no historico fica disponivel apenas no plano ULTRA ou superior.
-      </div>
-      <div class="mb-4 rounded-2xl border border-red-100 bg-red-50/70 p-3">
-        <label class="flex cursor-pointer items-center gap-3">
-          <input id="remove-register-alert" type="checkbox" class="peer sr-only" onchange="toggleRemoveAlertFields()">
-          <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-red-600 ring-1 ring-red-100">
-            <i data-lucide="shield-alert" class="h-4 w-4"></i>
-          </span>
-          <span class="min-w-0 flex-1">
-            <span class="block text-sm font-bold text-gray-800">Registrar alerta junto</span>
-            <span class="block text-xs font-medium text-gray-500">O alerta não poderá ser excluído depois.</span>
-          </span>
-          <span class="relative h-6 w-11 shrink-0 rounded-full bg-gray-300 transition-colors peer-checked:bg-red-500">
-            <span id="remove-alert-toggle-dot" class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow transition-transform"></span>
-          </span>
-        </label>
-        <div id="remove-alert-fields" class="hidden mt-3 border-t border-red-100 pt-3">
-          <label for="remove-alert-reason" class="mb-1.5 block text-xs font-bold text-gray-600">Motivo do alerta</label>
-          <div class="relative">
-            <select id="remove-alert-reason" onchange="onRemoveAlertReasonChange()" class="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2.5 pr-9 text-sm font-semibold text-gray-700 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100">
-              <option value="">Selecione um motivo</option>
-              <option value="Não vale a pena recrutar">Não vale a pena recrutar</option>
-              <option value="Trapaceiro">Trapaceiro</option>
-              <option value="Precisa de xit para viver">Precisa de xit para viver</option>
-              <option value="Só faz ponto na guilda se ganhar premiação">Só faz ponto na guilda se ganhar premiação</option>
-              <option value="Não tem respeito nenhum">Não tem respeito nenhum</option>
-              <option value="Xinga muito">Xinga muito</option>
-              <option value="Outro motivo">Outro motivo</option>
-            </select>
-            <i data-lucide="chevron-down" class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"></i>
-          </div>
-          <div id="remove-alert-custom-wrap" class="hidden mt-2">
-            <div class="relative">
-              <input id="remove-alert-custom-reason" type="text" maxlength="50" placeholder="Escreva o motivo" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 pr-14 text-sm font-semibold text-gray-700 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100">
-              <span id="remove-alert-custom-count" class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">0/50</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="grid gap-2">
-        <button id="btn-delete-with-history" type="button" onclick="executeDeleteMember('history')" class="hidden w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-200 transition-all active:scale-95">
-          Remover e salvar no historico
-        </button>
-        <button id="btn-delete-no-history" type="button" onclick="executeDeleteMember('delete')" class="w-full py-3 rounded-xl border border-red-200 bg-red-50 text-red-600 font-bold text-sm hover:bg-red-100 transition-colors">
-          Deletar sem historico
-        </button>
-        <button type="button" onclick="closeDeleteConfirmModal()" class="w-full py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">
-          Cancelar
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL DE HISTORICO -->
-  <div id="history-modal" class="fixed inset-0 z-[62] flex items-end sm:items-center justify-center hidden">
-    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeHistoryModal()"></div>
-    <div class="relative bg-white w-full sm:max-w-3xl sm:rounded-3xl rounded-t-3xl max-h-[92vh] overflow-hidden shadow-2xl m-0 sm:m-4 zoom-in-95">
-      <div class="sticky top-0 z-10 bg-white border-b border-gray-100 p-5">
-        <div class="flex items-start justify-between gap-4">
-          <div class="flex items-start gap-3 min-w-0">
-            <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700">
-              <i data-lucide="archive-restore" class="w-5 h-5"></i>
-            </span>
-            <div class="min-w-0">
-              <h3 class="text-lg font-black text-gray-900">Historico de membros</h3>
-              <p id="history-helper-text" class="mt-1 text-xs font-semibold text-gray-500">Pesquise por nick, ID, numero ou data de saida.</p>
-            </div>
-          </div>
-          <button type="button" onclick="closeHistoryModal()" class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Fechar historico">
-            <i data-lucide="x" class="w-5 h-5"></i>
-          </button>
-        </div>
-        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div class="relative flex-1">
-            <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
-            <input type="text" id="history-search-input" placeholder="Buscar no historico..." class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm transition-all bg-white">
-          </div>
-          <span id="history-count" class="inline-flex shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-black text-gray-600">0/500 no historico</span>
-        </div>
-      </div>
-
-      <div class="max-h-[62vh] overflow-y-auto p-5">
-        <div id="history-locked-box" class="hidden rounded-2xl border border-amber-100 bg-amber-50 p-5 text-center">
-          <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-            <i data-lucide="lock" class="w-6 h-6"></i>
-          </div>
-          <h4 class="text-sm font-black text-gray-900">Recurso bloqueado</h4>
-          <p id="history-locked-copy" class="mt-2 text-sm font-semibold leading-relaxed text-gray-600">O historico de membros fica disponivel apenas no plano ULTRA ou superior.</p>
-          <a href="/upgrade" class="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white hover:bg-emerald-700">
-            <i data-lucide="zap" class="w-4 h-4"></i>
-            Ver planos
-          </a>
-        </div>
-
-        <div id="history-body" class="space-y-4">
-          <div id="history-empty-state" class="hidden rounded-2xl border border-gray-100 bg-gray-50 p-8 text-center">
-            <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-gray-400 border border-gray-100">
-              <i data-lucide="archive" class="w-6 h-6"></i>
-            </div>
-            <p data-empty-history-text class="text-sm font-semibold text-gray-500">Nenhum membro foi guardado no historico ainda.</p>
-          </div>
-          <div id="history-list" class="grid grid-cols-1 gap-3"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL DE MOVER MEMBRO -->
-  <div id="move-member-modal" class="fixed inset-0 z-[62] flex items-center justify-center hidden">
-    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeMoveMemberModal()"></div>
-    <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 m-4 zoom-in-95">
-      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-emerald-100 mb-4 mx-auto">
-        <i data-lucide="arrow-right-left" class="w-7 h-7 text-emerald-600"></i>
-      </div>
-      <h3 class="text-xl font-bold text-center text-gray-900 mb-2">Mover membro</h3>
-      <p id="move-member-desc" class="text-sm text-center text-gray-500 mb-5 leading-relaxed">Escolha para qual guilda este membro deve ser movido.</p>
-      <div id="move-member-options" class="space-y-2 mb-6"></div>
-      <div class="flex gap-3">
-        <button type="button" onclick="closeMoveMemberModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
-        <button type="button" id="btn-confirm-move-member" onclick="executeMoveMember()" class="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-200 transition-all active:scale-95">Mover</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL DE ADVERTÊNCIA -->
-  <div id="warning-member-modal" class="fixed inset-0 z-[63] flex items-end sm:items-center justify-center hidden">
-    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeWarningMemberModal()"></div>
-    <div class="relative bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 m-0 sm:m-4 zoom-in-95">
-      <div class="flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 mb-4 mx-auto">
-        <i data-lucide="triangle-alert" class="w-7 h-7 text-amber-600"></i>
-      </div>
-      <h3 id="warning-member-title" class="text-xl font-bold text-center text-gray-900 mb-2">Advertir membro</h3>
-      <p id="warning-member-desc" class="text-sm text-center text-gray-500 mb-5 leading-relaxed">Escolha um motivo ou escreva manualmente.</p>
-
-      <div class="space-y-4">
-        <div class="relative">
-          <label class="text-sm font-semibold text-gray-700 mb-1 block">Motivo rápido</label>
-          <input type="hidden" id="warning-preset" value="">
-          <button id="warning-preset-btn" type="button" class="warning-preset-button" aria-expanded="false" aria-controls="warning-preset-menu">
-            <span id="warning-preset-label" class="truncate">Selecionar motivo</span>
-            <i data-lucide="chevron-down" class="w-4 h-4 text-amber-500 shrink-0"></i>
-          </button>
-          <div id="warning-preset-menu" class="warning-preset-menu hidden">
-            <button type="button" class="warning-preset-option" data-warning-preset="">
-              <span class="warning-preset-option-icon">✍️</span>
-              <span>Escrever manualmente</span>
+</section>
+    <!-- CTA Section -->
+    <section class="py-24 relative overflow-hidden bg-slate-50">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+            <h2 class="text-4xl font-bold mb-6 text-slate-900">Pronto para elevar o nível da sua Guilda?</h2>
+            <p class="text-slate-600 text-lg mb-10">
+                Junte-se a dezenas de líderes que já automatizaram a organização e focam-se apenas no que importa: <strong class="text-slate-900">vencer.</strong>
+            </p>
+            <button type="button" onclick="openAuth()" class="bg-slate-900 text-white px-10 py-4 rounded-md font-extrabold text-lg hover:bg-slate-800 transition-colors shadow-xl shadow-slate-900/10">
+                Criar Minha Guilda Grátis
             </button>
-            <button type="button" class="warning-preset-option" data-warning-preset="Acabou a luz (de novo)">
-              <span class="warning-preset-option-icon">💡</span>
-              <span>Acabou a luz (de novo)</span>
-            </button>
-            <button type="button" class="warning-preset-option" data-warning-preset="O tataravô faleceu">
-              <span class="warning-preset-option-icon">🪦</span>
-              <span>O tataravô faleceu</span>
-            </button>
-            <button type="button" class="warning-preset-option" data-warning-preset="O peixe teve que ir ao hospital">
-              <span class="warning-preset-option-icon">🐟</span>
-              <span>O peixe teve que ir ao hospital</span>
-            </button>
-            <button type="button" class="warning-preset-option" data-warning-preset="A internet caiu bem na hora">
-              <span class="warning-preset-option-icon">📶</span>
-              <span>A internet caiu bem na hora</span>
-            </button>
-            <button type="button" class="warning-preset-option" data-warning-preset="Foi comprar pão e desapareceu">
-              <span class="warning-preset-option-icon">🥖</span>
-              <span>Foi comprar pão e desapareceu</span>
-            </button>
-            <button type="button" class="warning-preset-option" data-warning-preset="Dormiu no lobby">
-              <span class="warning-preset-option-icon">😴</span>
-              <span>Dormiu no lobby</span>
-            </button>
-          </div>
         </div>
+    </section>
 
-        <div>
-          <label class="text-sm font-semibold text-gray-700 mb-1 block">Motivo da advertência</label>
-          <textarea id="warning-reason" rows="4" maxlength="500" placeholder="Escreva o motivo..." class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 outline-none text-sm resize-none"></textarea>
-          <p class="mt-1 text-[11px] text-gray-400">Esse motivo fica salvo no próprio documento do membro.</p>
-        </div>
-      </div>
-
-      <div class="flex gap-3 mt-6">
-        <button type="button" onclick="closeWarningMemberModal()" class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 transition-colors">Cancelar</button>
-        <button type="button" id="btn-remove-warning" onclick="removeMemberWarning()" class="hidden flex-1 py-3 rounded-xl border border-red-200 bg-red-50 text-red-600 font-bold text-sm hover:bg-red-100 transition-colors">Remover</button>
-        <button type="button" id="btn-save-warning" onclick="saveMemberWarning()" class="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-lg shadow-amber-200 transition-all active:scale-95">Salvar</button>
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="/membros/membros.js?v=alertas-player-20260608"></script>
-
-  <!-- OTK Footer -->
-  <footer class="bg-white py-10 border-t border-slate-200">
+    <!-- Footer -->
+    <footer class="bg-white py-10 border-t border-slate-200">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <div class="flex justify-center items-center gap-2 mb-10">
@@ -997,5 +251,151 @@
     </div>
 </footer>
 
+
+    
+
+    <!-- Auth Drawer (mantém 100% da lógica original) -->
+<div id="auth-backdrop" class="drawer-backdrop fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"></div>
+
+  <aside id="auth-drawer" class="drawer-panel fixed right-0 top-0 z-50 h-full w-full max-w-md border-l border-slate-200 bg-white shadow-2xl">
+    <div class="flex h-full flex-col">
+      <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+        
+      <div class="flex items-center gap-3">
+          <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
+          <div>
+            <div class="text-sm font-black leading-tight">Acesse Guilda • HUB</div>
+            <div class="text-xs font-medium text-slate-500">Entrar ou criar conta</div>
+          </div>
+        </div>
+
+        <button id="close-auth" type="button"
+          class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-[.98] transition"
+          aria-label="Fechar">
+          <i data-lucide="x" class="h-5 w-5 text-slate-700"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-5 py-5">
+        <!-- Login -->
+        <form id="login-form" class="flex flex-col gap-3">
+          <div>
+            <label class="text-xs font-bold text-slate-600 ml-1">Email</label>
+            <input id="email" type="email"
+              class="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all"
+              placeholder="seuemail@exemplo.com" required />
+          </div>
+
+          <div>
+            <label class="text-xs font-bold text-slate-600 ml-1">Senha</label>
+            <div class="relative">
+              <input id="password" type="password"
+                class="w-full px-4 py-3 pr-24 rounded-xl border border-slate-200 outline-none text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all"
+                placeholder="••••••••" required />
+              <button type="button" data-password-toggle="password"
+                class="absolute inset-y-0 right-2 my-auto h-9 px-3 rounded-lg text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                aria-label="Mostrar senha">Mostrar</button>
+            </div>
+          </div>
+
+          <button id="btn-login" type="submit"
+            class="mt-1 w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-green-700 text-white font-bold text-sm shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-200 transition-all active:scale-95 flex items-center justify-center gap-2">
+            <span>Entrar</span>
+          </button>
+
+          <div class="text-[10px] text-slate-500 text-center leading-tight px-2">
+            Use um usuário de líder/admin (ou login de jogador).
+          </div>
+        </form>
+
+        <!-- Toggle -->
+        <div class="mt-4 flex items-center justify-center gap-2 text-sm text-slate-600">
+          <span id="login-hint">Não tem conta?</span>
+          <button id="btn-show-signup" type="button" class="font-semibold text-emerald-700 hover:underline">Criar conta</button>
+          <button id="btn-show-login" type="button" class="hidden font-semibold text-emerald-700 hover:underline">Voltar para Login</button>
+        </div>
+
+        <!-- Signup -->
+        <form id="signup-form" class="hidden mt-6 space-y-4">
+          <div class="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-sm font-black text-slate-900">Você é dono de guilda?</p>
+                <p id="signup-mode-desc" class="mt-1 text-xs font-medium leading-relaxed text-slate-500">
+                  Ative se você vai criar e administrar uma guilda na plataforma.
+                </p>
+              </div>
+
+              <label class="relative inline-flex cursor-pointer items-center pt-1">
+                <input id="signup-is-owner" type="checkbox" class="peer sr-only" checked>
+                <span class="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-emerald-500 after:absolute after:left-0.5 after:top-1.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5"></span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-gameid">ID do usuário</label>
+            <input id="signup-gameid" type="text" inputmode="numeric" required
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+              placeholder="Ex: 123456789" />
+            <p class="mt-1 text-xs font-semibold text-amber-600">
+              Importante: coloque o ID do seu usuário/personagem. NÃO coloque o ID da guilda.
+            </p>
+          </div>
+
+          <div id="signup-guild-wrap">
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-guild-name">Nome da guilda</label>
+            <input id="signup-guild-name" type="text" required
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+              placeholder="Ex: Ottakubrasil" />
+            <p class="mt-1 text-xs text-slate-500">Esse nome identifica sua guilda no painel.</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-nick">Nome/Nick</label>
+            <input id="signup-nick" type="text" required maxlength="30"
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+              placeholder="Ex: moggizi" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-email">Email</label>
+            <input id="signup-email" type="email" required inputmode="email" autocomplete="email"
+              pattern="^[a-zA-Z0-9._%+-]+@(gmail\.com|yahoo\.com)$"
+              title="Use apenas e-mail @gmail.com ou @yahoo.com"
+              class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+              placeholder="seuemail@gmail.com" />
+            <p class="mt-1 text-xs text-slate-500">Permitido apenas @gmail.com ou @yahoo.com.</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="signup-password">Senha</label>
+            <div class="relative">
+              <input id="signup-password" type="password" required minlength="6"
+                pattern="[A-Za-z0-9?.!#@_]{6,}"
+                title="Mínimo 6 caracteres. Sem espaços. Permitido: letras, números e ? . ! # @ _"
+                class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-24 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                placeholder="mínimo 6 caracteres" />
+              <button type="button" data-password-toggle="signup-password"
+                class="absolute inset-y-0 right-2 my-auto h-9 px-3 rounded-lg text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                aria-label="Mostrar senha">Mostrar</button>
+            </div>
+            <p class="mt-1 text-xs text-slate-500">Mínimo 6 caracteres. Sem espaços. Permitido: letras, números e ? . ! # @ _.</p>
+          </div>
+
+          <button id="btn-signup" type="submit"
+            class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 active:scale-[.98] transition">
+            <span>Criar conta</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Toast -->
+  <div id="toast-container" class="fixed top-5 right-5 z-[60] flex flex-col gap-2"></div>
+
+<!-- Scripts -->
+<script type="module" src="/index/index.js"></script>
 </body>
 </html>

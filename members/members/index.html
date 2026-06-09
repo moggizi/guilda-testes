@@ -165,6 +165,53 @@
       color:#fde68a!important;
     }
     html[data-theme="dark"] .remove-history-note b{color:#6ee7b7}
+    .remove-alert-panel{transition:background-color .18s ease,border-color .18s ease,color .18s ease}
+    .remove-alert-reason-button{
+      width:100%;display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+      padding:.7rem .8rem;border:1px solid #e5e7eb;border-radius:12px;background:#fff;color:#374151;
+      font-size:.875rem;font-weight:700;text-align:left;transition:.15s;
+    }
+    .remove-alert-reason-button:hover{background:#f9fafb}
+    .remove-alert-reason-menu{
+      position:absolute;left:0;right:0;top:calc(100% + .5rem);z-index:100;max-height:220px;
+      overflow-y:auto;padding:.35rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff;
+      box-shadow:0 18px 50px rgba(15,23,42,.18);
+    }
+    .remove-alert-reason-option{
+      width:100%;padding:.7rem .75rem;border-radius:10px;color:#374151;font-size:.82rem;
+      font-weight:700;text-align:left;transition:.15s;
+    }
+    .remove-alert-reason-option:hover{background:#fef2f2;color:#b91c1c}
+    .remove-alert-reason-option.is-selected{background:#fee2e2;color:#b91c1c}
+    html[data-theme="dark"] .remove-alert-panel{
+      background:rgba(69,10,10,.28)!important;
+      border-color:rgba(248,113,113,.28)!important;
+      color:var(--theme-text)!important;
+    }
+    html[data-theme="dark"] .remove-alert-panel .remove-alert-icon{
+      background:rgba(69,10,10,.48)!important;
+      color:#fca5a5!important;
+      box-shadow:inset 0 0 0 1px rgba(248,113,113,.24)!important;
+    }
+    html[data-theme="dark"] .remove-alert-reason-button,
+    html[data-theme="dark"] .remove-alert-reason-menu{
+      background:var(--theme-surface-2)!important;
+      border-color:var(--theme-border)!important;
+      color:var(--theme-text-soft)!important;
+    }
+    html[data-theme="dark"] .remove-alert-reason-menu{
+      background:var(--theme-surface)!important;
+      box-shadow:0 18px 50px var(--theme-shadow)!important;
+    }
+    html[data-theme="dark"] .remove-alert-reason-option{color:var(--theme-text-soft)!important}
+    html[data-theme="dark"] .remove-alert-reason-option:hover{
+      background:var(--theme-danger-soft)!important;
+      color:#fca5a5!important;
+    }
+    html[data-theme="dark"] .remove-alert-reason-option.is-selected{
+      background:var(--theme-danger-soft)!important;
+      color:#fca5a5!important;
+    }
 
     .contact-dd{position:relative}
     .contact-dd-button{
@@ -756,10 +803,10 @@
       <div id="remove-member-history-note" class="remove-history-note remove-history-note--locked mb-5 rounded-2xl border border-amber-100 bg-amber-50/80 p-4 text-sm text-gray-700">
         Guardar no historico fica disponivel apenas no plano ULTRA ou superior.
       </div>
-      <div class="mb-4 rounded-2xl border border-red-100 bg-red-50/70 p-3">
+      <div class="remove-alert-panel mb-4 rounded-2xl border border-red-100 bg-red-50/70 p-3">
         <label class="flex cursor-pointer items-center gap-3">
           <input id="remove-register-alert" type="checkbox" class="peer sr-only" onchange="toggleRemoveAlertFields()">
-          <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-red-600 ring-1 ring-red-100">
+          <span class="remove-alert-icon inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-red-600 ring-1 ring-red-100">
             <i data-lucide="shield-alert" class="h-4 w-4"></i>
           </span>
           <span class="min-w-0 flex-1">
@@ -771,19 +818,22 @@
           </span>
         </label>
         <div id="remove-alert-fields" class="hidden mt-3 border-t border-red-100 pt-3">
-          <label for="remove-alert-reason" class="mb-1.5 block text-xs font-bold text-gray-600">Motivo do alerta</label>
+          <label class="mb-1.5 block text-xs font-bold text-gray-600">Motivo do alerta</label>
           <div class="relative">
-            <select id="remove-alert-reason" onchange="onRemoveAlertReasonChange()" class="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2.5 pr-9 text-sm font-semibold text-gray-700 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100">
-              <option value="">Selecione um motivo</option>
-              <option value="Não vale a pena recrutar">Não vale a pena recrutar</option>
-              <option value="Trapaceiro">Trapaceiro</option>
-              <option value="Precisa de xit para viver">Precisa de xit para viver</option>
-              <option value="Só faz ponto na guilda se ganhar premiação">Só faz ponto na guilda se ganhar premiação</option>
-              <option value="Não tem respeito nenhum">Não tem respeito nenhum</option>
-              <option value="Xinga muito">Xinga muito</option>
-              <option value="Outro motivo">Outro motivo</option>
-            </select>
-            <i data-lucide="chevron-down" class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"></i>
+            <input id="remove-alert-reason" type="hidden" value="">
+            <button id="remove-alert-reason-button" type="button" class="remove-alert-reason-button" onclick="toggleRemoveAlertReasonMenu()" aria-expanded="false">
+              <span id="remove-alert-reason-label">Selecione um motivo</span>
+              <i data-lucide="chevron-down" class="h-4 w-4 shrink-0 text-gray-400"></i>
+            </button>
+            <div id="remove-alert-reason-menu" class="remove-alert-reason-menu hidden">
+              <button type="button" class="remove-alert-reason-option" data-remove-alert-reason="Não vale a pena recrutar">Não vale a pena recrutar</button>
+              <button type="button" class="remove-alert-reason-option" data-remove-alert-reason="Trapaceiro">Trapaceiro</button>
+              <button type="button" class="remove-alert-reason-option" data-remove-alert-reason="Precisa de xit para viver">Precisa de xit para viver</button>
+              <button type="button" class="remove-alert-reason-option" data-remove-alert-reason="Só faz ponto na guilda se ganhar premiação">Só faz ponto na guilda se ganhar premiação</button>
+              <button type="button" class="remove-alert-reason-option" data-remove-alert-reason="Não tem respeito nenhum">Não tem respeito nenhum</button>
+              <button type="button" class="remove-alert-reason-option" data-remove-alert-reason="Xinga muito">Xinga muito</button>
+              <button type="button" class="remove-alert-reason-option" data-remove-alert-reason="Outro motivo">Outro motivo</button>
+            </div>
           </div>
           <div id="remove-alert-custom-wrap" class="hidden mt-2">
             <div class="relative">
@@ -943,7 +993,7 @@
     </div>
   </div>
 
-  <script type="module" src="/membros/membros.js?v=alertas-player-20260608"></script>
+  <script type="module" src="/membros/membros.js?v=alertas-player-clean-v3"></script>
 
   <!-- OTK Footer -->
   <footer class="bg-white py-10 border-t border-slate-200">

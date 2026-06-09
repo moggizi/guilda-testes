@@ -1719,10 +1719,16 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
       const customWrapEl = document.getElementById('remove-alert-custom-wrap');
       const customEl = document.getElementById('remove-alert-custom-reason');
       const countEl = document.getElementById('remove-alert-custom-count');
+      const reasonLabelEl = document.getElementById('remove-alert-reason-label');
+      const reasonMenuEl = document.getElementById('remove-alert-reason-menu');
       if (enabledEl) enabledEl.checked = false;
       document.getElementById('remove-alert-toggle-dot')?.classList.remove('translate-x-5');
       fieldsEl?.classList.add('hidden');
       if (reasonEl) reasonEl.value = '';
+      if (reasonLabelEl) reasonLabelEl.textContent = 'Selecione um motivo';
+      reasonMenuEl?.classList.add('hidden');
+      document.getElementById('remove-alert-reason-button')?.setAttribute('aria-expanded', 'false');
+      reasonMenuEl?.querySelectorAll('[data-remove-alert-reason]').forEach((button) => button.classList.remove('is-selected'));
       customWrapEl?.classList.add('hidden');
       if (customEl) customEl.value = '';
       if (countEl) countEl.textContent = '0/50';
@@ -1738,6 +1744,9 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
         const customEl = document.getElementById('remove-alert-custom-reason');
         const countEl = document.getElementById('remove-alert-custom-count');
         if (reasonEl) reasonEl.value = '';
+        const reasonLabelEl = document.getElementById('remove-alert-reason-label');
+        if (reasonLabelEl) reasonLabelEl.textContent = 'Selecione um motivo';
+        document.getElementById('remove-alert-reason-menu')?.classList.add('hidden');
         customWrapEl?.classList.add('hidden');
         if (customEl) customEl.value = '';
         if (countEl) countEl.textContent = '0/50';
@@ -1745,12 +1754,43 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
       initIcons();
     };
 
-    window.onRemoveAlertReasonChange = () => {
-      const reason = String(document.getElementById('remove-alert-reason')?.value || '');
+    window.toggleRemoveAlertReasonMenu = () => {
+      const menu = document.getElementById('remove-alert-reason-menu');
+      const button = document.getElementById('remove-alert-reason-button');
+      const open = menu?.classList.contains('hidden');
+      menu?.classList.toggle('hidden', !open);
+      button?.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+
+    window.selectRemoveAlertReason = (value) => {
+      const reason = String(value || '').trim();
+      const input = document.getElementById('remove-alert-reason');
+      const label = document.getElementById('remove-alert-reason-label');
+      const menu = document.getElementById('remove-alert-reason-menu');
+      if (input) input.value = reason;
+      if (label) label.textContent = reason || 'Selecione um motivo';
+      menu?.classList.add('hidden');
+      document.getElementById('remove-alert-reason-button')?.setAttribute('aria-expanded', 'false');
+      menu?.querySelectorAll('[data-remove-alert-reason]').forEach((button) => {
+        button.classList.toggle('is-selected', button.dataset.removeAlertReason === reason);
+      });
       const custom = reason === PLAYER_ALERT_CUSTOM_REASON;
       document.getElementById('remove-alert-custom-wrap')?.classList.toggle('hidden', !custom);
       if (custom) document.getElementById('remove-alert-custom-reason')?.focus();
     };
+
+    document.getElementById('remove-alert-reason-menu')?.querySelectorAll('[data-remove-alert-reason]').forEach((button) => {
+      button.addEventListener('click', () => window.selectRemoveAlertReason(button.dataset.removeAlertReason || ''));
+    });
+
+    document.addEventListener('click', (event) => {
+      const button = document.getElementById('remove-alert-reason-button');
+      const menu = document.getElementById('remove-alert-reason-menu');
+      if (!button?.contains(event.target) && !menu?.contains(event.target)) {
+        menu?.classList.add('hidden');
+        button?.setAttribute('aria-expanded', 'false');
+      }
+    });
 
     document.getElementById('remove-alert-custom-reason')?.addEventListener('input', (event) => {
       const input = event.currentTarget;
@@ -3307,7 +3347,7 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
         btn.classList.toggle('opacity-60', !!isBusy);
         btn.classList.toggle('cursor-wait', !!isBusy);
       });
-      ['remove-register-alert', 'remove-alert-reason', 'remove-alert-custom-reason'].forEach((id) => {
+      ['remove-register-alert', 'remove-alert-reason-button', 'remove-alert-custom-reason'].forEach((id) => {
         const field = document.getElementById(id);
         if (field) field.disabled = !!isBusy;
       });
