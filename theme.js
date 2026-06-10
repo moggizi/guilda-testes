@@ -34,24 +34,7 @@
   }
 
   function ensureProfileSearchNav() {
-    const isActive = /^\/buscar_perfil1(?:\/|$|\.html)/i.test(window.location.pathname || "");
-
-    document.querySelectorAll('a[href="/membros"]').forEach((membersLink) => {
-      const nav = membersLink.closest("nav");
-      if (!nav || nav.querySelector('[data-profile-search-nav="true"]')) return;
-
-      const link = document.createElement("a");
-      link.href = "/buscar_perfil1";
-      link.dataset.profileSearchNav = "true";
-      link.className = isActive
-        ? "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 shadow-sm hidden"
-        : "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors hidden";
-      link.innerHTML = '<i data-lucide="search" class="w-5 h-5"></i> Buscar perfil';
-      membersLink.insertAdjacentElement("afterend", link);
-    });
-
     syncProfileSearchNavVisibility();
-    refreshIcons();
 
     const roleEl = document.getElementById("user-role");
     if (roleEl && !roleEl.dataset.profileSearchObserver) {

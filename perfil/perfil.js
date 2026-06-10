@@ -26,6 +26,7 @@ const normalizeEmail = (v) => String(v ?? '').trim().toLowerCase();
 const isNumericDocId = (id) => /^\d+$/.test(String(id || ''));
 const PROFILE_GUILD_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const PROFILE_GUILD_CACHE_PREFIX = 'profileGuildContext_v1_';
+const PROFILE_GUILD_SYNC_CACHE_PREFIX = 'profileGuildSync_v1_';
 const PARTNER_CACHE_TTL_MS = 60 * 60 * 1000;
 const PARTNER_DATA_CACHE_PREFIX = 'profilePartnerData_v2_';
 const PARTNER_COMMISSIONS_CACHE_PREFIX = 'profilePartnerCommissions_v1_';
@@ -858,6 +859,7 @@ function buildBridgePayload(gameProfileDoc, oldAuthDocData = {}) {
 
     guildId: accessContext.guildId || gameProfileDoc.guildId || oldAuthDocData.guildId || '',
     guilda: accessContext.guildName || gameProfileDoc.guilda || oldAuthDocData.guilda || '',
+    guildName: accessContext.guildName || gameProfileDoc.guildName || gameProfileDoc.guilda || oldAuthDocData.guildName || oldAuthDocData.guilda || '',
     role: accessContext.role || gameProfileDoc.role || oldAuthDocData.role || 'Membro',
 
     parceiro: gameProfileDoc.parceiro === true || oldAuthDocData.parceiro === true,
@@ -867,6 +869,63 @@ function buildBridgePayload(gameProfileDoc, oldAuthDocData = {}) {
 
     updatedAt: serverTimestamp()
   };
+}
+
+function profileGuildSyncCacheKey(uid, profileId) {
+  return `${PROFILE_GUILD_SYNC_CACHE_PREFIX}${String(uid || '').trim()}_${String(profileId || '').trim()}`;
+}
+
+async function syncProfileGuildDataDaily(gameProfileDoc = {}, oldAuthDocData = {}) {
+  const user = auth.currentUser;
+  const uid = String(user?.uid || '').trim();
+  const profileId = String(gameProfileDoc?.id || currentUserProfileId || '').trim();
+  if (!uid || !profileId) return gameProfileDoc;
+
+  const ctx = getProfileAccessContext();
+  const guildId = String(ctx.guildId || gameProfileDoc.guildId || oldAuthDocData.guildId || '').trim();
+  const guildName = String(
+    ctx.guildName ||
+    gameProfileDoc.guildName ||
+    gameProfileDoc.guilda ||
+    oldAuthDocData.guildName ||
+    oldAuthDocData.guilda ||
+    ''
+  ).trim();
+  const role = normalizeRoleLabel(ctx.role || gameProfileDoc.role || oldAuthDocData.role || 'Membro');
+
+  const projected = {
+    ...(gameProfileDoc || {}),
+    guildId,
+    guilda: guildName,
+    guildName,
+    role
+  };
+
+  const fingerprint = JSON.stringify({ guildId, guildName, role });
+  const cacheKey = profileGuildSyncCacheKey(uid, profileId);
+  const cached = cacheReadJson(cacheKey, null);
+  if (cached?.fingerprint === fingerprint && cacheIsFresh(cached, PROFILE_GUILD_CACHE_TTL_MS)) {
+    return projected;
+  }
+
+  try {
+    const payload = {
+      guildId,
+      guilda: guildName,
+      guildName,
+      role,
+      updatedAt: serverTimestamp()
+    };
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', profileId), payload, { merge: true });
+    batch.set(doc(db, 'users', uid), payload, { merge: true });
+    await batch.commit();
+    cacheWriteJsonStamped(cacheKey, { fingerprint, guildId, guildName, role });
+  } catch (error) {
+    console.warn('Nao foi possivel sincronizar guilda/cargo do perfil:', error);
+  }
+
+  return projected;
 }
 
 
@@ -1673,6 +1732,7 @@ async function loadProfile() {
       }
 
       await setDoc(doc(db, 'users', uid), buildBridgePayload(gameProfileDoc, oldAuthDocData || {}), { merge: true });
+      gameProfileDoc = await syncProfileGuildDataDaily(gameProfileDoc, oldAuthDocData || {});
 
       fillProfileForm(gameProfileDoc);
       setLoadingVisible(false);
@@ -1710,6 +1770,7 @@ function fillProfileForm(data) {
     ...(data || {}),
     guildId: ctx.guildId || data.guildId || '',
     guilda: actualGuildName,
+    guildName: actualGuildName,
     role: actualRole
   };
 
@@ -1729,6 +1790,7 @@ function fillProfileForm(data) {
       cat: data.cat || data.bio || '',
       guildId: data.guildId || ctx.guildId || '',
       guilda: actualGuildName,
+      guildName: actualGuildName,
       role: actualRole
     }, auth.currentUser);
     applyCachedSidebarProfile(auth.currentUser);
@@ -1797,6 +1859,7 @@ async function handleCreateProfile(e) {
 
       guildId: ctx.guildId || baseData.guildId || '',
       guilda: ctx.guildName || baseData.guilda || '',
+      guildName: ctx.guildName || baseData.guildName || baseData.guilda || '',
       role: ctx.role || baseData.role || 'Membro',
 
       nick: baseData.nick || '',

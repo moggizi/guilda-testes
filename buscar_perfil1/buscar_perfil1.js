@@ -5,8 +5,10 @@ import {
   initIcons,
   logout,
   setupSidebar,
-  showToast
+  showToast,
+  db
 } from '../logic.js';
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const byId = (id) => document.getElementById(id);
 const form = byId('profile-search-form');
@@ -38,7 +40,7 @@ function canUseProfileSearch(ctx = {}) {
 }
 
 function cleanGameId(value) {
-  return String(value || '').replace(/\D+/g, '').slice(0, 24);
+  return String(value || '').replace(/\D+/g, '').slice(0, 15);
 }
 
 function setVisible(element, visible) {
@@ -101,7 +103,13 @@ function applyRoleBadge(element, role) {
 }
 
 function formatJoinDate(value) {
-  if (!value) return 'Não informada';
+  if (!value) return 'Nao informada';
+
+  if (typeof value === 'object') {
+    if (typeof value.toDate === 'function') return formatJoinDate(value.toDate());
+    if (typeof value.toMillis === 'function') return formatJoinDate(value.toMillis());
+    if (typeof value.seconds === 'number') return formatJoinDate(value.seconds * 1000);
+  }
 
   const raw = String(value).trim();
   let date = null;
@@ -114,12 +122,27 @@ function formatJoinDate(value) {
     if (!Number.isNaN(parsed.getTime())) date = parsed;
   }
 
-  if (!date || Number.isNaN(date.getTime())) return raw || 'Não informada';
+  if (!date || Number.isNaN(date.getTime())) return raw || 'Nao informada';
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: 'long',
     year: 'numeric'
   }).format(date);
+}
+
+function publicProfileFromUserDoc(snap) {
+  const data = snap.data() || {};
+  const id = cleanGameId(data.id || data.gameIdMigrated || data.gameId || snap.id) || snap.id;
+
+  return {
+    id,
+    nick: String(data.nick || data.nome || data.name || 'Jogador').trim() || 'Jogador',
+    bio: String(data.cat || data.bio || '').trim().slice(0, 100),
+    photo: String(data.foto || data.photo || data.avatar || '').trim(),
+    guildName: String(data.guilda || data.guildName || 'Sem guilda').trim() || 'Sem guilda',
+    role: String(data.role || data.cargo || 'Membro').trim() || 'Membro',
+    joinDate: data.createdAt || data.criadoEm || data.created_at || data.created || null
+  };
 }
 
 function renderProfile(profile) {
@@ -133,7 +156,7 @@ function renderProfile(profile) {
 
   byId('modal-profile-nick').textContent = profile.nick || 'Jogador';
   byId('modal-profile-id').textContent = profile.id || '--';
-  byId('modal-profile-bio').textContent = profile.bio || 'Este jogador ainda não adicionou uma bio.';
+  byId('modal-profile-bio').textContent = profile.bio || 'Este jogador ainda nao adicionou uma bio.';
   byId('modal-profile-guild').textContent = profile.guildName || 'Sem guilda';
   byId('modal-profile-join-date').textContent = formatJoinDate(profile.joinDate);
   applyRoleBadge(byId('modal-profile-role'), profile.role);
@@ -153,35 +176,21 @@ function setSearching(searching) {
 
 function errorMessage(code) {
   const messages = {
-    'profile-not-found': ['Perfil não encontrado', 'Não existe um perfil público cadastrado com esse ID.'],
-    'invalid-id': ['ID inválido', 'Digite um ID de jogador válido usando apenas números.'],
-    forbidden: ['Acesso não permitido', 'A busca de perfis está disponível apenas para donos, líderes e admins.'],
-    'auth-required': ['Sessão encerrada', 'Entre novamente para continuar.'],
-    'auth-invalid': ['Sessão encerrada', 'Entre novamente para continuar.'],
-    'internal-error': ['Não foi possível buscar agora', 'Tente novamente em alguns instantes.']
+    'profile-not-found': ['Perfil nao encontrado', 'Nao existe um perfil publico cadastrado com esse ID.'],
+    'invalid-id': ['ID invalido', 'Digite um ID de jogador valido com 3 a 15 numeros.'],
+    forbidden: ['Acesso nao permitido', 'A busca de perfis esta disponivel apenas para donos, lideres e admins.'],
+    'auth-required': ['Sessao encerrada', 'Entre novamente para continuar.'],
+    'auth-invalid': ['Sessao encerrada', 'Entre novamente para continuar.'],
+    'internal-error': ['Nao foi possivel buscar agora', 'Tente novamente em alguns instantes.']
   };
-  return messages[code] || ['Erro na busca', 'Não foi possível carregar esse perfil agora.'];
+  return messages[code] || ['Erro na busca', 'Nao foi possivel carregar esse perfil agora.'];
 }
 
 async function searchProfile(gameId) {
-  const user = auth.currentUser;
-  if (!user) throw new Error('auth-required');
-
-  const token = await user.getIdToken();
-  const response = await fetch('/api/public_profile', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({ id: gameId })
-  });
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok || !payload?.ok || !payload?.profile) {
-    throw new Error(payload?.error || 'internal-error');
-  }
-  return payload.profile;
+  if (!auth.currentUser) throw new Error('auth-required');
+  const snap = await getDoc(doc(db, 'users', gameId));
+  if (!snap.exists()) throw new Error('profile-not-found');
+  return publicProfileFromUserDoc(snap);
 }
 
 async function handleSearch(event) {
@@ -189,8 +198,8 @@ async function handleSearch(event) {
   const gameId = cleanGameId(input.value);
   input.value = gameId;
 
-  if (gameId.length < 4) {
-    setError('ID inválido', 'Digite o ID completo do jogador usando apenas números.');
+  if (gameId.length < 3 || gameId.length > 15) {
+    setError('ID invalido', 'Digite um ID de 3 a 15 numeros.');
     input.focus();
     return;
   }
@@ -275,7 +284,7 @@ async function init() {
 
   const context = getGuildContext() || {};
   if (!canUseProfileSearch(context)) {
-    showToast('error', 'A busca de perfis é exclusiva para donos, líderes e admins.');
+    showToast('error', 'A busca de perfis e exclusiva para donos, lideres e admins.');
     setTimeout(() => { window.location.href = '/dashboard'; }, 900);
     return;
   }
@@ -294,6 +303,6 @@ async function init() {
 
 init().catch((error) => {
   console.error('Erro ao iniciar busca de perfis:', error);
-  setError('Não foi possível abrir a busca', 'Atualize a página e tente novamente.');
+  setError('Nao foi possivel abrir a busca', 'Atualize a pagina e tente novamente.');
   try { window.GuildaHubLoader?.done(); } catch (_) {}
 });
