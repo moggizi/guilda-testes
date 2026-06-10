@@ -169,7 +169,6 @@ function renderResultCard(profile) {
   byId('result-id').textContent = profile.id || '--';
   byId('result-guild').textContent = profile.guildName || 'Sem guilda';
   setPhoto(byId('result-photo'), byId('result-photo-placeholder'), profile.photo, profile.nick);
-  byId('result-partner-badge')?.classList.toggle('hidden', profile.isVerifiedPartner !== true);
 }
 
 function renderModalProfile(profile) {
@@ -180,6 +179,7 @@ function renderModalProfile(profile) {
   byId('modal-profile-join-date').textContent = formatJoinDate(profile.joinDate);
   applyRoleBadge(byId('modal-profile-role'), profile.role);
   setPhoto(byId('modal-profile-photo'), byId('modal-profile-photo-placeholder'), profile.photo, profile.nick);
+  byId('modal-partner-badge')?.classList.toggle('hidden', profile.isVerifiedPartner !== true);
 }
 
 function clearSuggestions() {
@@ -202,10 +202,6 @@ function createSuggestionCard(profile, index) {
       <div class="min-w-0 flex-1">
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           <h4 data-suggestion-nick class="truncate text-sm font-black text-gray-900 sm:text-base">Jogador</h4>
-          <span data-suggestion-partner-badge class="verified-partner-badge hidden inline-flex items-center gap-1.5 rounded-full border border-violet-100 bg-violet-50 px-2 py-0.5 text-[10px] font-black tracking-wider text-violet-700">
-            <i data-lucide="badge-check" class="h-3 w-3"></i>
-            Parceiro da plataforma
-          </span>
         </div>
         <p class="mt-1 flex items-center gap-1.5 text-xs font-bold text-gray-500">
           <i data-lucide="hash" class="h-3.5 w-3.5"></i>
@@ -222,7 +218,6 @@ function createSuggestionCard(profile, index) {
   card.querySelector('[data-suggestion-nick]').textContent = profile.nick || 'Jogador';
   card.querySelector('[data-suggestion-id]').textContent = profile.id || '--';
   card.querySelector('[data-suggestion-guild]').textContent = profile.guildName || 'Sem guilda';
-  card.querySelector('[data-suggestion-partner-badge]')?.classList.toggle('hidden', profile.isVerifiedPartner !== true);
   setPhoto(
     card.querySelector('[data-suggestion-photo]'),
     card.querySelector('[data-suggestion-photo-placeholder]'),
