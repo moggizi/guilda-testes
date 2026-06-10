@@ -165,6 +165,7 @@ function renderProfile(profile) {
   byId('modal-profile-join-date').textContent = formatJoinDate(profile.joinDate);
   applyRoleBadge(byId('modal-profile-role'), profile.role);
   setPhoto(byId('modal-profile-photo'), byId('modal-profile-photo-placeholder'), profile.photo, profile.nick);
+  byId('result-partner-badge')?.classList.toggle('hidden', profile.isVerifiedPartner !== true);
   byId('modal-partner-badge')?.classList.toggle('hidden', profile.isVerifiedPartner !== true);
 
   showState('result');
