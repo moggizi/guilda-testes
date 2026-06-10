@@ -18,12 +18,16 @@ const emptyState = byId('profile-empty-state');
 const loadingState = byId('profile-loading-state');
 const errorState = byId('profile-error-state');
 const resultCard = byId('profile-result-card');
+const suggestionsState = byId('profile-suggestions-state');
+const suggestionsList = byId('profile-suggestions-list');
 const modal = byId('public-profile-modal');
 const backdrop = byId('public-profile-backdrop');
 const sheet = byId('public-profile-sheet');
 const closeButton = byId('public-profile-close');
 
 let currentProfile = null;
+let primaryProfile = null;
+let suggestionProfiles = [];
 let modalCloseTimer = null;
 
 function normalizeRoleKey(value) {
@@ -52,6 +56,15 @@ function showState(state) {
   setVisible(loadingState, state === 'loading');
   setVisible(errorState, state === 'error');
   setVisible(resultCard, state === 'result');
+  if (state !== 'result') clearSuggestions();
+}
+
+function showResults(hasExact, hasSuggestions) {
+  setVisible(emptyState, false);
+  setVisible(loadingState, false);
+  setVisible(errorState, false);
+  setVisible(resultCard, hasExact);
+  setVisible(suggestionsState, hasSuggestions);
 }
 
 function setError(title, message) {
@@ -139,6 +152,7 @@ function publicProfileFromUserDoc(snap) {
   const id = cleanGameId(data.id || data.gameIdMigrated || data.gameId || snap.id) || snap.id;
 
   return {
+    docId: snap.id,
     id,
     nick: String(data.nick || data.nome || data.name || 'Jogador').trim() || 'Jogador',
     bio: String(data.cat || data.bio || '').trim().slice(0, 100),
@@ -150,14 +164,15 @@ function publicProfileFromUserDoc(snap) {
   };
 }
 
-function renderProfile(profile) {
-  currentProfile = profile;
-
+function renderResultCard(profile) {
   byId('result-nick').textContent = profile.nick || 'Jogador';
   byId('result-id').textContent = profile.id || '--';
   byId('result-guild').textContent = profile.guildName || 'Sem guilda';
   setPhoto(byId('result-photo'), byId('result-photo-placeholder'), profile.photo, profile.nick);
+  byId('result-partner-badge')?.classList.toggle('hidden', profile.isVerifiedPartner !== true);
+}
 
+function renderModalProfile(profile) {
   byId('modal-profile-nick').textContent = profile.nick || 'Jogador';
   byId('modal-profile-id').textContent = profile.id || '--';
   byId('modal-profile-bio').textContent = profile.bio || 'Este jogador ainda nao adicionou uma bio.';
@@ -165,10 +180,78 @@ function renderProfile(profile) {
   byId('modal-profile-join-date').textContent = formatJoinDate(profile.joinDate);
   applyRoleBadge(byId('modal-profile-role'), profile.role);
   setPhoto(byId('modal-profile-photo'), byId('modal-profile-photo-placeholder'), profile.photo, profile.nick);
-  byId('result-partner-badge')?.classList.toggle('hidden', profile.isVerifiedPartner !== true);
-  byId('modal-partner-badge')?.classList.toggle('hidden', profile.isVerifiedPartner !== true);
+}
 
-  showState('result');
+function clearSuggestions() {
+  suggestionProfiles = [];
+  if (suggestionsList) suggestionsList.innerHTML = '';
+  setVisible(suggestionsState, false);
+}
+
+function createSuggestionCard(profile, index) {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.dataset.suggestionIndex = String(index);
+  card.className = 'w-full rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-emerald-100 sm:p-4';
+  card.innerHTML = `
+    <div class="flex items-center gap-3">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-emerald-50 text-emerald-600 sm:h-14 sm:w-14">
+        <img data-suggestion-photo src="" alt="" class="hidden h-full w-full rounded-full object-cover">
+        <i data-suggestion-photo-placeholder data-lucide="user-round" class="h-6 w-6"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+          <h4 data-suggestion-nick class="truncate text-sm font-black text-gray-900 sm:text-base">Jogador</h4>
+          <span data-suggestion-partner-badge class="verified-partner-badge hidden inline-flex items-center gap-1.5 rounded-full border border-violet-100 bg-violet-50 px-2 py-0.5 text-[10px] font-black tracking-wider text-violet-700">
+            <i data-lucide="badge-check" class="h-3 w-3"></i>
+            Parceiro da plataforma
+          </span>
+        </div>
+        <p class="mt-1 flex items-center gap-1.5 text-xs font-bold text-gray-500">
+          <i data-lucide="hash" class="h-3.5 w-3.5"></i>
+          <span data-suggestion-id>--</span>
+        </p>
+        <p data-suggestion-guild class="mt-1 truncate text-xs font-semibold text-gray-400">Sem guilda</p>
+      </div>
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-50 text-gray-400">
+        <i data-lucide="chevron-up" class="h-4 w-4"></i>
+      </div>
+    </div>
+  `;
+
+  card.querySelector('[data-suggestion-nick]').textContent = profile.nick || 'Jogador';
+  card.querySelector('[data-suggestion-id]').textContent = profile.id || '--';
+  card.querySelector('[data-suggestion-guild]').textContent = profile.guildName || 'Sem guilda';
+  card.querySelector('[data-suggestion-partner-badge]')?.classList.toggle('hidden', profile.isVerifiedPartner !== true);
+  setPhoto(
+    card.querySelector('[data-suggestion-photo]'),
+    card.querySelector('[data-suggestion-photo-placeholder]'),
+    profile.photo,
+    profile.nick
+  );
+  return card;
+}
+
+function renderSuggestions(profiles) {
+  suggestionProfiles = profiles;
+  if (!suggestionsList) return;
+  suggestionsList.innerHTML = '';
+  profiles.forEach((profile, index) => {
+    suggestionsList.appendChild(createSuggestionCard(profile, index));
+  });
+}
+
+function renderSearchResults({ exact, suggestions }) {
+  primaryProfile = exact || null;
+  currentProfile = exact || null;
+
+  if (exact) {
+    renderResultCard(exact);
+    renderModalProfile(exact);
+  }
+
+  renderSuggestions(suggestions);
+  showResults(!!exact, suggestions.length > 0);
   initIcons();
 }
 
@@ -192,11 +275,43 @@ function errorMessage(code) {
   return messages[code] || ['Erro na busca', 'Nao foi possivel carregar esse perfil agora.'];
 }
 
-async function searchProfile(gameId) {
-  if (!auth.currentUser) throw new Error('auth-required');
+function makeOneDigitShorterIds(gameId) {
+  const variants = new Set();
+  for (let index = 0; index < gameId.length; index += 1) {
+    const variant = `${gameId.slice(0, index)}${gameId.slice(index + 1)}`;
+    if (variant.length >= 3) variants.add(variant);
+  }
+  variants.delete(gameId);
+  return Array.from(variants);
+}
+
+async function fetchProfile(gameId) {
   const snap = await getDoc(doc(db, 'users', gameId));
-  if (!snap.exists()) throw new Error('profile-not-found');
-  return publicProfileFromUserDoc(snap);
+  return snap.exists() ? publicProfileFromUserDoc(snap) : null;
+}
+
+async function searchProfiles(gameId) {
+  if (!auth.currentUser) throw new Error('auth-required');
+
+  const variantIds = makeOneDigitShorterIds(gameId);
+  const [exact, suggestionResults] = await Promise.all([
+    fetchProfile(gameId),
+    Promise.all(variantIds.map((variantId) => fetchProfile(variantId)))
+  ]);
+
+  const exactKey = exact ? String(exact.docId || exact.id || '') : '';
+  const suggestionsByKey = new Map();
+  suggestionResults.forEach((profile) => {
+    if (!profile) return;
+    const key = String(profile.docId || profile.id || '');
+    if (!key || key === exactKey || key === gameId) return;
+    if (!suggestionsByKey.has(key)) suggestionsByKey.set(key, profile);
+  });
+
+  return {
+    exact,
+    suggestions: Array.from(suggestionsByKey.values())
+  };
 }
 
 async function handleSearch(event) {
@@ -215,8 +330,12 @@ async function handleSearch(event) {
   showState('loading');
 
   try {
-    const profile = await searchProfile(gameId);
-    renderProfile(profile);
+    const results = await searchProfiles(gameId);
+    if (!results.exact && results.suggestions.length === 0) {
+      throw new Error('profile-not-found');
+    }
+
+    renderSearchResults(results);
     const url = new URL(window.location.href);
     url.searchParams.set('id', gameId);
     window.history.replaceState({}, '', url);
@@ -258,7 +377,7 @@ function closeProfileModal(immediate = false) {
 
   const finish = () => {
     modal.classList.add('hidden');
-    if (!immediate) resultCard.focus();
+    if (!immediate && !resultCard.classList.contains('hidden')) resultCard.focus();
   };
 
   if (immediate) finish();
@@ -271,7 +390,25 @@ function bindEvents() {
     const clean = cleanGameId(input.value);
     if (input.value !== clean) input.value = clean;
   });
-  resultCard.addEventListener('click', openProfileModal);
+  resultCard.addEventListener('click', () => {
+    if (primaryProfile) {
+      currentProfile = primaryProfile;
+      renderModalProfile(primaryProfile);
+      initIcons();
+    }
+    openProfileModal();
+  });
+  suggestionsList?.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const card = target?.closest('[data-suggestion-index]');
+    if (!card) return;
+    const profile = suggestionProfiles[Number(card.dataset.suggestionIndex)];
+    if (!profile) return;
+    currentProfile = profile;
+    renderModalProfile(profile);
+    initIcons();
+    openProfileModal();
+  });
   backdrop.addEventListener('click', () => closeProfileModal());
   closeButton.addEventListener('click', () => closeProfileModal());
   byId('btn-logout')?.addEventListener('click', logout);
