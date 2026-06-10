@@ -3,7 +3,7 @@
 
 export const CACHE_DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 export const GUILD_CONTEXT_CACHE_KEY = 'guildCtx_cache_v1';
-export const GUILD_CONTEXT_CACHE_VERSION = 7;
+export const GUILD_CONTEXT_CACHE_VERSION = 8;
 export const CEO_CACHE_KEY = 'ceo_cache_v1';
 export const SIDEBAR_PROFILE_CACHE_PREFIX = 'sidebarProfile_v1_';
 

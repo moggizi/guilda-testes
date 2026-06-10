@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <script src="/theme.js"></script>
+  <script src="/app-loader.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Busque perfis públicos de jogadores pelo ID no Guilda HUB." />
+  <title>Buscar perfil - Guilda HUB</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-50/80">
+  <div id="app-boot-loader" class="app-boot-loader" role="status" aria-live="polite">
+    <div class="app-boot-loader__box">
+      <div class="app-boot-loader__mark"></div>
+      <div class="app-boot-loader__text">Carregando</div>
+    </div>
+  </div>
+
+  <div class="flex min-h-screen">
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
+
+    <aside id="sidebar" class="fixed top-0 left-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transform -translate-x-full transition-transform duration-300 lg:translate-x-0 flex flex-col">
+      <div class="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+        <div class="flex items-center gap-3">
+          <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--nav">
+          <div>
+            <h1 class="font-bold text-gray-900 text-lg leading-tight">Guilda e eventos</h1>
+            <p id="vip-label" class="text-xs text-gray-400">Guilda: <span class="font-bold">carregando...</span></p>
+          </div>
+        </div>
+      </div>
+
+      <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
+        <a href="/dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="house" class="w-5 h-5"></i> Painel
+        </a>
+        <a href="/perfil-guilda" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="bar-chart-3" class="w-5 h-5"></i> Estatísticas
+        </a>
+        <a href="/membros" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="users" class="w-5 h-5"></i> Membros
+        </a>
+        <a href="/lines" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="layers" class="w-5 h-5"></i> Lines / Equipes
+        </a>
+        <a href="/ajustes" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="settings-2" class="w-5 h-5"></i> Ajustes
+        </a>
+        <a href="/upgrade" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="sparkles" class="w-5 h-5"></i> Assinatura
+        </a>
+        <a href="/recrutar" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="users-round" class="w-5 h-5"></i> Recrutamento
+        </a>
+        <a href="/admin" class="only-leader w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="settings" class="w-5 h-5"></i> Admin
+        </a>
+        <a id="nav-support-link" href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="messages-square" class="w-5 h-5"></i> Suporte &amp; Sugestão
+        </a>
+        <a id="nav-chefe" href="/chefe" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+          <i data-lucide="crown" class="w-5 h-5"></i> Chefe
+        </a>
+      </nav>
+
+      <div class="shrink-0 p-4 border-t border-gray-100 bg-white">
+        <a href="/perfil" class="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50 hover:bg-emerald-100 transition-colors">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-emerald-200/50 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden border border-emerald-300">
+              <img id="sidebar-avatar" src="" alt="" class="w-full h-full object-cover hidden">
+              <i id="sidebar-avatar-icon" data-lucide="user" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <p id="user-role" class="text-sm font-bold">Meu Perfil</p>
+              <p id="user-email" class="text-[10px] opacity-80 truncate w-28">Configurações</p>
+            </div>
+          </div>
+        </a>
+        <button id="btn-logout" class="w-full mt-2 flex items-center justify-center gap-2 py-2 text-sm font-semibold text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+          <i data-lucide="log-out" class="w-4 h-4"></i> Sair
+        </button>
+      </div>
+    </aside>
+
+    <main class="flex-1 min-w-0 lg:ml-72">
+      <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
+        <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
+          <button id="mobile-menu-btn" type="button" class="lg:hidden p-2 rounded-xl hover:bg-gray-100 text-gray-500" aria-label="Abrir menu">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
+          <div>
+            <h1 class="text-lg font-semibold text-gray-900 leading-none">Buscar perfil</h1>
+            <p class="hidden sm:block text-xs text-gray-400 mt-1">Encontre jogadores pelo ID</p>
+          </div>
+        </div>
+      </header>
+
+      <div class="w-full max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
+        <section class="relative overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-sm">
+          <div class="absolute inset-x-0 top-0 h-36 bg-gradient-to-br from-emerald-500 via-green-500 to-teal-600"></div>
+          <div class="relative p-5 sm:p-8">
+            <div class="max-w-2xl pt-3 text-white">
+              <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/15 px-3 py-1.5 text-xs font-bold backdrop-blur">
+                <i data-lucide="globe-2" class="h-4 w-4"></i>
+                Perfis públicos
+              </span>
+              <h2 class="mt-4 text-2xl font-black sm:text-3xl">Quem você está procurando?</h2>
+              <p class="mt-2 max-w-xl text-sm font-medium text-emerald-50/90">
+                Digite o ID do jogador para ver seu perfil, guilda, cargo e data de entrada.
+              </p>
+            </div>
+
+            <form id="profile-search-form" class="relative mt-8 rounded-2xl border border-gray-100 bg-white p-3 shadow-xl shadow-emerald-950/10 sm:p-4">
+              <label for="profile-id-input" class="mb-2 block text-xs font-black uppercase tracking-wider text-gray-500">ID do jogador</label>
+              <div class="flex flex-col gap-2 sm:flex-row">
+                <div class="relative flex-1">
+                  <i data-lucide="hash" class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400"></i>
+                  <input id="profile-id-input" name="id" type="text" inputmode="numeric" autocomplete="off" maxlength="24" placeholder="Ex: 123456789" class="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-12 pr-4 text-base font-bold text-gray-900 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-50" />
+                </div>
+                <button id="profile-search-button" type="submit" class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3.5 text-sm font-black text-white shadow-sm transition hover:bg-slate-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60">
+                  <i data-lucide="search" class="h-5 w-5"></i>
+                  <span>Buscar</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="mt-6" aria-live="polite">
+          <div id="profile-empty-state" class="rounded-3xl border border-dashed border-gray-200 bg-white/70 px-6 py-12 text-center">
+            <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+              <i data-lucide="contact-round" class="h-7 w-7"></i>
+            </div>
+            <h3 class="mt-4 text-base font-black text-gray-900">O perfil aparecerá aqui</h3>
+            <p class="mx-auto mt-1 max-w-sm text-sm text-gray-500">Use o ID exato do jogador cadastrado na Guilda HUB.</p>
+          </div>
+
+          <div id="profile-loading-state" class="hidden rounded-3xl border border-gray-100 bg-white px-6 py-12 text-center shadow-sm">
+            <i data-lucide="loader-2" class="mx-auto h-8 w-8 animate-spin text-emerald-500"></i>
+            <p class="mt-4 text-sm font-bold text-gray-600">Buscando perfil...</p>
+          </div>
+
+          <div id="profile-error-state" class="hidden rounded-3xl border border-amber-200 bg-amber-50 px-6 py-8 text-center">
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+              <i data-lucide="user-round-x" class="h-6 w-6"></i>
+            </div>
+            <h3 id="profile-error-title" class="mt-4 text-base font-black text-amber-900">Perfil não encontrado</h3>
+            <p id="profile-error-message" class="mx-auto mt-1 max-w-md text-sm text-amber-800">Confira o ID e tente novamente.</p>
+          </div>
+
+          <button id="profile-result-card" type="button" class="hidden w-full rounded-3xl border border-gray-100 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-emerald-100 sm:p-5">
+            <div class="flex items-center gap-4">
+              <div class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-600 sm:h-20 sm:w-20">
+                <img id="result-photo" src="" alt="" class="hidden h-full w-full object-cover">
+                <i id="result-photo-placeholder" data-lucide="user-round" class="h-8 w-8"></i>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 id="result-nick" class="truncate text-lg font-black text-gray-900">Jogador</h3>
+                  <span id="result-role" class="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">Membro</span>
+                </div>
+                <p class="mt-1 flex items-center gap-1.5 text-sm font-bold text-gray-500">
+                  <i data-lucide="hash" class="h-4 w-4"></i>
+                  <span id="result-id">--</span>
+                </p>
+                <p id="result-guild" class="mt-2 truncate text-xs font-semibold text-gray-400">Sem guilda</p>
+              </div>
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-50 text-gray-400">
+                <i data-lucide="chevron-up" class="h-5 w-5"></i>
+              </div>
+            </div>
+          </button>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <footer class="border-t border-slate-200 bg-white py-10 lg:ml-72">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="mb-8 flex items-center justify-center gap-2">
+        <img src="/assets/logo.png" alt="Logo" class="app-logo app-logo--footer h-10 w-10">
+        <span class="text-xl font-bold tracking-wider text-slate-900">GUILDA<span class="text-green-500">HUB</span></span>
+      </div>
+      <div class="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm font-semibold text-slate-500">
+        <a href="https://instagram.com/guildahub" target="_blank" rel="noopener noreferrer" class="transition-colors hover:text-green-500">Instagram</a>
+        <a href="https://tiktok.com/@guildahub" target="_blank" rel="noopener noreferrer" class="transition-colors hover:text-green-500">TikTok</a>
+        <a href="https://chat.whatsapp.com/FsBRk3VNaGm29UmXldwaOE?mode=hq2tcli" target="_blank" rel="noopener noreferrer" class="transition-colors hover:text-green-500">WhatsApp</a>
+      </div>
+      <div class="mt-8 border-t border-slate-200 pt-6 text-center text-sm text-slate-500">
+        © 2026 Guilda HUB. Todos os direitos reservados.
+      </div>
+    </div>
+  </footer>
+
+  <div id="public-profile-modal" class="fixed inset-0 z-[90] hidden" aria-hidden="true">
+    <button id="public-profile-backdrop" type="button" class="absolute inset-0 bg-slate-950/60 opacity-0 backdrop-blur-sm transition-opacity duration-300" aria-label="Fechar perfil"></button>
+    <section id="public-profile-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-profile-nick" class="absolute inset-x-0 bottom-0 mx-auto max-h-[92vh] w-full max-w-2xl translate-y-full overflow-y-auto rounded-t-[2rem] border border-gray-100 bg-white shadow-2xl transition-transform duration-300">
+      <div class="sticky top-0 z-20 flex justify-center bg-white/90 pb-2 pt-3 backdrop-blur">
+        <span class="h-1.5 w-12 rounded-full bg-gray-200"></span>
+        <button id="public-profile-close" type="button" class="absolute right-4 top-3 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:bg-gray-50" aria-label="Fechar perfil">
+          <i data-lucide="x" class="h-5 w-5"></i>
+        </button>
+      </div>
+
+      <div class="relative h-36 overflow-hidden bg-gradient-to-br from-emerald-500 via-green-500 to-teal-600 sm:h-44">
+        <div class="absolute -right-12 -top-16 h-48 w-48 rounded-full bg-white/10"></div>
+        <div class="absolute -bottom-20 -left-10 h-52 w-52 rounded-full bg-slate-950/10"></div>
+      </div>
+
+      <div class="relative px-5 pb-8 sm:px-8">
+        <div class="-mt-14 flex items-end justify-between gap-4 sm:-mt-16">
+          <div class="flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-[6px] border-white bg-emerald-50 text-emerald-600 shadow-lg sm:h-32 sm:w-32">
+            <img id="modal-profile-photo" src="" alt="" class="hidden h-full w-full object-cover">
+            <i id="modal-profile-photo-placeholder" data-lucide="user-round" class="h-12 w-12"></i>
+          </div>
+          <span id="modal-profile-role" class="mb-2 inline-flex rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">Membro</span>
+        </div>
+
+        <div class="mt-4">
+          <h2 id="modal-profile-nick" class="text-2xl font-black text-gray-900 sm:text-3xl">Jogador</h2>
+          <p class="mt-1 flex items-center gap-1.5 text-sm font-bold text-gray-500">
+            <i data-lucide="hash" class="h-4 w-4"></i>
+            <span id="modal-profile-id">--</span>
+          </p>
+        </div>
+
+        <div class="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+          <p class="text-[11px] font-black uppercase tracking-wider text-gray-400">Bio</p>
+          <p id="modal-profile-bio" class="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-gray-700">Este jogador ainda não adicionou uma bio.</p>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <i data-lucide="shield" class="h-5 w-5"></i>
+            </div>
+            <p class="mt-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Guilda atual</p>
+            <p id="modal-profile-guild" class="mt-1 break-words text-sm font-black text-gray-900">Sem guilda</p>
+          </div>
+          <div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <i data-lucide="calendar-days" class="h-5 w-5"></i>
+            </div>
+            <p class="mt-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Entrada na guilda</p>
+            <p id="modal-profile-join-date" class="mt-1 text-sm font-black text-gray-900">Não informada</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="/buscar_perfil1/buscar_perfil1.js"></script>
+</body>
+</html>

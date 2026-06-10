@@ -1617,6 +1617,7 @@ function __isProtectedRouteAllowedByCachedCtx(ctx, isLoginPage) {
     const isLinesPage = path.endsWith("/lines") || path.endsWith("/lines.html") || path.includes("lines.html");
     const isUpgradePage = path.endsWith("/upgrade") || path.endsWith("/upgrade.html") || path.includes("upgrade.html");
     const isChefePage = path.endsWith("/chefe") || path.endsWith("/chefe.html") || path.includes("chefe.html");
+    const isProfileSearchPage = path.endsWith("/buscar_perfil1") || path.endsWith("/buscar_perfil1.html") || path.includes("/buscar_perfil1/");
     const isRecruitmentPage =
       path.endsWith("/eventos") || path.endsWith("/eventos.html") || path.includes("eventos.html") ||
       path.endsWith("/recrutar") || path.endsWith("/recrutar.html") || path.includes("recrutar.html") ||
@@ -1634,7 +1635,7 @@ function __isProtectedRouteAllowedByCachedCtx(ctx, isLoginPage) {
 
     if (role === "Admin") {
       if (isAdminPage) return { allowed: false, redirectTo: '/dashboard' };
-      if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage && !isRecruitmentPage && !isUpgradePage) {
+      if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage && !isRecruitmentPage && !isUpgradePage && !isProfileSearchPage) {
         return { allowed: false, redirectTo: '/dashboard' };
       }
     }
@@ -1985,6 +1986,7 @@ try {
       const isLinesPage = path.endsWith("/lines") || path.endsWith("/lines.html") || path.includes("lines.html");
       const isUpgradePage = path.endsWith("/upgrade") || path.endsWith("/upgrade.html") || path.includes("upgrade.html");
       const isChefePage = path.endsWith("/chefe") || path.endsWith("/chefe.html") || path.includes("chefe.html");
+      const isProfileSearchPage = path.endsWith("/buscar_perfil1") || path.endsWith("/buscar_perfil1.html") || path.includes("/buscar_perfil1/");
       const isRecruitmentPage =
         path.endsWith("/eventos") || path.endsWith("/eventos.html") || path.includes("eventos.html") ||
         path.endsWith("/recrutar") || path.endsWith("/recrutar.html") || path.includes("recrutar.html") ||
@@ -2041,7 +2043,7 @@ try {
           resolve(null);
           return;
         }
-        if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage && !isRecruitmentPage && !isUpgradePage) {
+        if (!isDashboardPage && !isMembersPage && !isSettingsPage && !isLinesPage && !isRecruitmentPage && !isUpgradePage && !isProfileSearchPage) {
           window.location.href = "/dashboard";
           resolve(null);
           return;
@@ -2161,35 +2163,12 @@ export function applyVipUiAndGates(tierRaw) {
   } catch (_) {}
 })();
 
-function __ensurePlayerAlertsNavLink() {
-  const sidebar = document.getElementById("sidebar");
-  const nav = sidebar?.querySelector("nav");
-  if (!nav || nav.querySelector('[data-player-alerts-nav="true"]')) return;
-
-  const path = String(window.location.pathname || "").toLowerCase();
-  const active = path.includes("/alertagd") || path.includes("/alertajg");
-  const linesLink = nav.querySelector('a[href="/lines"], a[href="/lines/"], a[href="/lines.html"]');
-  if (!linesLink) return;
-  const link = document.createElement("a");
-
-  link.href = "/alertagd";
-  link.dataset.playerAlertsNav = "true";
-  link.className = active
-    ? "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-100"
-    : "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors";
-  link.innerHTML = '<i data-lucide="shield-alert" class="w-5 h-5"></i><span>Alertas de jogadores</span>';
-
-  linesLink.insertAdjacentElement("afterend", link);
-  try { initIcons(); } catch (_) {}
-}
-
 export function setupSidebar() {
   const sidebar = document.getElementById("sidebar");
   const overlay = document.getElementById("sidebar-overlay");
   const btn = document.getElementById("mobile-menu-btn");
 
   try { __applyCachedSidebarNow(); } catch (_) {}
-  try { __ensurePlayerAlertsNavLink(); } catch (_) {}
 
   if (!sidebar || !overlay || !btn) return;
 

@@ -32,18 +32,14 @@
     { "source": "/jogador", "destination": "/jogador.html" },
     { "source": "/jogador.html", "destination": "/jogador.html" },
 
-    { "source": "/alertagd", "destination": "/alertagd/index.html" },
-    { "source": "/alertagd.html", "destination": "/alertagd/index.html" },
-    { "source": "/alertajg", "destination": "/alertajg/index.html" },
-    { "source": "/alertajg.html", "destination": "/alertajg/index.html" },
-    { "source": "/alertasl", "destination": "/alertasl/index.html" },
-    { "source": "/alertasl.html", "destination": "/alertasl/index.html" },
-
     { "source": "/perfil", "destination": "/perfil.html" },
     { "source": "/perfil.html", "destination": "/perfil.html" },
 
     { "source": "/perfil-guilda", "destination": "/perfil-guilda.html" },
     { "source": "/perfil-guilda.html", "destination": "/perfil-guilda.html" },
+
+    { "source": "/buscar_perfil1", "destination": "/buscar_perfil1/index.html" },
+    { "source": "/buscar_perfil1.html", "destination": "/buscar_perfil1/index.html" },
 
     { "source": "/eventos", "destination": "/eventos.html" },
     { "source": "/eventos.html", "destination": "/eventos.html" },

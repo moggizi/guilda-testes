@@ -13,8 +13,8 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
 
     function tierRank(t){
       const s = (t || 'free').toString().toLowerCase().trim();
-      if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life')) return 2;
-      if (s === 'pro' || s === 'business' || s.includes('business') || s.includes('buss')) return 2;
+      if (s === 'vitalicio' || s === 'vitalício' || s.includes('vital') || s.includes('life') || s.includes('parceiro') || s.includes('partner')) return 2;
+      if (s === 'pro' || s === 'business' || s === 'ultra' || s.includes('ultra') || s.includes('business') || s.includes('buss')) return 2;
       if (s === 'plus' || s.includes('plus')) return 1;
       return 0;
     }
@@ -53,6 +53,233 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
 
     let activeMembersCacheKey = keyMembers();
     let activeLinesCacheKey = keyLines();
+    const LINES_JSON_IMPORT_MAX_BYTES = 3 * 1024 * 1024;
+
+    function downloadJsonFile(filename, payload) {
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function readJsonFile(file, maxBytes = LINES_JSON_IMPORT_MAX_BYTES) {
+      return new Promise((resolve, reject) => {
+        if (!file) {
+          reject(new Error('Selecione um arquivo JSON.'));
+          return;
+        }
+        const isJson = file.type === 'application/json' || /\.json$/i.test(file.name || '');
+        if (!isJson) {
+          reject(new Error('O arquivo precisa estar no formato .json.'));
+          return;
+        }
+        if (file.size > maxBytes) {
+          reject(new Error('Esse JSON esta grande demais. Exporte novamente somente os dados desta tela.'));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          try { resolve(JSON.parse(String(reader.result || '{}'))); }
+          catch (_) { reject(new Error('Nao foi possivel ler o JSON. Verifique se o arquivo nao esta corrompido.')); }
+        };
+        reader.onerror = () => reject(new Error('Nao foi possivel abrir o arquivo.'));
+        reader.readAsText(file, 'utf-8');
+      });
+    }
+
+    function safeBackupDocId(value, fallback) {
+      const clean = String(value || '').trim();
+      if (!clean || clean.includes('/')) return fallback;
+      return clean.slice(0, 120);
+    }
+
+    function toBackupNumber(value, fallback = 0) {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < 0) return fallback;
+      return Math.floor(n);
+    }
+
+    function sanitizeLineMemberSnap(value) {
+      if (typeof value === 'string') {
+        const id = value.trim();
+        return id ? { id, visibleId: id, nick: '' } : null;
+      }
+      if (!value || typeof value !== 'object') return null;
+      const id = String(value.id || value.visibleId || value.playerId || value.uid || '').trim();
+      if (!id) return null;
+      return {
+        id,
+        nick: String(value.nick || value.nickname || '').trim().slice(0, 80),
+        visibleId: String(value.visibleId || value.playerId || value.uid || id).trim().slice(0, 80),
+        whatsapp: String(value.whatsapp || '').trim().slice(0, 32),
+        guildWar: value.guildWar ?? value.guerra ?? null,
+        guildWarMeta: toBackupNumber(value.guildWarMeta ?? value.pontosGG ?? value.gg, 0),
+        weeklyMeta: value.weeklyMeta ?? null,
+        weeklyMetaValue: toBackupNumber(value.weeklyMetaValue ?? value.pontosHonra ?? value.honra, 0),
+        hasTag: value.hasTag ?? null,
+        playMode: Array.isArray(value.playMode)
+          ? value.playMode.map(v => String(v || '').trim()).filter(Boolean).slice(0, 8)
+          : (value.playMode != null ? String(value.playMode || '').trim().slice(0, 80) : null)
+      };
+    }
+
+    function sanitizeLineForBackup(line) {
+      const memberSnaps = Array.isArray(line?.members)
+        ? line.members.map(sanitizeLineMemberSnap).filter(Boolean)
+        : [];
+      const idsFromMembers = memberSnaps.map(m => m.id).filter(Boolean);
+      const idsFromField = Array.isArray(line?.memberIds)
+        ? line.memberIds.map(v => String(v || '').trim()).filter(Boolean)
+        : [];
+      const memberIds = Array.from(new Set([...idsFromField, ...idsFromMembers])).slice(0, 10);
+      return {
+        id: String(line?.id || '').trim(),
+        name: String(line?.name || '').trim(),
+        number: toBackupNumber(line?.number, 0),
+        memberIds,
+        members: memberSnaps.slice(0, 10)
+      };
+    }
+
+    function sanitizeImportedLine(raw, index) {
+      if (!raw || typeof raw !== 'object') return null;
+      const fallbackId = `line-${Date.now()}-${index + 1}`;
+      const id = safeBackupDocId(raw.id || raw.lineId || raw.docId, fallbackId);
+      const number = toBackupNumber(raw.number ?? raw.numero, index + 1);
+      const name = String(raw.name || raw.nome || `Line ${number || index + 1}`).trim().slice(0, 80);
+      const rawMembers = Array.isArray(raw.members) ? raw.members : [];
+      const memberSnaps = rawMembers.map(sanitizeLineMemberSnap).filter(Boolean).slice(0, 10);
+      const idsFromMembers = memberSnaps.map(m => m.id).filter(Boolean);
+      const idsFromField = Array.isArray(raw.memberIds)
+        ? raw.memberIds.map(v => String(v || '').trim()).filter(Boolean)
+        : [];
+      const memberIds = Array.from(new Set([...idsFromField, ...idsFromMembers])).slice(0, 10);
+      const finalMembers = memberSnaps.length
+        ? memberSnaps
+        : memberIds.map(memberId => sanitizeLineMemberSnap(getMemberById(memberId) || { id: memberId, visibleId: memberId })).filter(Boolean);
+      if (!id || !name) return null;
+      return { id, name, number, memberIds, members: finalMembers.slice(0, 10) };
+    }
+
+    function mountLinesJsonBackupPanel() {
+      if (document.getElementById('lines-json-backup-panel')) return;
+      const list = document.getElementById('lines-list');
+      const parent = list?.parentElement;
+      if (!parent) return;
+
+      const panel = document.createElement('section');
+      panel.id = 'lines-json-backup-panel';
+      panel.className = 'mb-4 rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm';
+      panel.innerHTML = `
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                <i data-lucide="file-json" class="w-5 h-5"></i>
+              </span>
+              <div>
+                <h3 class="text-sm font-extrabold text-gray-900">Backup em JSON das lines</h3>
+                <p class="text-xs text-gray-500 mt-0.5">Baixe uma copia das lines desta guilda ou importe um JSON gerado por esta mesma tela.</p>
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-500 mt-3 leading-relaxed">
+              A importacao adiciona ou atualiza lines com o mesmo ID. Ela nao apaga lines que ja existem e nao aceita arquivo de outra tela, outra guilda ou muito grande.
+            </p>
+          </div>
+          <div class="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+            <button id="btn-export-lines-json" type="button" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50">
+              <i data-lucide="download" class="w-4 h-4"></i> Exportar JSON
+            </button>
+            <button id="btn-import-lines-json" type="button" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">
+              <i data-lucide="upload" class="w-4 h-4"></i> Importar JSON
+            </button>
+            <input id="input-import-lines-json" type="file" accept=".json,application/json" class="hidden" />
+          </div>
+        </div>
+      `;
+      parent.insertBefore(panel, list);
+
+      document.getElementById('btn-export-lines-json')?.addEventListener('click', exportLinesJson);
+      document.getElementById('btn-import-lines-json')?.addEventListener('click', () => {
+        document.getElementById('input-import-lines-json')?.click();
+      });
+      document.getElementById('input-import-lines-json')?.addEventListener('change', async (event) => {
+        const input = event.currentTarget;
+        try { await importLinesJson(input.files?.[0]); }
+        finally { if (input) input.value = ''; }
+      });
+      initIcons();
+    }
+
+    function exportLinesJson() {
+      if (!guildId) {
+        showToast('error', 'A guilda ainda nao foi carregada.');
+        return;
+      }
+      const payload = {
+        app: 'guilda-hub',
+        screen: 'lines',
+        version: 1,
+        guildId,
+        guildName: currentGuildLineDisplayName(),
+        collection: currentLinesCollectionName(),
+        exportedAt: new Date().toISOString(),
+        data: {
+          goals: lineGoals || {},
+          lines: (allLines || []).map(sanitizeLineForBackup)
+        }
+      };
+      downloadJsonFile(`guilda-lines-${guildId}-${currentLinesCollectionName()}.json`, payload);
+      showToast('success', 'JSON das lines baixado.');
+    }
+
+    async function importLinesJson(file) {
+      if (!guildId) {
+        showToast('error', 'A guilda ainda nao foi carregada.');
+        return;
+      }
+      try {
+        const payload = await readJsonFile(file);
+        if (!payload || payload.screen !== 'lines' || !Array.isArray(payload?.data?.lines)) {
+          throw new Error('Esse arquivo nao parece ser um backup da tela de lines.');
+        }
+        if (payload.guildId && String(payload.guildId) !== String(guildId)) {
+          throw new Error('Esse JSON foi gerado para outra guilda.');
+        }
+        if (payload.collection && String(payload.collection) !== currentLinesCollectionName()) {
+          throw new Error('Esse JSON pertence a outra lista de lines. Troque a guilda selecionada e tente novamente.');
+        }
+        const imported = payload.data.lines.map(sanitizeImportedLine).filter(Boolean);
+        if (!imported.length) throw new Error('Nao encontrei nenhuma line valida dentro desse JSON.');
+
+        const ok = window.confirm(`Importar ${imported.length} line(s)? Lines com o mesmo ID serao atualizadas, mas nada sera apagado.`);
+        if (!ok) return;
+
+        const collectionName = currentLinesCollectionName();
+        for (const line of imported) {
+          const { id, ...data } = line;
+          await setDoc(doc(db, 'guildas', guildId, collectionName, id), {
+            ...data,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        }
+
+        const merged = new Map((allLines || []).map(item => [String(item.id || ''), item]));
+        imported.forEach((line) => merged.set(String(line.id), { ...(merged.get(String(line.id)) || {}), ...line, updatedAt: Date.now() }));
+        allLines = Array.from(merged.values()).sort((a, b) => toBackupNumber(a.number, 0) - toBackupNumber(b.number, 0));
+        saveCached(allLines);
+        updateLinesView(allLines);
+        showToast('success', 'JSON importado nas lines.');
+      } catch (err) {
+        console.error(err);
+        showToast('error', err?.message || 'Nao foi possivel importar o JSON.');
+      }
+    }
 
     function readMembersCacheForCurrentGuild() {
       const keys = secondaryLines()?.memberCacheKeys?.(guildId) || [keyMembers()];
@@ -1247,6 +1474,7 @@ import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getGuildCont
     });
 
     // 1) Renderiza cache imediatamente (sem piscar)
+    mountLinesJsonBackupPanel();
     loadCached();
 
     // 2) Auth e sync em background

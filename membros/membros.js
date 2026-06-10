@@ -1,11 +1,5 @@
-import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMemberTagConfig, getGuildGoalsConfig, getGuildContext, getGuildMultiConfig, getVipTier } from '../logic.js';
+import { checkAuth, setupSidebar, initIcons, logout, db, showToast, getMemberTagConfig, getGuildGoalsConfig, getGuildContext, getGuildMultiConfig, getVipTier } from '../logic.js';
     import { collection, getDocs, setDoc, doc, deleteDoc, serverTimestamp, query, where, limit, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import {
-      PLAYER_ALERT_CUSTOM_REASON,
-      PlayerAlertError,
-      registerPlayerAlert,
-      resolveAlertReporter
-    } from '../alertas-service.js';
 
     // CARREGA OS ÍCONES IMEDIATAMENTE INDEPENDENTE DE TER DADOS!
     setupSidebar();
@@ -481,7 +475,6 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
     let pendingEdits = {}; 
     let currentZeroAction = ''; 
     let currentDeleteId = ''; 
-    let removeAlertReporterCache = null;
     let currentMoveId = ''; 
     let currentMoveTargetSlot = null; 
     let currentWarningId = '';
@@ -1712,127 +1705,6 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
       initIcons();
     }
 
-    function __resetRemoveAlertUi() {
-      const enabledEl = document.getElementById('remove-register-alert');
-      const fieldsEl = document.getElementById('remove-alert-fields');
-      const reasonEl = document.getElementById('remove-alert-reason');
-      const customWrapEl = document.getElementById('remove-alert-custom-wrap');
-      const customEl = document.getElementById('remove-alert-custom-reason');
-      const countEl = document.getElementById('remove-alert-custom-count');
-      const reasonLabelEl = document.getElementById('remove-alert-reason-label');
-      const reasonMenuEl = document.getElementById('remove-alert-reason-menu');
-      if (enabledEl) enabledEl.checked = false;
-      document.getElementById('remove-alert-toggle-dot')?.classList.remove('translate-x-5');
-      fieldsEl?.classList.add('hidden');
-      if (reasonEl) reasonEl.value = '';
-      if (reasonLabelEl) reasonLabelEl.textContent = 'Selecione um motivo';
-      reasonMenuEl?.classList.add('hidden');
-      document.getElementById('remove-alert-reason-button')?.setAttribute('aria-expanded', 'false');
-      reasonMenuEl?.querySelectorAll('[data-remove-alert-reason]').forEach((button) => button.classList.remove('is-selected'));
-      customWrapEl?.classList.add('hidden');
-      if (customEl) customEl.value = '';
-      if (countEl) countEl.textContent = '0/50';
-    }
-
-    window.toggleRemoveAlertFields = () => {
-      const enabled = document.getElementById('remove-register-alert')?.checked === true;
-      document.getElementById('remove-alert-toggle-dot')?.classList.toggle('translate-x-5', enabled);
-      document.getElementById('remove-alert-fields')?.classList.toggle('hidden', !enabled);
-      if (!enabled) {
-        const reasonEl = document.getElementById('remove-alert-reason');
-        const customWrapEl = document.getElementById('remove-alert-custom-wrap');
-        const customEl = document.getElementById('remove-alert-custom-reason');
-        const countEl = document.getElementById('remove-alert-custom-count');
-        if (reasonEl) reasonEl.value = '';
-        const reasonLabelEl = document.getElementById('remove-alert-reason-label');
-        if (reasonLabelEl) reasonLabelEl.textContent = 'Selecione um motivo';
-        document.getElementById('remove-alert-reason-menu')?.classList.add('hidden');
-        customWrapEl?.classList.add('hidden');
-        if (customEl) customEl.value = '';
-        if (countEl) countEl.textContent = '0/50';
-      }
-      initIcons();
-    };
-
-    window.toggleRemoveAlertReasonMenu = () => {
-      const menu = document.getElementById('remove-alert-reason-menu');
-      const button = document.getElementById('remove-alert-reason-button');
-      const open = menu?.classList.contains('hidden');
-      menu?.classList.toggle('hidden', !open);
-      button?.setAttribute('aria-expanded', open ? 'true' : 'false');
-    };
-
-    window.selectRemoveAlertReason = (value) => {
-      const reason = String(value || '').trim();
-      const input = document.getElementById('remove-alert-reason');
-      const label = document.getElementById('remove-alert-reason-label');
-      const menu = document.getElementById('remove-alert-reason-menu');
-      if (input) input.value = reason;
-      if (label) label.textContent = reason || 'Selecione um motivo';
-      menu?.classList.add('hidden');
-      document.getElementById('remove-alert-reason-button')?.setAttribute('aria-expanded', 'false');
-      menu?.querySelectorAll('[data-remove-alert-reason]').forEach((button) => {
-        button.classList.toggle('is-selected', button.dataset.removeAlertReason === reason);
-      });
-      const custom = reason === PLAYER_ALERT_CUSTOM_REASON;
-      document.getElementById('remove-alert-custom-wrap')?.classList.toggle('hidden', !custom);
-      if (custom) document.getElementById('remove-alert-custom-reason')?.focus();
-    };
-
-    document.getElementById('remove-alert-reason-menu')?.querySelectorAll('[data-remove-alert-reason]').forEach((button) => {
-      button.addEventListener('click', () => window.selectRemoveAlertReason(button.dataset.removeAlertReason || ''));
-    });
-
-    document.addEventListener('click', (event) => {
-      const button = document.getElementById('remove-alert-reason-button');
-      const menu = document.getElementById('remove-alert-reason-menu');
-      if (!button?.contains(event.target) && !menu?.contains(event.target)) {
-        menu?.classList.add('hidden');
-        button?.setAttribute('aria-expanded', 'false');
-      }
-    });
-
-    document.getElementById('remove-alert-custom-reason')?.addEventListener('input', (event) => {
-      const input = event.currentTarget;
-      input.value = String(input.value || '').slice(0, 50);
-      const countEl = document.getElementById('remove-alert-custom-count');
-      if (countEl) countEl.textContent = `${input.value.length}/50`;
-    });
-
-    function __getRemoveAlertInput(member) {
-      if (document.getElementById('remove-register-alert')?.checked !== true) return null;
-      const selectedReason = String(document.getElementById('remove-alert-reason')?.value || '').trim();
-      const reason = selectedReason === PLAYER_ALERT_CUSTOM_REASON
-        ? String(document.getElementById('remove-alert-custom-reason')?.value || '').replace(/\s+/g, ' ').trim()
-        : selectedReason;
-      if (!selectedReason) {
-        throw new PlayerAlertError('invalid-reason', 'Selecione um motivo para registrar o alerta.');
-      }
-      return {
-        playerId: member?.visibleId || member?.id || '',
-        targetNick: member?.nick || member?.visibleId || member?.id || '',
-        reason
-      };
-    }
-
-    async function __getRemovalAlertReporter() {
-      if (!auth.currentUser) {
-        throw new PlayerAlertError('login-required', 'Entre novamente na sua conta para registrar o alerta.');
-      }
-      if (!removeAlertReporterCache || removeAlertReporterCache.uid !== auth.currentUser.uid) {
-        removeAlertReporterCache = await resolveAlertReporter(db, auth.currentUser, getGuildContext() || {});
-      }
-      return removeAlertReporterCache;
-    }
-
-    async function __registerRemovalAlert(member, options = {}) {
-      const input = __getRemoveAlertInput(member);
-      if (!input) return false;
-      const reporter = await __getRemovalAlertReporter();
-      await registerPlayerAlert(db, input, reporter, options);
-      return true;
-    }
-
     function __renderRemoveMemberModal() {
       const titleEl = document.getElementById('remove-member-title');
       const descEl = document.getElementById('remove-member-desc');
@@ -1841,7 +1713,6 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
       const withoutHistoryBtn = document.getElementById('btn-delete-no-history');
       const canUseHistory = __canUseHistoryFromCache();
       const member = membersCache.find(x => String(x.id || '') === String(currentDeleteId || ''));
-      __resetRemoveAlertUi();
 
       if (titleEl) titleEl.textContent = 'Remover membro?';
       if (descEl) {
@@ -3335,7 +3206,6 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
 
     window.closeDeleteConfirmModal = () => {
       currentDeleteId = '';
-      __resetRemoveAlertUi();
       document.getElementById('delete-confirm-modal').classList.add('hidden');
     };
 
@@ -3346,10 +3216,6 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
         btn.disabled = !!isBusy;
         btn.classList.toggle('opacity-60', !!isBusy);
         btn.classList.toggle('cursor-wait', !!isBusy);
-      });
-      ['remove-register-alert', 'remove-alert-reason-button', 'remove-alert-custom-reason'].forEach((id) => {
-        const field = document.getElementById(id);
-        if (field) field.disabled = !!isBusy;
       });
       const noHistoryBtn = document.getElementById('btn-delete-no-history');
       if (noHistoryBtn) noHistoryBtn.textContent = isBusy ? (label || 'Removendo...') : (__canUseHistoryFromCache() ? 'Deletar sem historico' : 'Deletar agora');
@@ -3425,75 +3291,6 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
       showToast('success', 'Membro removido e salvo no historico.');
     }
 
-    async function __removeMemberWithAlert(mode, id, member) {
-      const guildId = String(getGuildContext()?.guildId || '').trim();
-      if (!guildId) throw new Error('Guilda não carregada.');
-
-      const memberRef = doc(db, "guildas", guildId, __membersCollectionName(), id);
-      let historyEntry = null;
-      let historyRef = null;
-      let metaRef = null;
-      let nextHistoryTotal = 0;
-
-      if (mode === 'history') {
-        await __ensureHistoryPlansCache(false).catch(() => null);
-        if (!__canUseHistoryFromCache()) {
-          throw new PlayerAlertError('history-plan-required', 'Salvar histórico está disponível apenas no plano ULTRA ou superior.');
-        }
-
-        historyEntry = __buildHistoryEntryFromMember(member);
-        const historyId = String(historyEntry?.id || '').trim();
-        if (!historyEntry || !historyId) {
-          throw new PlayerAlertError('history-invalid', 'Não foi possível gerar o histórico deste membro.');
-        }
-
-        if (!historyCacheHydrated) {
-          await __loadHistoryMembers({ forceRefresh: false, applyPolicy: false });
-        }
-
-        const alreadyExists = historyCache.some(item => String(item.id || '') === historyId);
-        if (!alreadyExists && historyCache.length >= HISTORY_MAX_ITEMS) {
-          throw new PlayerAlertError('history-limit', `O histórico já tem ${HISTORY_MAX_ITEMS} pessoas. Delete um registro antes de salvar outro.`);
-        }
-
-        historyRef = __historyDocRef(historyId);
-        metaRef = __historyDocRef(HISTORY_META_DOC_ID);
-        if (!historyRef || !metaRef) {
-          throw new PlayerAlertError('guild-not-ready', 'A guilda ainda não foi carregada.');
-        }
-        nextHistoryTotal = alreadyExists
-          ? historyCache.length
-          : Math.min(HISTORY_MAX_ITEMS, historyCache.length + 1);
-      }
-
-      await __registerRemovalAlert(member, {
-        applyAdditionalWrites(transaction) {
-          if (mode === 'history') {
-            transaction.set(historyRef, __serializeHistoryEntry(historyEntry), { merge: true });
-            transaction.set(metaRef, {
-              totalItems: nextHistoryTotal,
-              cleanupAtMs: null,
-              cleanupAt: null,
-              lastPlanTier: __getCachedVipTierFast(),
-              updatedAt: serverTimestamp(),
-              updatedAtMs: Date.now()
-            }, { merge: true });
-          }
-          transaction.delete(memberRef);
-        }
-      });
-
-      if (mode === 'history') __syncHistoryEntryInCache(historyEntry);
-      __removeMemberFromCurrentCache(id);
-      closeDeleteConfirmModal();
-      showToast(
-        'success',
-        mode === 'history'
-          ? 'Membro salvo no histórico e alerta registrado.'
-          : 'Membro removido e alerta registrado.'
-      );
-    }
-
     window.executeDeleteMember = async (mode = 'delete') => {
       const id = String(currentDeleteId || '').trim();
       if (!id) {
@@ -3507,23 +3304,16 @@ import { checkAuth, setupSidebar, initIcons, logout, auth, db, showToast, getMem
           closeDeleteConfirmModal();
           return;
         }
-        const wantsAlert = document.getElementById('remove-register-alert')?.checked === true;
-        __setRemoveMemberBusy(true, wantsAlert ? 'Registrando alerta...' : (mode === 'history' ? 'Salvando...' : 'Removendo...'));
-        if (wantsAlert) {
-          await __removeMemberWithAlert(mode, id, m);
-        } else if (mode === 'history') {
+        __setRemoveMemberBusy(true, mode === 'history' ? 'Salvando...' : 'Removendo...');
+        if (mode === 'history') {
           await __deleteMemberKeepingHistory(id, m);
         } else {
           await __deleteMemberWithoutHistory(id, m);
         }
       } catch(e) {
         console.error(e);
-        if (e instanceof PlayerAlertError) {
-          showToast('error', e.message);
-        } else {
-          closeDeleteConfirmModal();
-          showToast('error', 'Erro ao remover.');
-        }
+        closeDeleteConfirmModal();
+        showToast('error', 'Erro ao remover.');
       } finally {
         __setRemoveMemberBusy(false);
       }

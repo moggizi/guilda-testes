@@ -544,39 +544,6 @@ html[data-theme="dark"] :where(.member-warning-card, .warning-reason-box) {
   border-color: rgba(245, 158, 11, 0.38) !important;
 }
 
-html[data-theme="dark"] :where(.alert-modal-panel, .alert-reason-menu, .alert-result-card) {
-  background: var(--theme-surface) !important;
-  color: var(--theme-text) !important;
-  border-color: var(--theme-border) !important;
-  box-shadow: 0 20px 60px var(--theme-shadow) !important;
-}
-
-html[data-theme="dark"] .alert-reason-button {
-  background: var(--theme-surface-2) !important;
-  color: var(--theme-text-soft) !important;
-  border-color: var(--theme-border) !important;
-}
-
-.alert-reason-option {
-  color: #374151;
-}
-
-.alert-reason-option:hover,
-.alert-reason-option.is-selected {
-  background: #ecfdf5;
-  color: #047857;
-}
-
-html[data-theme="dark"] .alert-reason-option {
-  color: var(--theme-text-soft) !important;
-}
-
-html[data-theme="dark"] .alert-reason-option:hover,
-html[data-theme="dark"] .alert-reason-option.is-selected {
-  background: var(--theme-accent-soft) !important;
-  color: #6ee7b7 !important;
-}
-
 html[data-theme="dark"] .welcome-modal__close {
   background: var(--theme-surface-2);
   color: var(--theme-muted);

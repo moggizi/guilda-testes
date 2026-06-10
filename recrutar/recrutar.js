@@ -501,6 +501,78 @@ function renderRequirementChips(data = {}) {
   const items = buildRecruitmentRequirements(data);
   return items.length ? items.map(v => tagChip(v, 'default')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
 }
+const MAX_RECRUITMENT_SECTIONS = 8;
+const MAX_RECRUITMENT_FIELDS = 10;
+const MAX_RECRUITMENT_OPTIONS = 8;
+const RECRUITMENT_FIELD_TYPES = new Set(['text', 'select', 'multiselect', 'boolean']);
+function createRecruitmentBuilderId(prefix = 'item') {
+  const random = Math.random().toString(36).slice(2, 9);
+  return `${prefix}_${Date.now().toString(36)}_${random}`.slice(0, 40);
+}
+function normalizeRecruitmentBuilderText(value, max = 80) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+function normalizeRecruitmentBuilderOptions(value) {
+  const source = Array.isArray(value) ? value : String(value || '').split(',');
+  return [...new Set(source
+    .map((item) => normalizeRecruitmentBuilderText(item, 50))
+    .filter(Boolean))]
+    .slice(0, MAX_RECRUITMENT_OPTIONS);
+}
+function normalizeRecruitmentCustomSections(data = {}) {
+  const raw = Array.isArray(data.customSections) ? data.customSections : [];
+  const normalized = raw.map((section, index) => ({
+    id: normalizeRecruitmentBuilderText(section?.id, 40) || `section_${index + 1}`,
+    title: normalizeRecruitmentBuilderText(section?.title, 50),
+    items: normalizeRecruitmentBuilderOptions(section?.items)
+  })).filter((section) => section.title && section.items.length).slice(0, MAX_RECRUITMENT_SECTIONS);
+  if (normalized.length || Number(data.formVersion || 0) >= 2) return normalized;
+
+  const legacy = [];
+  const pushLegacy = (title, items) => {
+    const clean = normalizeRecruitmentBuilderOptions(items);
+    if (clean.length) legacy.push({ id: createRecruitmentBuilderId('section'), title, items: clean });
+  };
+  pushLegacy('Funções', data.roles);
+  pushLegacy('Contato', data.contacts);
+  pushLegacy('Tipo da guilda', data.guildType);
+  pushLegacy('Foco', data.focus);
+  pushLegacy('Requisitos', buildRecruitmentRequirements(data));
+  return legacy.slice(0, MAX_RECRUITMENT_SECTIONS);
+}
+function normalizeRecruitmentApplicationFields(data = {}) {
+  const raw = Array.isArray(data.applicationFields) ? data.applicationFields : [];
+  const normalized = raw.map((field, index) => {
+    const type = RECRUITMENT_FIELD_TYPES.has(String(field?.type || '')) ? String(field.type) : 'text';
+    return {
+      id: normalizeRecruitmentBuilderText(field?.id, 40) || `question_${index + 1}`,
+      label: normalizeRecruitmentBuilderText(field?.label, 70),
+      type,
+      required: field?.required === true,
+      options: ['select', 'multiselect'].includes(type) ? normalizeRecruitmentBuilderOptions(field?.options) : []
+    };
+  }).filter((field) => field.label).slice(0, MAX_RECRUITMENT_FIELDS);
+  if (normalized.length || Number(data.formVersion || 0) >= 2) return normalized;
+
+  const legacyRoles = normalizeRecruitmentBuilderOptions(data.roles);
+  return [
+    { id: 'legacy_roles', label: 'Qual modo você joga?', type: 'multiselect', required: true, options: legacyRoles.length ? legacyRoles : MARKETPLACE_ROLE_OPTIONS },
+    { id: 'legacy_age', label: 'Idade', type: 'select', required: true, options: MARKETPLACE_AGE_OPTIONS },
+    { id: 'legacy_availability', label: 'Horário disponível', type: 'select', required: true, options: MARKETPLACE_AVAILABILITY_OPTIONS },
+    { id: 'legacy_weekend', label: 'Disponível sexta e sábado?', type: 'boolean', required: true, options: [] },
+    { id: 'legacy_gg', label: 'Já jogou GG?', type: 'boolean', required: true, options: [] },
+    { id: 'legacy_nick_change', label: 'Possui troca nick?', type: 'boolean', required: true, options: [] }
+  ];
+}
+function renderRecruitmentCustomSections(data = {}) {
+  const sections = normalizeRecruitmentCustomSections(data);
+  if (!sections.length) return '<p class="text-sm text-gray-400">Nenhuma informação adicional.</p>';
+  return `<div class="grid gap-4 md:grid-cols-2">${sections.map((section) => `
+    <div class="min-w-0">
+      <p class="mb-2 text-xs font-semibold text-gray-500">${escapeHtml(section.title)}</p>
+      <div class="flex flex-wrap gap-2">${section.items.map((item) => tagChip(item, 'default')).join('')}</div>
+    </div>`).join('')}</div>`;
+}
 const normalizeDigits = (v) => String(v ?? '').replace(/\D+/g, '');
 const MARKETPLACE_ROLE_OPTIONS = ['Rush', 'Full Gás', 'Curandeiro', 'Fuzileiro', 'Suporte'];
 const MARKETPLACE_AGE_OPTIONS = ['+10', '+11', '+12', '+13', '+14', '+15', '+16', '+17', '+18'];
@@ -666,7 +738,8 @@ function bootManagementMode() {
     currentGuildName: qs('current-guild-name'), openedKey: qs('opened-key'), view: qs('recruitment-view'),
     keyLabel: document.querySelector('label[for="guild-access-key-input"]'),
     modal: qs('rec-modal'), modalTitle: qs('rec-modal-title'), form: qs('rec-form'), guildName: qs('rec-guild-name'),
-    platform: qs('rec-platform'), age: qs('rec-age'), nickRequired: qs('rec-nick-required'), nickDeadline: qs('rec-nick-deadline'), teamPlay: qs('rec-teamplay'), useCall: qs('rec-call'),
+    customSections: qs('rec-custom-sections'), applicationFields: qs('rec-application-fields'),
+    addSectionBtn: qs('btn-add-rec-section'), addQuestionBtn: qs('btn-add-rec-question'),
     desc: qs('rec-description'), descCount: qs('rec-desc-count'), photoInput: qs('rec-photo'),
     photoPreviewWrap: qs('rec-photo-preview-wrap'), photoPreview: qs('rec-photo-preview'), photoStatus: qs('rec-photo-status'),
     photoFileName: qs('rec-photo-file-name'),
@@ -674,13 +747,149 @@ function bootManagementMode() {
     requestModal: qs('request-detail-modal'), requestModalName: qs('request-detail-name'), requestModalId: qs('request-detail-id'),
     requestModalStatus: qs('request-detail-status'), requestModalDate: qs('request-detail-date'), requestModalModes: qs('request-detail-modes'),
     requestModalWhatsapp: qs('request-detail-whatsapp'), requestTargetSlot: qs('request-target-slot'), requestAcceptBtn: qs('btn-request-accept'), requestRejectBtn: qs('btn-request-reject'),
+    requestModalAnswersWrap: qs('request-detail-answers-wrap'), requestModalAnswers: qs('request-detail-answers'),
     deleteRecModal: qs('delete-rec-modal'), cancelDeleteRecBtn: qs('btn-cancel-delete-rec'), confirmDeleteRecBtn: qs('btn-confirm-delete-rec'),
     planWarning: qs('recruitment-plan-warning')
   };
   let linkedUid = null, openedKey = '', currentRecruitment = null, currentRecruitmentStatus = RECRUITMENT_ACTIVE_STATUS, currentPhotoBase64 = '', currentPhotoBytes = 0, currentRequests = [], activeRequest = null;
+  let recruitmentCustomSections = [], recruitmentApplicationFields = [];
   let isSavingRecruitment = false, isReloadingRecruitment = false;
   let managementGuildSlotsCache = [];
   let recruitmentGuildCtx = readRecruitmentCachedCtx() || getGuildContext() || null;
+
+  function collectRecruitmentSectionsFromEditor() {
+    if (!els.customSections) return recruitmentCustomSections;
+    return [...els.customSections.querySelectorAll('[data-rec-section]')].map((node) => ({
+      id: String(node.dataset.recSection || createRecruitmentBuilderId('section')),
+      title: normalizeRecruitmentBuilderText(node.querySelector('[data-rec-section-title]')?.value, 50),
+      items: normalizeRecruitmentBuilderOptions(node.querySelector('[data-rec-section-items]')?.value)
+    })).slice(0, MAX_RECRUITMENT_SECTIONS);
+  }
+  function collectRecruitmentQuestionsFromEditor() {
+    if (!els.applicationFields) return recruitmentApplicationFields;
+    return [...els.applicationFields.querySelectorAll('[data-rec-question]')].map((node) => {
+      const typeValue = String(node.querySelector('[data-rec-question-type]')?.value || 'text');
+      const type = RECRUITMENT_FIELD_TYPES.has(typeValue) ? typeValue : 'text';
+      return {
+        id: String(node.dataset.recQuestion || createRecruitmentBuilderId('question')),
+        label: normalizeRecruitmentBuilderText(node.querySelector('[data-rec-question-label]')?.value, 70),
+        type,
+        required: node.querySelector('[data-rec-question-required]')?.checked === true,
+        options: ['select', 'multiselect'].includes(type)
+          ? normalizeRecruitmentBuilderOptions(node.querySelector('[data-rec-question-options]')?.value)
+          : []
+      };
+    }).slice(0, MAX_RECRUITMENT_FIELDS);
+  }
+  function renderRecruitmentSectionEditor() {
+    if (!els.customSections) return;
+    if (!recruitmentCustomSections.length) {
+      els.customSections.innerHTML = '<div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-center text-xs text-gray-500">Nenhum bloco criado. Use o botão <b>Bloco</b> para adicionar informações.</div>';
+      return;
+    }
+    els.customSections.innerHTML = recruitmentCustomSections.map((section, index) => `
+      <div data-rec-section="${escapeHtml(section.id)}" class="rounded-xl border border-gray-200 bg-gray-50/70 p-3">
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <span class="text-[11px] font-extrabold uppercase text-gray-400">Bloco ${index + 1}</span>
+          <div class="flex items-center gap-1">
+            <button type="button" data-rec-section-action="up" title="Mover para cima" class="grid h-8 w-8 place-items-center rounded-lg text-gray-500 hover:bg-white disabled:opacity-30" ${index === 0 ? 'disabled' : ''}><i data-lucide="arrow-up" class="h-4 w-4"></i></button>
+            <button type="button" data-rec-section-action="down" title="Mover para baixo" class="grid h-8 w-8 place-items-center rounded-lg text-gray-500 hover:bg-white disabled:opacity-30" ${index === recruitmentCustomSections.length - 1 ? 'disabled' : ''}><i data-lucide="arrow-down" class="h-4 w-4"></i></button>
+            <button type="button" data-rec-section-action="remove" title="Remover bloco" class="grid h-8 w-8 place-items-center rounded-lg text-red-500 hover:bg-red-50"><i data-lucide="trash-2" class="h-4 w-4"></i></button>
+          </div>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+          <div>
+            <label class="mb-1.5 block text-xs font-semibold text-gray-600">Título</label>
+            <input data-rec-section-title type="text" maxlength="50" value="${escapeHtml(section.title)}" placeholder="Ex: Requisitos" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="mb-1.5 block text-xs font-semibold text-gray-600">Itens separados por vírgula</label>
+            <input data-rec-section-items type="text" maxlength="400" value="${escapeHtml(section.items.join(', '))}" placeholder="Ex: +16, usar call, jogar em equipe" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+        </div>
+      </div>`).join('');
+    initIcons();
+  }
+  function renderRecruitmentQuestionEditor() {
+    if (!els.applicationFields) return;
+    if (!recruitmentApplicationFields.length) {
+      els.applicationFields.innerHTML = '<div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-center text-xs text-gray-500">Nenhuma pergunta personalizada. ID, nick e contato continuarão obrigatórios.</div>';
+      return;
+    }
+    els.applicationFields.innerHTML = recruitmentApplicationFields.map((field, index) => {
+      const needsOptions = ['select', 'multiselect'].includes(field.type);
+      return `
+        <div data-rec-question="${escapeHtml(field.id)}" class="rounded-xl border border-gray-200 bg-gray-50/70 p-3">
+          <div class="mb-3 flex items-center justify-between gap-2">
+            <span class="text-[11px] font-extrabold uppercase text-gray-400">Pergunta ${index + 1}</span>
+            <div class="flex items-center gap-1">
+              <button type="button" data-rec-question-action="up" title="Mover para cima" class="grid h-8 w-8 place-items-center rounded-lg text-gray-500 hover:bg-white disabled:opacity-30" ${index === 0 ? 'disabled' : ''}><i data-lucide="arrow-up" class="h-4 w-4"></i></button>
+              <button type="button" data-rec-question-action="down" title="Mover para baixo" class="grid h-8 w-8 place-items-center rounded-lg text-gray-500 hover:bg-white disabled:opacity-30" ${index === recruitmentApplicationFields.length - 1 ? 'disabled' : ''}><i data-lucide="arrow-down" class="h-4 w-4"></i></button>
+              <button type="button" data-rec-question-action="remove" title="Remover pergunta" class="grid h-8 w-8 place-items-center rounded-lg text-red-500 hover:bg-red-50"><i data-lucide="trash-2" class="h-4 w-4"></i></button>
+            </div>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+            <div>
+              <label class="mb-1.5 block text-xs font-semibold text-gray-600">Pergunta</label>
+              <input data-rec-question-label type="text" maxlength="70" value="${escapeHtml(field.label)}" placeholder="Ex: Qual horário você joga?" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <div>
+              <label class="mb-1.5 block text-xs font-semibold text-gray-600">Tipo de resposta</label>
+              <div class="rq-select-wrap">
+                <select data-rec-question-type data-rec-custom-select="true" class="rq-select">
+                  <option value="text" ${field.type === 'text' ? 'selected' : ''}>Resposta escrita (35 caracteres)</option>
+                  <option value="select" ${field.type === 'select' ? 'selected' : ''}>Escolha única</option>
+                  <option value="multiselect" ${field.type === 'multiselect' ? 'selected' : ''}>Múltipla escolha</option>
+                  <option value="boolean" ${field.type === 'boolean' ? 'selected' : ''}>Sim ou não</option>
+                </select>
+                <i data-lucide="chevron-down" class="h-4 w-4"></i>
+              </div>
+            </div>
+          </div>
+          <div data-rec-question-options-wrap class="${needsOptions ? '' : 'hidden'} mt-3">
+            <label class="mb-1.5 block text-xs font-semibold text-gray-600">Opções separadas por vírgula</label>
+            <input data-rec-question-options type="text" maxlength="400" value="${escapeHtml(field.options.join(', '))}" placeholder="Ex: Manhã, Tarde, Noite" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <label class="mt-3 inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-gray-600">
+            <input data-rec-question-required type="checkbox" class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" ${field.required ? 'checked' : ''}>
+            Resposta obrigatória
+          </label>
+        </div>`;
+    }).join('');
+    initManagementCustomSelects();
+    initIcons();
+  }
+  function renderRecruitmentBuilders() {
+    renderRecruitmentSectionEditor();
+    renderRecruitmentQuestionEditor();
+  }
+  function validateRecruitmentBuilderContent(sections, fields) {
+    for (const [index, section] of sections.entries()) {
+      if (!section.title || !section.items.length) {
+        showToast('error', `Complete o título e os itens do bloco ${index + 1}.`);
+        return false;
+      }
+      if (!validarTextoSemLink(section.title, `Título do bloco ${index + 1}`) || !validarTextoPermitido(section.title, `Título do bloco ${index + 1}`)) return false;
+      for (const item of section.items) {
+        if (!validarTextoSemLink(item, `Item do bloco ${index + 1}`) || !validarTextoPermitido(item, `Item do bloco ${index + 1}`)) return false;
+      }
+    }
+    for (const [index, field] of fields.entries()) {
+      if (!field.label) {
+        showToast('error', `Escreva a pergunta ${index + 1}.`);
+        return false;
+      }
+      if (!validarTextoSemLink(field.label, `Pergunta ${index + 1}`) || !validarTextoPermitido(field.label, `Pergunta ${index + 1}`)) return false;
+      if (['select', 'multiselect'].includes(field.type) && field.options.length < 2) {
+        showToast('error', `Adicione pelo menos duas opções na pergunta ${index + 1}.`);
+        return false;
+      }
+      for (const option of field.options) {
+        if (!validarTextoSemLink(option, `Opção da pergunta ${index + 1}`) || !validarTextoPermitido(option, `Opção da pergunta ${index + 1}`)) return false;
+      }
+    }
+    return true;
+  }
 
   const activeGuildContext = () => recruitmentGuildCtx || getGuildContext() || readRecruitmentCachedCtx() || {};
 
@@ -1162,6 +1371,10 @@ function bootManagementMode() {
   }
   function enhanceManagementCustomSelect(select) {
     if (!select || select.dataset.recCustomSelect !== 'true') return;
+    if (!select.id) {
+      const owner = select.closest('[data-rec-question]')?.dataset.recQuestion || createRecruitmentBuilderId('select');
+      select.id = `rec-select-${String(owner).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40)}-${Math.random().toString(36).slice(2, 7)}`;
+    }
     if (select.dataset.recDdInit === '1') {
       syncManagementCustomSelect(select);
       return;
@@ -1292,6 +1505,33 @@ function bootManagementMode() {
     const list = Array.isArray(value) ? value : (value != null && value !== '' ? [value] : []);
     return list.map(v => backupString(v, maxText)).filter(Boolean).slice(0, maxItems);
   }
+  function backupRecruitmentSections(value) {
+    return (Array.isArray(value) ? value : []).map((section, index) => ({
+      id: backupString(section?.id || `section_${index + 1}`, 40),
+      title: backupString(section?.title || '', 50),
+      items: backupArray(section?.items, MAX_RECRUITMENT_OPTIONS, 50)
+    })).filter((section) => section.title && section.items.length).slice(0, MAX_RECRUITMENT_SECTIONS);
+  }
+  function backupRecruitmentFields(value) {
+    return (Array.isArray(value) ? value : []).map((field, index) => {
+      const type = RECRUITMENT_FIELD_TYPES.has(String(field?.type || '')) ? String(field.type) : 'text';
+      return {
+        id: backupString(field?.id || `question_${index + 1}`, 40),
+        label: backupString(field?.label || '', 70),
+        type,
+        required: field?.required === true,
+        options: ['select', 'multiselect'].includes(type) ? backupArray(field?.options, MAX_RECRUITMENT_OPTIONS, 50) : []
+      };
+    }).filter((field) => field.label).slice(0, MAX_RECRUITMENT_FIELDS);
+  }
+  function backupCustomAnswers(value) {
+    return (Array.isArray(value) ? value : []).map((answer, index) => ({
+      id: backupString(answer?.id || `answer_${index + 1}`, 40),
+      label: backupString(answer?.label || '', 70),
+      type: backupString(answer?.type || 'text', 20),
+      value: backupString(answer?.value || '', 240)
+    })).filter((answer) => answer.label && answer.value).slice(0, MAX_RECRUITMENT_FIELDS);
+  }
 
   function sanitizeRecruitmentForBackup(item = {}) {
     if (!item || typeof item !== 'object') return null;
@@ -1310,6 +1550,9 @@ function bootManagementMode() {
       nickChangeDeadline: backupString(item.nickChangeDeadline || '', 80),
       teamPlay: backupString(item.teamPlay || '', 80),
       useCall: backupString(item.useCall || '', 80),
+      customSections: backupRecruitmentSections(item.customSections),
+      applicationFields: backupRecruitmentFields(item.applicationFields),
+      formVersion: Number(item.formVersion || 0) >= 2 ? 2 : 1,
       key: normalizeGuildAccessKey(item.key || openedKey || ''),
       ownerUid: backupString(item.ownerUid || ctxGuildId() || linkedUid, 120),
       guildId: backupString(item.guildId || linkedUid || ctxGuildId(), 120),
@@ -1330,7 +1573,7 @@ function bootManagementMode() {
     clean.ownerUid = backupString(clean.ownerUid || ctxGuildId() || linkedUid, 120);
     clean.photoBytes = clean.photoBase64 ? dataUrlSizeBytes(clean.photoBase64) : backupNumber(clean.photoBytes || 0, 0);
     if (!clean.guildName) return null;
-    if (!clean.roles.length) return null;
+    if (!clean.roles.length && !clean.customSections.length && Number(clean.formVersion || 0) < 2) return null;
     if (!clean.photoUrl && (!clean.photoBase64 || !String(clean.photoBase64).startsWith('data:image/'))) return null;
     if (clean.photoBytes > 900 * 1024) return null;
     return clean;
@@ -1362,6 +1605,8 @@ function bootManagementMode() {
       availableFridaySaturday: backupString(item.availableFridaySaturday || '', 80),
       playedGg: backupString(item.playedGg || '', 80),
       hasNickChange: backupString(item.hasNickChange || '', 80),
+      customAnswers: backupCustomAnswers(item.customAnswers),
+      formVersion: Number(item.formVersion || 0) >= 2 ? 2 : 1,
       status: backupString(item.status || 'pendente', 40),
       createdAt: item.createdAt || null,
       createdAtMs: backupNumber(item.createdAtMs || item.dateMs, 0),
@@ -1648,18 +1893,15 @@ function bootManagementMode() {
     if (els.descCount) els.descCount.textContent = '0/100';
     if (els.modalTitle) els.modalTitle.textContent = mode === 'edit' ? 'Editar recrutamento' : 'Novo recrutamento';
     if (els.guildName) els.guildName.value = currentRecruitment?.guildName || ctxGuildName() || '';
+    recruitmentCustomSections = mode === 'edit' && currentRecruitment
+      ? normalizeRecruitmentCustomSections(currentRecruitment)
+      : [];
+    recruitmentApplicationFields = mode === 'edit' && currentRecruitment
+      ? normalizeRecruitmentApplicationFields(currentRecruitment)
+      : [];
+    renderRecruitmentBuilders();
     resetPhotoState();
     if (mode === 'edit' && currentRecruitment) {
-      setCheckedValues('roles', currentRecruitment.roles || []);
-      setCheckedValues('contacts', currentRecruitment.contacts || []);
-      setCheckedValues('guildType', currentRecruitment.guildType || []);
-      setCheckedValues('focus', currentRecruitment.focus || []);
-      if (els.platform) els.platform.value = currentRecruitment.platform || '';
-      if (els.age) els.age.value = currentRecruitment.minimumAge || '';
-      if (els.nickRequired) els.nickRequired.value = currentRecruitment.nickChangeRequired || '';
-      if (els.nickDeadline) els.nickDeadline.value = currentRecruitment.nickChangeDeadline || '';
-      if (els.teamPlay) els.teamPlay.value = currentRecruitment.teamPlay || '';
-      if (els.useCall) els.useCall.value = currentRecruitment.useCall || '';
       if (els.desc) {
         els.desc.value = currentRecruitment.description || '';
         if (els.descCount) els.descCount.textContent = `${els.desc.value.length}/100`;
@@ -1713,7 +1955,8 @@ function bootManagementMode() {
       if (item.availableFridaySaturday) chips.push(tagChip(`Sex/Sáb: ${item.availableFridaySaturday}`,'default'));
       if (item.playedGg) chips.push(tagChip(`Já jogou GG: ${item.playedGg}`,'default'));
       if (item.hasNickChange) chips.push(tagChip(`Troca nick: ${item.hasNickChange}`,'default'));
-      els.requestModalModes.innerHTML = chips.length ? chips.join(' ') : '<span class="text-xs text-gray-400">Modo não informado</span>';
+      els.requestModalModes.parentElement?.classList.toggle('hidden', !chips.length);
+      els.requestModalModes.innerHTML = chips.join(' ');
     }
     if (els.requestModalWhatsapp) {
       const contact = getRequestContact(item);
@@ -1726,6 +1969,15 @@ function bootManagementMode() {
       els.requestModalWhatsapp.innerHTML = href
         ? `<p class="mb-1 text-[11px] font-bold uppercase text-gray-400">${escapeHtml(platform)}</p><a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"${discordCopy} class="text-emerald-600 font-semibold hover:underline break-all">${escapeHtml(label)}</a>`
         : '<span class="text-gray-400">Não informado</span>';
+    }
+    const customAnswers = backupCustomAnswers(item.customAnswers);
+    if (els.requestModalAnswersWrap && els.requestModalAnswers) {
+      els.requestModalAnswersWrap.classList.toggle('hidden', !customAnswers.length);
+      els.requestModalAnswers.innerHTML = customAnswers.map((answer) => `
+        <div class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+          <p class="text-[11px] font-bold text-gray-500">${escapeHtml(answer.label)}</p>
+          <p class="mt-1 whitespace-pre-wrap break-words text-sm font-semibold text-gray-900">${escapeHtml(answer.value)}</p>
+        </div>`).join('');
     }
     populateRequestTargetSlotOptions('1');
     els.requestModal.classList.remove('hidden');
@@ -1743,9 +1995,13 @@ function bootManagementMode() {
     if (!guildId || !item?.id) throw new Error('Guilda ou pedido inválido.');
     const targetSlot = String(els.requestTargetSlot?.value || '1').trim() || '1';
     const targetCollection = getManagementMembersCollection(targetSlot);
-    const requestPlayMode = Array.isArray(item.roles)
+    let requestPlayMode = Array.isArray(item.roles)
       ? item.roles.map(v => String(v || '').trim()).filter(Boolean)
       : [];
+    if (!requestPlayMode.length && Array.isArray(item.customAnswers)) {
+      const modeAnswer = item.customAnswers.find((answer) => /modo|fun[cç][aã]o|posi[cç][aã]o/i.test(String(answer?.label || '')));
+      requestPlayMode = String(modeAnswer?.value || '').split('|').map((value) => value.trim()).filter(Boolean).slice(0, 8);
+    }
     const requestNick = String(item.nick || item.nickname || item.name || item.nome || '').trim() || 'Sem nick';
     const requestContact = getRequestContact(item);
     if (encontrarPalavraImpropria(requestNick)) {
@@ -1848,11 +2104,11 @@ function bootManagementMode() {
       updateCreateButtonVisibility(); renderRequests(); initIcons(); return;
     }
     const d = currentRecruitment;
-    const roles = Array.isArray(d.roles) && d.roles.length ? d.roles.map(v => tagChip(v,'role')).join(' ') : '<span class="text-sm text-gray-400">Nenhuma</span>';
-    const contacts = Array.isArray(d.contacts) && d.contacts.length ? d.contacts.map(v => tagChip(v,'contact')).join(' ') : '<span class="text-sm text-gray-400">Nenhuma</span>';
-    const types = Array.isArray(d.guildType) && d.guildType.length ? d.guildType.map(v => tagChip(v,'type')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
-    const focuses = Array.isArray(d.focus) && d.focus.length ? d.focus.map(v => tagChip(v,'focus')).join(' ') : '<span class="text-sm text-gray-400">Nenhum</span>';
-    const requirements = renderRequirementChips(d);
+    const customSections = renderRecruitmentCustomSections(d);
+    const questionCount = normalizeRecruitmentApplicationFields(d).length;
+    const questionSummary = questionCount
+      ? `<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200"><i data-lucide="list-checks" class="h-3.5 w-3.5"></i>${questionCount} pergunta${questionCount === 1 ? '' : 's'}</span>`
+      : '<span class="text-xs text-gray-400">Somente ID, nick e contato</span>';
     const photoSrc = recruitmentPhotoSrc(d);
     const photoNew = photoSrc ? `<img src="${escapeHtml(photoSrc)}" alt="Foto do recrutamento" class="w-full h-64 object-cover rounded-2xl border border-gray-200 bg-gray-50">` : '';
     const inactive = currentRecruitmentStatus === RECRUITMENT_INACTIVE_STATUS;
@@ -1861,18 +2117,11 @@ function bootManagementMode() {
     const actions = canEdit
       ? `<div class="flex items-center gap-2 flex-wrap"><button id="btn-toggle-rec-status" class="px-3 py-2 rounded-xl text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100">${inactive ? 'Ativar' : 'Inativar'}</button><button id="btn-edit-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100">Editar</button><button id="btn-delete-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50">Excluir</button></div>`
       : '<span class="rounded-xl bg-gray-50 px-3 py-2 text-xs font-bold text-gray-500 ring-1 ring-gray-200">Edicao bloqueada pelo plano</span>';
-    if (els.view) els.view.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div class="p-5 border-b border-gray-100 flex items-start justify-between gap-4"><div><div class="flex items-center gap-2 flex-wrap"><h4 class="text-xl font-bold text-gray-900">${escapeHtml(d.guildName || 'Sem nome')}</h4><span class="inline-flex items-center rounded-full ${statusClass} ring-1 px-2.5 py-1 text-[11px] font-extrabold">${recruitmentStatusLabel()}</span></div><p class="text-sm text-gray-500 mt-1">UID do recrutamento: <span class="font-semibold break-all">${escapeHtml(linkedUid || d.guildId || d.id || '-')}</span></p><p class="text-sm text-gray-500 mt-1">Publicado em: ${escapeHtml(formatDateBR(d.dateMs || d.createdAt || Date.now()))}</p></div>${actions}</div><div class="p-5 space-y-5">${photoNew}<div class="grid md:grid-cols-2 gap-5"><div><p class="text-xs font-semibold text-gray-500 mb-2">Funcoes</p><div class="flex flex-wrap gap-2">${roles}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Mais opcoes</p><div class="flex flex-wrap gap-2">${contacts}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Foco</p><div class="flex flex-wrap gap-2">${focuses}</div></div><div class="md:col-span-2"><p class="text-xs font-semibold text-gray-500 mb-2">Requisitos</p><div class="flex flex-wrap gap-2">${requirements}</div></div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Descricao</p><div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700 min-h-[84px] whitespace-pre-wrap">${escapeHtml(d.description || 'Sem descricao.')}</div></div></div></div>`;
+    if (els.view) els.view.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div class="p-5 border-b border-gray-100 flex items-start justify-between gap-4"><div><div class="flex items-center gap-2 flex-wrap"><h4 class="text-xl font-bold text-gray-900">${escapeHtml(d.guildName || 'Sem nome')}</h4><span class="inline-flex items-center rounded-full ${statusClass} ring-1 px-2.5 py-1 text-[11px] font-extrabold">${recruitmentStatusLabel()}</span></div><p class="text-sm text-gray-500 mt-1">UID do recrutamento: <span class="font-semibold break-all">${escapeHtml(linkedUid || d.guildId || d.id || '-')}</span></p><p class="text-sm text-gray-500 mt-1">Publicado em: ${escapeHtml(formatDateBR(d.dateMs || d.createdAt || Date.now()))}</p></div>${actions}</div><div class="p-5 space-y-5">${photoNew}${customSections}<div><p class="text-xs font-semibold text-gray-500 mb-2">Ficha de pedido</p>${questionSummary}</div><div><p class="text-xs font-semibold text-gray-500 mb-2">Descrição</p><div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700 min-h-[84px] whitespace-pre-wrap">${escapeHtml(d.description || 'Sem descrição.')}</div></div></div></div>`;
     updateCreateButtonVisibility(); renderRequests();
     qs('btn-edit-rec')?.addEventListener('click', () => openModal('edit'));
     qs('btn-delete-rec')?.addEventListener('click', deleteRecruitment);
     qs('btn-toggle-rec-status')?.addEventListener('click', toggleRecruitmentStatus);
-    initIcons();
-    return;
-    const photo = d.photoBase64 ? `<img src="${d.photoBase64}" alt="Foto do recrutamento" class="w-full h-64 object-cover rounded-2xl border border-gray-200 bg-gray-50">` : '';
-    if (els.view) els.view.innerHTML = `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div class="p-5 border-b border-gray-100 flex items-start justify-between gap-4"><div><div class="flex items-center gap-2 flex-wrap"><h4 class="text-xl font-bold text-gray-900">${escapeHtml(d.guildName || 'Sem nome')}</h4><span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2.5 py-1 text-[11px] font-extrabold">ATIVO</span></div><p class="text-sm text-gray-500 mt-1">Chave usada: <span class="font-semibold break-all">${escapeHtml(openedKey)}</span></p><p class="text-sm text-gray-500 mt-1">Publicado em: ${escapeHtml(formatDateBR(d.dateMs || d.createdAt || Date.now()))}</p></div><div class="flex items-center gap-2"><button id="btn-edit-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100">Editar</button><button id="btn-delete-rec" class="px-3 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50">Excluir</button></div></div><div class="p-5 space-y-5">${photo}<div class="grid md:grid-cols-2 gap-5"><div><p class="text-xs font-semibold text-gray-500 mb-2">Funções</p><div class="flex flex-wrap gap-2">${roles}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Mais opções</p><div class="flex flex-wrap gap-2">${contacts}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Tipo da guilda</p><div class="flex flex-wrap gap-2">${types}</div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Foco</p><div class="flex flex-wrap gap-2">${focuses}</div></div><div class="md:col-span-2"><p class="text-xs font-semibold text-gray-500 mb-2">Requisitos</p><div class="flex flex-wrap gap-2">${requirements}</div></div></div><div><p class="text-xs font-semibold text-gray-500 mb-2">Descrição</p><div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700 min-h-[84px] whitespace-pre-wrap">${escapeHtml(d.description || 'Sem descrição.')}</div></div></div></div>`;
-    updateCreateButtonVisibility(); renderRequests();
-    qs('btn-edit-rec')?.addEventListener('click', () => openModal('edit'));
-    qs('btn-delete-rec')?.addEventListener('click', deleteRecruitment);
     initIcons();
   }
   async function loadRequests(forceRefresh = false) {
@@ -2076,22 +2325,20 @@ function bootManagementMode() {
     if (!linkedUid) linkedUid = ctxGuildId();
     if (!linkedUid) { showToast('error','Guilda nao encontrada para salvar.'); return; }
     const guildName = String(els.guildName?.value || '').trim();
-    const roles = getCheckedValues('roles');
-    const contacts = getCheckedValues('contacts');
-    const guildType = getCheckedValues('guildType');
-    const focus = getCheckedValues('focus');
-    const platform = String(els.platform?.value || '').trim();
-    const minimumAge = String(els.age?.value || '').trim();
-    const nickChangeRequired = String(els.nickRequired?.value || '').trim();
-    const nickChangeDeadline = String(els.nickDeadline?.value || '').trim();
-    const teamPlay = String(els.teamPlay?.value || '').trim();
-    const useCall = String(els.useCall?.value || '').trim();
+    const customSections = collectRecruitmentSectionsFromEditor();
+    const applicationFields = collectRecruitmentQuestionsFromEditor();
+    const findSectionItems = (pattern) => customSections.find((section) => pattern.test(normalizarTextoFiltro(section.title)))?.items || [];
+    const roles = findSectionItems(/func|modo|posic/).slice(0, 8);
+    const contacts = findSectionItems(/contato/).slice(0, 8);
+    const guildType = findSectionItems(/tipo/).slice(0, 8);
+    const focus = findSectionItems(/foco|meta/).slice(0, 8);
     const description = String(els.desc?.value || '').trim().slice(0,100);
     if (!guildName) { showToast('error','O nome da guilda é obrigatório.'); return; }
+    if (!validarTextoSemLink(guildName, 'Nome da guilda')) return;
     if (!validarTextoPermitido(guildName, 'Nome da guilda')) return;
     if (description && !validarTextoSemLink(description, 'Descricao')) return;
     if (description && !validarTextoPermitido(description, 'Descrição')) return;
-    if (!roles.length) { showToast('error','Marque pelo menos uma função.'); return; }
+    if (!validateRecruitmentBuilderContent(customSections, applicationFields)) return;
     if (!currentPhotoBase64 && !recruitmentPhotoSrc(currentRecruitment)) { showToast('error','Envie uma foto para o recrutamento.'); return; }
     const submitBtn = els.form?.querySelector('button[type="submit"]');
     isSavingRecruitment = true;
@@ -2102,7 +2349,8 @@ function bootManagementMode() {
       const status = normalizeRecruitmentStatus(currentRecruitmentStatus);
       const payload = {
         guildName, dateMs: currentRecruitment?.dateMs || now, roles, contacts, guildType, focus, description,
-        platform, minimumAge, nickChangeRequired, nickChangeDeadline, teamPlay, useCall,
+        customSections, applicationFields, formVersion: 2,
+        platform: '', minimumAge: '', nickChangeRequired: '', nickChangeDeadline: '', teamPlay: '', useCall: '',
         key: linkedUid, ownerUid: ctxGuildId() || linkedUid, guildId: linkedUid,
         status, active: status === RECRUITMENT_ACTIVE_STATUS,
         photoUrl: photoData.photoUrl || '',
@@ -2132,7 +2380,8 @@ function bootManagementMode() {
     try {
       const payload = {
         guildName, dateMs: currentRecruitment?.dateMs || Date.now(), roles, contacts, guildType, focus, description,
-        platform, minimumAge, nickChangeRequired, nickChangeDeadline, teamPlay, useCall,
+        customSections, applicationFields, formVersion: 2,
+        platform: '', minimumAge: '', nickChangeRequired: '', nickChangeDeadline: '', teamPlay: '', useCall: '',
         key: openedKey, ownerUid: ctxGuildId() || linkedUid, photoBase64: currentPhotoBase64 || currentRecruitment?.photoBase64 || '',
         photoBytes: currentPhotoBytes || currentRecruitment?.photoBytes || dataUrlSizeBytes(currentPhotoBase64 || currentRecruitment?.photoBase64 || ''),
         updatedAt: serverTimestamp(), guildId: linkedUid
@@ -2209,6 +2458,55 @@ function bootManagementMode() {
     els.newBtn?.addEventListener('click', () => openModal('create'));
     els.copyBtn?.addEventListener('click', copyRecruitmentLink);
     els.loadBtn?.addEventListener('click', () => resolveKeyAndLoad(true));
+    els.addSectionBtn?.addEventListener('click', () => {
+      recruitmentCustomSections = collectRecruitmentSectionsFromEditor();
+      if (recruitmentCustomSections.length >= MAX_RECRUITMENT_SECTIONS) {
+        showToast('error', `Você pode criar até ${MAX_RECRUITMENT_SECTIONS} blocos.`);
+        return;
+      }
+      recruitmentCustomSections.push({ id: createRecruitmentBuilderId('section'), title: '', items: [] });
+      renderRecruitmentSectionEditor();
+    });
+    els.addQuestionBtn?.addEventListener('click', () => {
+      recruitmentApplicationFields = collectRecruitmentQuestionsFromEditor();
+      if (recruitmentApplicationFields.length >= MAX_RECRUITMENT_FIELDS) {
+        showToast('error', `Você pode criar até ${MAX_RECRUITMENT_FIELDS} perguntas.`);
+        return;
+      }
+      recruitmentApplicationFields.push({ id: createRecruitmentBuilderId('question'), label: '', type: 'text', required: false, options: [] });
+      renderRecruitmentQuestionEditor();
+    });
+    els.customSections?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-rec-section-action]');
+      const row = event.target.closest('[data-rec-section]');
+      if (!button || !row) return;
+      recruitmentCustomSections = collectRecruitmentSectionsFromEditor();
+      const index = recruitmentCustomSections.findIndex((item) => item.id === row.dataset.recSection);
+      if (index < 0) return;
+      const action = button.dataset.recSectionAction;
+      if (action === 'remove') recruitmentCustomSections.splice(index, 1);
+      if (action === 'up' && index > 0) [recruitmentCustomSections[index - 1], recruitmentCustomSections[index]] = [recruitmentCustomSections[index], recruitmentCustomSections[index - 1]];
+      if (action === 'down' && index < recruitmentCustomSections.length - 1) [recruitmentCustomSections[index + 1], recruitmentCustomSections[index]] = [recruitmentCustomSections[index], recruitmentCustomSections[index + 1]];
+      renderRecruitmentSectionEditor();
+    });
+    els.applicationFields?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-rec-question-action]');
+      const row = event.target.closest('[data-rec-question]');
+      if (!button || !row) return;
+      recruitmentApplicationFields = collectRecruitmentQuestionsFromEditor();
+      const index = recruitmentApplicationFields.findIndex((item) => item.id === row.dataset.recQuestion);
+      if (index < 0) return;
+      const action = button.dataset.recQuestionAction;
+      if (action === 'remove') recruitmentApplicationFields.splice(index, 1);
+      if (action === 'up' && index > 0) [recruitmentApplicationFields[index - 1], recruitmentApplicationFields[index]] = [recruitmentApplicationFields[index], recruitmentApplicationFields[index - 1]];
+      if (action === 'down' && index < recruitmentApplicationFields.length - 1) [recruitmentApplicationFields[index + 1], recruitmentApplicationFields[index]] = [recruitmentApplicationFields[index], recruitmentApplicationFields[index + 1]];
+      renderRecruitmentQuestionEditor();
+    });
+    els.applicationFields?.addEventListener('change', (event) => {
+      if (!event.target.matches('[data-rec-question-type]')) return;
+      recruitmentApplicationFields = collectRecruitmentQuestionsFromEditor();
+      renderRecruitmentQuestionEditor();
+    });
     els.reloadBtn?.addEventListener('click', async () => {
       if (isReloadingRecruitment) return;
       isReloadingRecruitment = true;

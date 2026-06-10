@@ -35,7 +35,8 @@ function normalizeSlot(value) {
 
 function normalizeVipTier(value) {
   const s = String(value || '').toLowerCase().trim();
-  if (s.includes('vital') || s.includes('life')) return 'vitalicio';
+  if (s.includes('vital') || s.includes('life') || s.includes('parceiro') || s.includes('partner')) return 'parceiro';
+  if (s.includes('ultra')) return 'ultra';
   if (s.includes('business') || s.includes('buss')) return 'business';
   if (s.includes('pro')) return 'pro';
   if (s.includes('plus')) return 'plus';
@@ -57,7 +58,7 @@ function resolveContext() {
 function isProOrHigher() {
   const ctx = resolveContext();
   const tier = normalizeVipTier(ctx.vipTier || getVipTier?.() || 'free');
-  return ['pro', 'business', 'vitalicio'].includes(tier);
+  return ['pro', 'business', 'ultra', 'parceiro'].includes(tier);
 }
 
 function selectionKey(id = guildId) {

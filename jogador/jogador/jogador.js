@@ -125,146 +125,136 @@ function showToast(type, message) {
   }, 3200);
 }
 
-const PLAYER_NOTICE_TTL_MS = 12 * 60 * 60 * 1000;
-const PLAYER_NOTICE_CACHE_VERSION = 2;
-const PLAYER_NOTICE_DOCS = [
-  { id: 'jogador', label: 'Jogador' },
-  { id: 'geral', label: 'Geral' }
-];
+const NOTICE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
-function playerNoticeCacheKey() {
-  return `avisos_jogador_${currentProfileId || currentUser?.uid || 'sem-usuario'}`;
+function noticeText(value, max = 1200) {
+  return String(value ?? '').trim().slice(0, max);
 }
 
-function readPlayerNoticeCache() {
-  try { return JSON.parse(localStorage.getItem(playerNoticeCacheKey()) || 'null'); }
-  catch (_) { return null; }
+function noticeCacheKey() {
+  return `avisos_jogador_${currentUser?.uid || currentProfileId || 'sem-user'}`;
 }
 
-function writePlayerNoticeCache(data) {
+function readNoticeCache() {
   try {
-    localStorage.setItem(playerNoticeCacheKey(), JSON.stringify({
-      version: PLAYER_NOTICE_CACHE_VERSION,
-      ts: Date.now(),
-      ...data
-    }));
+    const raw = localStorage.getItem(noticeCacheKey());
+    return raw ? (JSON.parse(raw) || null) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeNoticeCache(payload = {}) {
+  try {
+    localStorage.setItem(noticeCacheKey(), JSON.stringify({ ...(payload || {}), ts: Date.now() }));
   } catch (_) {}
 }
 
-function isPlayerNoticeCacheFresh(cache) {
-  return !!cache
-    && cache.version === PLAYER_NOTICE_CACHE_VERSION
-    && Number.isFinite(cache.ts)
-    && (Date.now() - cache.ts) < PLAYER_NOTICE_TTL_MS;
+function isNoticeCacheFresh(entry) {
+  const ts = Number(entry?.ts || 0);
+  return !!ts && Number.isFinite(ts) && (Date.now() - ts) < NOTICE_CACHE_TTL_MS;
 }
 
-async function fetchPlayerNotices() {
-  const notices = [];
-  for (const item of PLAYER_NOTICE_DOCS) {
-    const snap = await getDoc(doc(db, 'avisos', item.id));
-    if (!snap.exists()) continue;
-    const data = snap.data() || {};
-    const titulo = clean(data.titulo);
-    const aviso = clean(data.aviso);
-    if (titulo || aviso) notices.push({ ...item, titulo, aviso });
-  }
-  return notices;
-}
-
-function playerNoticeTone(notice = {}) {
-  const text = `${notice.titulo || ''} ${notice.aviso || ''}`
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-  const isUpdate = /(atualiz|novidade|melhoria|novo recurso|versao|release|mudanca|mudancas)/.test(text);
-  if (isUpdate) {
-    return {
-      label: 'Atualizacao',
-      icon: 'sparkles',
-      accent: 'bg-emerald-500',
-      border: 'border-emerald-200 hover:border-emerald-300',
-      iconBox: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-      text: 'text-emerald-700',
-      badge: 'bg-emerald-50 text-emerald-700 border-emerald-100'
-    };
-  }
+function normalizeNoticeDoc(id, data = {}) {
+  const titulo = noticeText(data?.titulo, 120);
+  const aviso = noticeText(data?.aviso, 2000);
+  if (!titulo && !aviso) return null;
   return {
-    label: 'Aviso importante',
-    icon: 'triangle-alert',
-    accent: 'bg-red-500',
-    border: 'border-red-200 hover:border-red-300',
-    iconBox: 'bg-red-50 text-red-700 border-red-100',
-    text: 'text-red-700',
-    badge: 'bg-red-50 text-red-700 border-red-100'
+    id,
+    tipo: id === 'geral' ? 'Geral' : 'Jogador',
+    titulo: titulo || 'Aviso',
+    aviso: aviso || titulo || ''
   };
 }
 
-function openPlayerNoticeModal(notice) {
-  const tone = playerNoticeTone(notice);
-  const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-[10000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4';
-  overlay.innerHTML = `
-    <div class="w-full max-w-lg rounded-3xl bg-white shadow-2xl border ${tone.border} overflow-hidden">
-      <div class="h-1.5 ${tone.accent}"></div>
-      <div class="flex items-start justify-between gap-4 p-5 border-b border-slate-100">
-        <div class="flex items-start gap-3 min-w-0">
-          <span class="mt-0.5 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${tone.iconBox}">
-            <i data-lucide="${tone.icon}" class="w-6 h-6"></i>
-          </span>
-          <div class="min-w-0">
-            <p class="notice-kicker inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${tone.badge}"></p>
-            <h3 class="notice-title mt-2 text-xl font-black text-slate-900 leading-tight"></h3>
-          </div>
+function ensureNoticeModal() {
+  let modal = qs('notice-modal-player');
+  if (modal) return modal;
+
+  modal = document.createElement('div');
+  modal.id = 'notice-modal-player';
+  modal.className = 'fixed inset-0 z-[10000] hidden items-center justify-center bg-black/45 px-4 backdrop-blur-sm';
+  modal.innerHTML = `
+    <div class="w-full max-w-lg overflow-hidden rounded-3xl border border-white/70 bg-white shadow-2xl">
+      <div class="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
+        <div class="min-w-0">
+          <p id="notice-modal-kind-player" class="text-[11px] font-extrabold uppercase tracking-wide text-emerald-600">Aviso</p>
+          <h3 id="notice-modal-title-player" class="mt-1 text-lg font-extrabold text-gray-900 break-words">Aviso</h3>
         </div>
-        <button type="button" class="notice-close w-10 h-10 shrink-0 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center" aria-label="Fechar aviso">
-          <i data-lucide="x" class="w-5 h-5"></i>
+        <button type="button" data-close-player-notice class="shrink-0 rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Fechar aviso">
+          <i data-lucide="x" class="h-5 w-5"></i>
         </button>
       </div>
-      <div class="p-5 bg-white">
-        <p class="notice-body whitespace-pre-line text-sm leading-6 text-slate-700"></p>
-      </div>
-    </div>`;
-  overlay.querySelector('.notice-kicker').textContent = tone.label;
-  overlay.querySelector('.notice-title').textContent = notice.titulo || 'Aviso';
-  overlay.querySelector('.notice-body').textContent = notice.aviso || 'Sem detalhes adicionais.';
-  const close = () => overlay.remove();
-  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
-  overlay.querySelector('.notice-close')?.addEventListener('click', close);
-  document.body.appendChild(overlay);
+      <div id="notice-modal-body-player" class="max-h-[65vh] overflow-y-auto whitespace-pre-wrap px-5 py-5 text-sm leading-relaxed text-gray-700"></div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.querySelectorAll('[data-close-player-notice]').forEach((btn) => {
+    btn.addEventListener('click', closeNoticeModal);
+  });
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) closeNoticeModal();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !modal.classList.contains('hidden')) closeNoticeModal();
+  });
+  initIcons();
+  return modal;
+}
+
+function openNoticeModal(notice) {
+  const modal = ensureNoticeModal();
+  const kind = qs('notice-modal-kind-player');
+  const title = qs('notice-modal-title-player');
+  const body = qs('notice-modal-body-player');
+  if (kind) kind.textContent = notice?.tipo || 'Aviso';
+  if (title) title.textContent = notice?.titulo || 'Aviso';
+  if (body) body.textContent = notice?.aviso || notice?.titulo || '';
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
   initIcons();
 }
 
-function showPlayerNoticeToast(notice) {
-  const tone = playerNoticeTone(notice);
-  let root = document.getElementById('site-notice-toast-container');
+function closeNoticeModal() {
+  const modal = qs('notice-modal-player');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function showNoticeToast(notice) {
+  let root = qs('notice-toast-root-player');
   if (!root) {
     root = document.createElement('div');
-    root.id = 'site-notice-toast-container';
-    root.className = 'fixed top-4 right-4 z-[9998] flex flex-col gap-3 w-[calc(100vw-2rem)] max-w-md';
+    root.id = 'notice-toast-root-player';
+    root.className = 'fixed top-4 right-4 z-[9999] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2';
     document.body.appendChild(root);
   }
+
   const box = document.createElement('button');
   box.type = 'button';
-  box.className = `relative overflow-hidden text-left rounded-2xl border ${tone.border} bg-white shadow-2xl px-4 py-4 transition hover:-translate-y-0.5`;
+  box.className = 'group w-full rounded-2xl border border-emerald-200 bg-white/95 p-4 text-left shadow-2xl shadow-emerald-950/10 ring-1 ring-white/70 backdrop-blur transition hover:-translate-y-0.5 hover:border-emerald-300';
   box.innerHTML = `
-    <span class="absolute inset-x-0 top-0 h-1 ${tone.accent}"></span>
-    <div class="flex items-start gap-3">
-      <div class="mt-0.5 w-11 h-11 rounded-2xl border ${tone.iconBox} flex items-center justify-center shrink-0">
-        <i data-lucide="${tone.icon}" class="w-5 h-5"></i>
-      </div>
-      <div class="min-w-0">
-        <p class="text-[11px] font-black uppercase tracking-[0.16em] ${tone.text}">${tone.label}</p>
-        <p class="notice-title mt-0.5 text-sm font-black text-slate-900 leading-snug"></p>
-        <p class="mt-1 text-xs font-bold text-slate-500">Clique para ver os detalhes</p>
-      </div>
-    </div>`;
-  box.querySelector('.notice-title').textContent = notice.titulo || 'Novo aviso';
+    <div class="flex gap-3">
+      <span class="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+        <i data-lucide="megaphone" class="h-5 w-5"></i>
+      </span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-[11px] font-extrabold uppercase tracking-wide text-emerald-600">${notice.tipo || 'Aviso'}</span>
+        <span class="mt-0.5 block text-sm font-extrabold leading-snug text-gray-900"></span>
+        <span class="mt-1 block text-xs font-semibold text-gray-500">Toque para ler o aviso completo.</span>
+      </span>
+    </div>
+  `;
+  const titleEl = box.querySelector('.text-gray-900');
+  if (titleEl) titleEl.textContent = notice.titulo || 'Aviso';
   box.addEventListener('click', () => {
+    openNoticeModal(notice);
     box.remove();
-    openPlayerNoticeModal(notice);
   });
   root.appendChild(box);
   initIcons();
+
   setTimeout(() => {
     box.style.opacity = '0';
     box.style.transform = 'translateY(-6px)';
@@ -273,16 +263,32 @@ function showPlayerNoticeToast(notice) {
   setTimeout(() => box.remove(), 4300);
 }
 
-async function maybeShowPlayerNotices({ force = false } = {}) {
-  const cached = readPlayerNoticeCache();
-  if (!force && isPlayerNoticeCacheFresh(cached)) return;
-  try {
-    const notices = await fetchPlayerNotices();
-    writePlayerNoticeCache({ notices });
-    notices.forEach((notice, index) => setTimeout(() => showPlayerNoticeToast(notice), index * 350));
-  } catch (error) {
-    console.warn('[jogador-avisos]', error);
+async function fetchPlayerNotices() {
+  const ids = ['jogador', 'geral'];
+  const out = [];
+  for (const id of ids) {
+    try {
+      const snap = await getDoc(doc(db, 'avisos', id));
+      if (!snap.exists()) continue;
+      const notice = normalizeNoticeDoc(id, snap.data() || {});
+      if (notice) out.push(notice);
+    } catch (error) {
+      console.warn('[avisos-jogador]', error);
+    }
   }
+  return out;
+}
+
+async function maybeShowPlayerNotices() {
+  if (!currentUser) return;
+  const cached = readNoticeCache();
+  if (isNoticeCacheFresh(cached)) return;
+
+  const notices = await fetchPlayerNotices();
+  writeNoticeCache({ notices, shownAt: notices.length ? Date.now() : 0 });
+  notices.forEach((notice, index) => {
+    setTimeout(() => showNoticeToast(notice), index * 250);
+  });
 }
 
 function dataUrlSizeBytes(dataUrl = '') {
@@ -567,13 +573,13 @@ async function bootPlayer(user) {
       });
       showToast('error', 'Perfil de jogador não encontrado.');
       setDashboardVisible(true);
-      setTimeout(() => maybeShowPlayerNotices().catch((error) => console.warn('[jogador-avisos]', error)), 700);
+      maybeShowPlayerNotices().catch((error) => console.warn('[avisos-jogador]', error));
       return;
     }
 
     fillPlayerDashboard(user, profile);
     setDashboardVisible(true);
-    setTimeout(() => maybeShowPlayerNotices().catch((error) => console.warn('[jogador-avisos]', error)), 700);
+    maybeShowPlayerNotices().catch((error) => console.warn('[avisos-jogador]', error));
   } catch (error) {
     console.error(error);
     showToast('error', 'Não foi possível carregar seu painel.');

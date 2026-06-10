@@ -26,6 +26,19 @@ const normalizeEmail = (v) => String(v ?? '').trim().toLowerCase();
 const isNumericDocId = (id) => /^\d+$/.test(String(id || ''));
 const PROFILE_GUILD_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const PROFILE_GUILD_CACHE_PREFIX = 'profileGuildContext_v1_';
+const PARTNER_CACHE_TTL_MS = 60 * 60 * 1000;
+const PARTNER_DATA_CACHE_PREFIX = 'profilePartnerData_v2_';
+const PARTNER_COMMISSIONS_CACHE_PREFIX = 'profilePartnerCommissions_v1_';
+const PARTNER_PLANS_CACHE_KEY = 'profilePartnerPlans_v1';
+
+const PARTNER_PLAN_DEFAULTS = [
+  { id: 'free', name: 'FREE', price: 0, affiliatePercent: 0, order: 0, active: true, visible: true, purchasable: false },
+  { id: 'plus', name: 'PLUS', price: 6.99, affiliatePercent: 20, order: 10, active: true, visible: true, purchasable: true },
+  { id: 'pro', name: 'PRO', price: 9.99, affiliatePercent: 20, order: 20, active: true, visible: true, purchasable: true },
+  { id: 'business', name: 'BUSINESS', price: 99.9, affiliatePercent: 10, order: 30, active: true, visible: true, purchasable: true },
+  { id: 'ultra', name: 'ULTRA', price: 14.99, affiliatePercent: 20, order: 40, active: true, visible: true, purchasable: true },
+  { id: 'parceiro', name: 'PARCEIRO', price: 0, affiliatePercent: 0, order: 50, active: true, visible: true, purchasable: false }
+];
 
 const palavrasBloqueioDireto = [
   "arrombado",
@@ -506,6 +519,10 @@ const els = {
   btnSavePartnerPix: qs('btn-save-partner-pix'),
   btnRequestPartnerWithdraw: qs('btn-request-partner-withdraw'),
   partnerWithdrawStatus: qs('partner-withdraw-status'),
+  partnerPlanSummary: qs('partner-plan-summary'),
+  partnerModalPlanList: qs('partner-modal-plan-list'),
+  partnerPaymentsList: qs('partner-payments-list'),
+  partnerPaymentsStatus: qs('partner-payments-status'),
   
   modalCreate: qs('modal-create-profile'),
   formCreate: qs('form-create-profile'),
@@ -522,6 +539,8 @@ let currentPersistedPhoto = '';
 let pendingProfilePhotoDataUrl = '';
 let currentProfileData = null;
 let currentMonetizeData = null;
+let currentPartnerPlans = [];
+let currentPartnerCommissions = [];
 let isPartnerPanelCollapsed = false;
 let profileAccessContext = null;
 let cropState = null;
@@ -742,6 +761,7 @@ function setLoadingVisible(isVisible) {
 
 function setMainFormVisible(isVisible) {
   els.formMain?.classList.toggle('hidden', !isVisible);
+  if (els.btnSave) els.btnSave.disabled = !isVisible;
 }
 
 function setCreateModalVisible(isVisible) {
@@ -798,6 +818,7 @@ function hydrateProfileFromCache(user = auth.currentUser) {
     }
 
     applyCachedSidebarProfile(user);
+    if (currentUserProfileId) hydratePartnerExperienceFromCache(currentProfileData);
     setLoadingVisible(false);
     setCreateModalVisible(false);
     setMainFormVisible(true);
@@ -867,6 +888,332 @@ function formatCurrencyBR(value) {
   });
 }
 
+function escapePartnerHtml(value = '') {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  }[char]));
+}
+
+function partnerCacheKey(prefix, id = currentUserProfileId) {
+  const uid = String(auth.currentUser?.uid || '').trim();
+  const profileId = String(id || '').trim();
+  return uid && profileId ? `${prefix}${uid}_${profileId}` : '';
+}
+
+function canonicalPartnerPlanId(value = '') {
+  const clean = String(value || '').trim().toLowerCase();
+  if (clean === 'bussines') return 'business';
+  if (clean === 'vitalicio') return 'parceiro';
+  return clean;
+}
+
+function partnerPlanField(data = {}, names = [], fallback = undefined) {
+  for (const name of names) {
+    if (Object.prototype.hasOwnProperty.call(data || {}, name) && data[name] !== undefined && data[name] !== null) {
+      return data[name];
+    }
+  }
+  return fallback;
+}
+
+function normalizePartnerPercent(value, fallback = 0) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return parsed > 0 && parsed <= 1 ? parsed * 100 : parsed;
+}
+
+function defaultPartnerPercent(planId = '') {
+  const plan = PARTNER_PLAN_DEFAULTS.find((item) => item.id === canonicalPartnerPlanId(planId));
+  return Number(plan?.affiliatePercent || 0);
+}
+
+function booleanPartnerField(data = {}, names = [], fallback = true) {
+  const value = partnerPlanField(data, names, undefined);
+  if (value === undefined) return fallback;
+  if (typeof value === 'string') return !['false', '0', 'nao', 'não', 'off'].includes(value.trim().toLowerCase());
+  return value !== false && value !== 0;
+}
+
+function isPartnerAddonPlan(id = '', data = {}) {
+  const planId = String(id || '').toLowerCase();
+  const type = String(partnerPlanField(data, ['type', 'tipo', 'kind'], '') || '').toLowerCase();
+  return planId.includes('adicional') || planId.includes('addon') || planId.includes('extra')
+    || type.includes('adicional') || type.includes('addon') || type.includes('extra');
+}
+
+function hydratePartnerPlan(id, data = {}) {
+  const normalizedId = canonicalPartnerPlanId(id);
+  const base = PARTNER_PLAN_DEFAULTS.find((item) => item.id === normalizedId) || {
+    id: normalizedId,
+    name: normalizedId.toUpperCase(),
+    price: 0,
+    affiliatePercent: 0,
+    order: 999,
+    active: true,
+    visible: true,
+    purchasable: true
+  };
+  const isFreeBenefit = normalizedId === 'free' || normalizedId === 'parceiro';
+
+  return {
+    ...base,
+    id: normalizedId,
+    sourceId: id,
+    name: String(partnerPlanField(data, ['name', 'nome', 'titulo', 'title'], base.name || normalizedId)).trim(),
+    price: toMoneyNumber(partnerPlanField(data, ['price', 'preco', 'valor', 'amount'], base.price || 0)),
+    affiliatePercent: normalizePartnerPercent(
+      partnerPlanField(data, ['affiliatePercent', 'afiliadoPercent', 'commissionPercent', 'comissaoPercentual'], base.affiliatePercent),
+      defaultPartnerPercent(normalizedId)
+    ),
+    order: Number(partnerPlanField(data, ['order', 'ordem', 'posicao'], base.order || 999)) || 999,
+    active: booleanPartnerField(data, ['active', 'ativo', 'enabled'], base.active !== false),
+    visible: booleanPartnerField(data, ['visible', 'visivel', 'show', 'mostrar'], base.visible !== false),
+    purchasable: isFreeBenefit
+      ? false
+      : booleanPartnerField(data, ['purchasable', 'vendavel', 'compravel', 'checkout', 'allowCheckout'], base.purchasable !== false)
+  };
+}
+
+function partnerPlanPercent(plan = {}) {
+  const normalized = canonicalPartnerPlanId(plan.id);
+  const maps = [
+    currentMonetizeData?.comissaoPorPlano,
+    currentMonetizeData?.comissaoPlanos,
+    currentMonetizeData?.percentualPorPlano,
+    currentMonetizeData?.planPercents,
+    currentMonetizeData?.planos
+  ];
+
+  for (const map of maps) {
+    if (!map || typeof map !== 'object') continue;
+    const item = map[normalized] || map[plan.name] || map[String(plan.name || '').toUpperCase()];
+    if (item === undefined || item === null) continue;
+    const value = typeof item === 'object'
+      ? partnerPlanField(item, ['percent', 'percentual', 'comissaoPercentual', 'affiliatePercent'], null)
+      : item;
+    const normalizedValue = normalizePartnerPercent(value, -1);
+    if (normalizedValue >= 0) return normalizedValue;
+  }
+
+  return normalizePartnerPercent(plan.affiliatePercent, defaultPartnerPercent(normalized));
+}
+
+function commissionPlanId(entry = {}) {
+  return canonicalPartnerPlanId(
+    entry.plano ||
+    entry.plan ||
+    entry.comissaoParceiroPlano ||
+    entry.vipTier ||
+    entry.tier ||
+    ''
+  );
+}
+
+function commissionAmount(entry = {}) {
+  return toMoneyNumber(
+    entry.comissao ??
+    entry.valorComissao ??
+    entry.comissaoParceiroValor ??
+    entry.affiliateFee ??
+    entry.partnerCommission ??
+    entry.valor ??
+    0
+  );
+}
+
+function commissionPlanValue(entry = {}, planId = commissionPlanId(entry)) {
+  const stored = toMoneyNumber(
+    entry.valorPlano ??
+    entry.planValue ??
+    entry.precoPlano ??
+    entry.valorPagamento ??
+    entry.amount ??
+    entry.valorPago ??
+    0
+  );
+  if (stored > 0) return stored;
+  return toMoneyNumber(currentPartnerPlans.find((plan) => plan.id === planId)?.price || 0);
+}
+
+function renderPartnerPlanLists() {
+  const plans = currentPartnerPlans
+    .filter((plan) => plan.active !== false && plan.visible !== false && plan.purchasable !== false)
+    .filter((plan) => !['free', 'parceiro'].includes(plan.id))
+    .sort((a, b) => (a.price - b.price) || (a.order - b.order));
+
+  const listHtml = plans.length
+    ? plans.map((plan) => {
+        const percent = partnerPlanPercent(plan);
+        return `
+          <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2.5">
+            <div class="min-w-0">
+              <p class="truncate text-xs font-black text-gray-900">${escapePartnerHtml(plan.name || plan.id.toUpperCase())}</p>
+              <p class="mt-0.5 text-[11px] font-semibold text-gray-500">${escapePartnerHtml(formatCurrencyBR(plan.price))}</p>
+            </div>
+            <span class="shrink-0 rounded-lg bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-800">${escapePartnerHtml(`${percent}%`)}</span>
+          </div>`;
+      }).join('')
+    : '<p class="text-xs font-semibold text-gray-400">Nenhum plano comissionado disponível no momento.</p>';
+
+  if (els.partnerPlanSummary) els.partnerPlanSummary.innerHTML = listHtml;
+  if (els.partnerModalPlanList) els.partnerModalPlanList.innerHTML = listHtml;
+}
+
+function renderPartnerPayments(statusMessage = '') {
+  if (!els.partnerPaymentsList) return;
+
+  if (statusMessage && !currentPartnerCommissions.length) {
+    els.partnerPaymentsList.innerHTML = '';
+    if (els.partnerPaymentsStatus) {
+      els.partnerPaymentsStatus.textContent = statusMessage;
+      els.partnerPaymentsStatus.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (els.partnerPaymentsStatus) {
+    els.partnerPaymentsStatus.textContent = '';
+    els.partnerPaymentsStatus.classList.add('hidden');
+  }
+
+  if (!currentPartnerCommissions.length) {
+    els.partnerPaymentsList.innerHTML = `
+      <div class="rounded-xl border border-dashed border-gray-200 px-4 py-5 text-center">
+        <p class="text-xs font-bold text-gray-400">Nenhum pagamento com comissão registrado ainda.</p>
+      </div>`;
+    return;
+  }
+
+  els.partnerPaymentsList.innerHTML = [...currentPartnerCommissions]
+    .sort((a, b) => {
+      const aDate = dateFromFirestoreValue(a.createdAt || a.criadoEm || a.data || a.updatedAt)?.getTime() || 0;
+      const bDate = dateFromFirestoreValue(b.createdAt || b.criadoEm || b.data || b.updatedAt)?.getTime() || 0;
+      return bDate - aDate;
+    })
+    .map((entry) => {
+      const planId = commissionPlanId(entry);
+      const plan = currentPartnerPlans.find((item) => item.id === planId);
+      const planName = String(entry.nomePlano || entry.planName || plan?.name || planId || 'Plano').trim();
+      return `
+        <div class="grid grid-cols-[minmax(0,1fr),auto,auto] items-center gap-3 rounded-xl border border-gray-100 bg-white px-3 py-3">
+          <div class="min-w-0">
+            <p class="truncate text-xs font-black text-gray-900">${escapePartnerHtml(planName)}</p>
+            <p class="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-400">Plano</p>
+          </div>
+          <div class="text-right">
+            <p class="text-xs font-black text-gray-700">${escapePartnerHtml(formatCurrencyBR(commissionPlanValue(entry, planId)))}</p>
+            <p class="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-400">Valor</p>
+          </div>
+          <div class="text-right">
+            <p class="text-xs font-black text-emerald-700">${escapePartnerHtml(formatCurrencyBR(commissionAmount(entry)))}</p>
+            <p class="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-400">Comissão</p>
+          </div>
+        </div>`;
+    }).join('');
+}
+
+function cachePartnerData(data = currentMonetizeData) {
+  const key = partnerCacheKey(PARTNER_DATA_CACHE_PREFIX);
+  if (key && data) cacheWriteJsonStamped(key, { data });
+}
+
+function cachePartnerCommissions(items = currentPartnerCommissions, monetizeId = currentMonetizeData?.id || currentUserProfileId) {
+  const key = partnerCacheKey(PARTNER_COMMISSIONS_CACHE_PREFIX, monetizeId);
+  if (key) cacheWriteJsonStamped(key, { items: Array.isArray(items) ? items : [] });
+}
+
+function hydratePartnerExperienceFromCache(profile = currentProfileData) {
+  const dataKey = partnerCacheKey(PARTNER_DATA_CACHE_PREFIX);
+  const dataCache = dataKey ? cacheReadJson(dataKey, null) : null;
+  if (dataCache?.data) currentMonetizeData = dataCache.data;
+
+  const plansCache = cacheReadJson(PARTNER_PLANS_CACHE_KEY, null);
+  currentPartnerPlans = Array.isArray(plansCache?.items) && plansCache.items.length
+    ? plansCache.items
+    : PARTNER_PLAN_DEFAULTS.map((plan) => ({ ...plan }));
+
+  const monetizeId = currentMonetizeData?.id || currentProfileData?.monetizeId || currentUserProfileId;
+  const commissionsKey = partnerCacheKey(PARTNER_COMMISSIONS_CACHE_PREFIX, monetizeId);
+  const commissionsCache = commissionsKey ? cacheReadJson(commissionsKey, null) : null;
+  currentPartnerCommissions = Array.isArray(commissionsCache?.items) ? commissionsCache.items : [];
+
+  renderPartnerState(profile, currentMonetizeData);
+  renderPartnerPlanLists();
+  renderPartnerPayments();
+
+  return {
+    dataFresh: cacheIsFresh(dataCache, PARTNER_CACHE_TTL_MS),
+    plansFresh: cacheIsFresh(plansCache, PARTNER_CACHE_TTL_MS),
+    commissionsFresh: cacheIsFresh(commissionsCache, PARTNER_CACHE_TTL_MS)
+  };
+}
+
+async function loadPartnerPlans(force = false) {
+  const cached = cacheReadJson(PARTNER_PLANS_CACHE_KEY, null);
+  if (!force && cacheIsFresh(cached, PARTNER_CACHE_TTL_MS) && Array.isArray(cached.items)) {
+    currentPartnerPlans = cached.items;
+    renderPartnerPlanLists();
+    renderPartnerPayments();
+    return currentPartnerPlans;
+  }
+
+  try {
+    const snap = await getDocs(collection(db, 'planos'));
+    const map = new Map();
+    snap.docs.forEach((planDoc) => {
+      const data = planDoc.data() || {};
+      if (isPartnerAddonPlan(planDoc.id, data)) return;
+      const plan = hydratePartnerPlan(planDoc.id, data);
+      if (plan.id) map.set(plan.id, plan);
+    });
+    currentPartnerPlans = map.size
+      ? Array.from(map.values())
+      : PARTNER_PLAN_DEFAULTS.map((plan) => ({ ...plan }));
+    cacheWriteJsonStamped(PARTNER_PLANS_CACHE_KEY, { items: currentPartnerPlans });
+  } catch (error) {
+    console.warn('Não foi possível atualizar os planos do programa de parceiros:', error);
+    if (!currentPartnerPlans.length) currentPartnerPlans = PARTNER_PLAN_DEFAULTS.map((plan) => ({ ...plan }));
+  }
+
+  renderPartnerPlanLists();
+  renderPartnerPayments();
+  return currentPartnerPlans;
+}
+
+async function loadPartnerCommissions(force = false) {
+  const monetizeId = String(currentMonetizeData?.id || currentProfileData?.monetizeId || currentUserProfileId || '').trim();
+  if (!monetizeId || !isAcceptedPartner()) return [];
+
+  const key = partnerCacheKey(PARTNER_COMMISSIONS_CACHE_PREFIX, monetizeId);
+  const cached = key ? cacheReadJson(key, null) : null;
+  if (!force && cacheIsFresh(cached, PARTNER_CACHE_TTL_MS) && Array.isArray(cached.items)) {
+    currentPartnerCommissions = cached.items;
+    renderPartnerPayments();
+    return currentPartnerCommissions;
+  }
+
+  renderPartnerPayments('Carregando pagamentos...');
+  try {
+    const snap = await getDocs(collection(db, 'monetize', monetizeId, 'comissoes'));
+    currentPartnerCommissions = snap.docs.map((commissionDoc) => ({
+      id: commissionDoc.id,
+      ...commissionDoc.data()
+    }));
+    cachePartnerCommissions(currentPartnerCommissions, monetizeId);
+    renderPartnerPayments();
+  } catch (error) {
+    console.warn('Não foi possível atualizar a lista de comissões:', error);
+    if (Array.isArray(cached?.items)) currentPartnerCommissions = cached.items;
+    renderPartnerPayments(currentPartnerCommissions.length ? '' : 'Sem dados de pagamentos no momento.');
+  }
+
+  return currentPartnerCommissions;
+}
+
 function getPartnerSocialsInput() {
   return String(els.inputPartnerSocials?.value || '').trim().slice(0, 600);
 }
@@ -882,6 +1229,8 @@ function setPartnerModalVisible(isVisible) {
   els.modalPartner?.classList.toggle('flex', isVisible);
 
   if (isVisible && els.inputPartnerSocials) {
+    renderPartnerPlanLists();
+    loadPartnerPlans(false).catch(() => {});
     els.inputPartnerSocials.value = String(
       currentMonetizeData?.redesSociais ||
       currentMonetizeData?.redes ||
@@ -975,6 +1324,8 @@ function renderPartnerState(profile = currentProfileData, monetize = currentMone
   }
 
   renderPartnerWithdrawStatus(monetize);
+  renderPartnerPlanLists();
+  renderPartnerPayments();
 
   els.partnerPanelBody?.classList.toggle('hidden', isPartnerPanelCollapsed);
   if (els.btnTogglePartnerPanel) {
@@ -988,8 +1339,17 @@ function renderPartnerState(profile = currentProfileData, monetize = currentMone
 
 async function getMonetizeDocData() {
   if (!currentUserProfileId) return null;
-  const snap = await getDoc(doc(db, 'monetize', currentUserProfileId));
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+  const candidates = [
+    currentMonetizeData?.id,
+    currentProfileData?.monetizeId,
+    currentUserProfileId
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+
+  for (const id of [...new Set(candidates)]) {
+    const snap = await getDoc(doc(db, 'monetize', id));
+    if (snap.exists()) return { id: snap.id, ...snap.data() };
+  }
+  return null;
 }
 
 function buildPartnerDocPayload(profile = currentProfileData, existing = currentMonetizeData) {
@@ -1014,23 +1374,32 @@ function buildPartnerDocPayload(profile = currentProfileData, existing = current
   };
 }
 
-async function loadPartnerData(profile = currentProfileData) {
+async function loadPartnerData(profile = currentProfileData, force = false) {
   if (!currentUserProfileId) return;
 
+  const cachedState = hydratePartnerExperienceFromCache(profile);
+  if (!force && cachedState.dataFresh) {
+    loadPartnerPlans(false).catch(() => {});
+    if (isAcceptedPartner(profile, currentMonetizeData)) loadPartnerCommissions(false).catch(() => {});
+  }
+
   try {
-    currentMonetizeData = await getMonetizeDocData();
+    const freshMonetizeData = await getMonetizeDocData();
+    if (freshMonetizeData) currentMonetizeData = freshMonetizeData;
 
     if (profile?.parceiro === true && !currentMonetizeData) {
       const payload = buildPartnerDocPayload(profile, null);
       await setDoc(doc(db, 'monetize', currentUserProfileId), payload, { merge: true });
       currentMonetizeData = await getMonetizeDocData();
     }
+    if (currentMonetizeData) cachePartnerData(currentMonetizeData);
   } catch (error) {
     console.error('Erro ao carregar monetização:', error);
-    currentMonetizeData = null;
   }
 
   renderPartnerState(profile, currentMonetizeData);
+  loadPartnerPlans(false).catch(() => {});
+  if (isAcceptedPartner(profile, currentMonetizeData)) loadPartnerCommissions(false).catch(() => {});
 }
 
 async function handleAcceptPartner() {
@@ -1070,8 +1439,10 @@ async function handleAcceptPartner() {
     await setDoc(doc(db, 'monetize', currentUserProfileId), partnerPayload, { merge: true });
 
     currentMonetizeData = await getMonetizeDocData();
+    cachePartnerData(currentMonetizeData);
     setPartnerModalVisible(false);
     renderPartnerState(currentProfileData, currentMonetizeData);
+    loadPartnerCommissions(true).catch(() => {});
     showToast('success', 'Programa de parceiros ativado.');
   } catch (error) {
     console.error(error);
@@ -1134,7 +1505,8 @@ async function handleSavePartnerPix() {
   }
 
   try {
-    await setDoc(doc(db, 'monetize', currentUserProfileId), {
+    const monetizeDocId = String(currentMonetizeData?.id || currentProfileData?.monetizeId || currentUserProfileId);
+    await setDoc(doc(db, 'monetize', monetizeDocId), {
       pix,
       updatedAt: serverTimestamp()
     }, { merge: true });
@@ -1143,6 +1515,7 @@ async function handleSavePartnerPix() {
       ...(currentMonetizeData || {}),
       pix
     };
+    cachePartnerData(currentMonetizeData);
 
     showToast('success', 'Pix salvo com sucesso.');
   } catch (error) {
@@ -1234,6 +1607,7 @@ async function handleRequestPartnerWithdraw() {
       valorSaqueSolicitado: amount
     };
 
+    cachePartnerData(currentMonetizeData);
     renderPartnerState(currentProfileData, currentMonetizeData);
     showToast('success', 'Saque solicitado. Aguarde a análise da equipe.');
   } catch (error) {
@@ -1301,12 +1675,14 @@ async function loadProfile() {
       await setDoc(doc(db, 'users', uid), buildBridgePayload(gameProfileDoc, oldAuthDocData || {}), { merge: true });
 
       fillProfileForm(gameProfileDoc);
-      await loadPartnerData(gameProfileDoc);
-
       setLoadingVisible(false);
       setCreateModalVisible(false);
       setMainFormVisible(true);
       initIcons();
+      hydratePartnerExperienceFromCache(gameProfileDoc);
+      loadPartnerData(gameProfileDoc).catch((error) => {
+        console.warn('A monetização continuará com os dados salvos:', error);
+      });
       return;
     }
 
@@ -1527,7 +1903,8 @@ async function handleSaveProfile(e) {
 
     if (isAcceptedPartner(currentProfileData, currentMonetizeData)) {
       try {
-        await setDoc(doc(db, 'monetize', currentUserProfileId), {
+        const monetizeDocId = String(currentMonetizeData?.id || currentProfileData?.monetizeId || currentUserProfileId);
+        await setDoc(doc(db, 'monetize', monetizeDocId), {
           nick,
           updatedAt: serverTimestamp()
         }, { merge: true });
@@ -1535,6 +1912,7 @@ async function handleSaveProfile(e) {
           ...(currentMonetizeData || {}),
           nick
         };
+        cachePartnerData(currentMonetizeData);
       } catch (error) {
         console.warn('O perfil foi salvo, mas o nome do parceiro não foi sincronizado:', error);
       }
@@ -1549,7 +1927,7 @@ async function handleSaveProfile(e) {
     showToast('error', 'Erro ao salvar alterações.');
   } finally {
     els.btnSave.disabled = false;
-    els.btnSave.innerHTML = `<i data-lucide="save" class="w-4 h-4"></i> Salvar Alterações`;
+    els.btnSave.innerHTML = `<i data-lucide="save" class="w-4 h-4"></i><span class="hidden sm:inline">Salvar alterações</span><span class="sm:hidden">Salvar</span>`;
     initIcons();
   }
 }
