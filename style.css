@@ -466,6 +466,12 @@ html[data-theme="dark"] :where(.text-red-600, .text-red-700, .text-red-800) {
   color: #fca5a5 !important;
 }
 
+html[data-theme="dark"] .verified-partner-badge {
+  background: rgba(109, 40, 217, 0.14) !important;
+  color: #ddd6fe !important;
+  border-color: rgba(167, 139, 250, 0.24) !important;
+}
+
 html[data-theme="dark"] :where(.border-gray-100, .border-gray-200, .border-gray-300, .border-slate-100, .border-slate-200, .border-slate-300, .border-emerald-100, .border-emerald-200, .border-emerald-300, .border-red-100, .border-red-200, .border-amber-100, .border-amber-200) {
   border-color: var(--theme-border) !important;
 }
