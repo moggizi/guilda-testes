@@ -95,10 +95,11 @@ function roleClasses(role) {
 }
 
 function applyRoleBadge(element, role) {
+  if (!element) return;
   element.textContent = role || 'Membro';
   element.className = `inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${roleClasses(role)}`;
   if (element.id === 'modal-profile-role') {
-    element.className = `mb-2 inline-flex rounded-full px-3 py-1.5 text-xs font-black uppercase tracking-wider ${roleClasses(role)}`;
+    element.className = `mt-1 inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${roleClasses(role)}`;
   }
 }
 
@@ -117,6 +118,9 @@ function formatJoinDate(value) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     const [year, month, day] = raw.split('-').map(Number);
     date = new Date(year, month - 1, day);
+  } else if (/^\d{10,13}$/.test(raw)) {
+    const numeric = Number(raw);
+    date = new Date(raw.length === 10 ? numeric * 1000 : numeric);
   } else {
     const parsed = new Date(raw);
     if (!Number.isNaN(parsed.getTime())) date = parsed;
@@ -141,7 +145,8 @@ function publicProfileFromUserDoc(snap) {
     photo: String(data.foto || data.photo || data.avatar || '').trim(),
     guildName: String(data.guilda || data.guildName || 'Sem guilda').trim() || 'Sem guilda',
     role: String(data.role || data.cargo || 'Membro').trim() || 'Membro',
-    joinDate: data.createdAt || data.criadoEm || data.created_at || data.created || null
+    joinDate: data.createdAt || data.criadoEm || data.created_at || data.created || null,
+    isVerifiedPartner: data.parceiroVerificado === true || String(data.parceiroTipo || '').toLowerCase().trim() === 'verificado'
   };
 }
 
@@ -151,7 +156,6 @@ function renderProfile(profile) {
   byId('result-nick').textContent = profile.nick || 'Jogador';
   byId('result-id').textContent = profile.id || '--';
   byId('result-guild').textContent = profile.guildName || 'Sem guilda';
-  applyRoleBadge(byId('result-role'), profile.role);
   setPhoto(byId('result-photo'), byId('result-photo-placeholder'), profile.photo, profile.nick);
 
   byId('modal-profile-nick').textContent = profile.nick || 'Jogador';
@@ -161,6 +165,7 @@ function renderProfile(profile) {
   byId('modal-profile-join-date').textContent = formatJoinDate(profile.joinDate);
   applyRoleBadge(byId('modal-profile-role'), profile.role);
   setPhoto(byId('modal-profile-photo'), byId('modal-profile-photo-placeholder'), profile.photo, profile.nick);
+  byId('modal-partner-badge')?.classList.toggle('hidden', profile.isVerifiedPartner !== true);
 
   showState('result');
   initIcons();

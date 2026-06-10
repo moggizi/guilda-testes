@@ -115,7 +115,6 @@
                 <span>Buscar</span>
               </button>
             </div>
-            <p class="mt-3 text-xs font-semibold text-gray-400">Busca direta no documento publico de users pelo ID do jogador. Use de 3 a 15 numeros.</p>
           </form>
         </section>
 
@@ -148,10 +147,7 @@
                 <i id="result-photo-placeholder" data-lucide="user-round" class="h-8 w-8"></i>
               </div>
               <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h3 id="result-nick" class="truncate text-lg font-black text-gray-900">Jogador</h3>
-                  <span id="result-role" class="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">Membro</span>
-                </div>
+                <h3 id="result-nick" class="truncate text-lg font-black text-gray-900">Jogador</h3>
                 <p class="mt-1 flex items-center gap-1.5 text-sm font-bold text-gray-500">
                   <i data-lucide="hash" class="h-4 w-4"></i>
                   <span id="result-id">--</span>
@@ -206,11 +202,17 @@
             <img id="modal-profile-photo" src="" alt="" class="hidden h-full w-full object-cover">
             <i id="modal-profile-photo-placeholder" data-lucide="user-round" class="h-12 w-12"></i>
           </div>
-          <span id="modal-profile-role" class="mb-2 inline-flex rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">Membro</span>
+          <span class="mb-2 inline-flex rounded-full bg-white/90 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">Perfil público</span>
         </div>
 
         <div class="mt-4">
-          <h2 id="modal-profile-nick" class="text-2xl font-black text-gray-900 sm:text-3xl">Jogador</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 id="modal-profile-nick" class="text-2xl font-black text-gray-900 sm:text-3xl">Jogador</h2>
+            <span id="modal-partner-badge" class="hidden inline-flex items-center gap-1.5 rounded-full border border-violet-100 bg-violet-50 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-violet-700">
+              <i data-lucide="badge-check" class="h-3.5 w-3.5"></i>
+              Parceiro da plataforma
+            </span>
+          </div>
           <p class="mt-1 flex items-center gap-1.5 text-sm font-bold text-gray-500">
             <i data-lucide="hash" class="h-4 w-4"></i>
             <span id="modal-profile-id">--</span>
@@ -229,6 +231,10 @@
             </div>
             <p class="mt-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Guilda atual</p>
             <p id="modal-profile-guild" class="mt-1 break-words text-sm font-black text-gray-900">Sem guilda</p>
+            <div class="mt-3">
+              <p class="text-[11px] font-black uppercase tracking-wider text-gray-400">Cargo</p>
+              <span id="modal-profile-role" class="mt-1 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">Membro</span>
+            </div>
           </div>
           <div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
